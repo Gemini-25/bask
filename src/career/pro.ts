@@ -125,7 +125,7 @@ export function proNewYear(c: Career): string[] {
   notes.push(`시즌 끝! 내 팀 성적: ${finish}${L.champion ? ` · 우승 ${teamName(L, L.champion)}` : ''}`);
   // 시상식
   const wins = Object.fromEntries(standings(L).map((r) => [r.id, r.w]));
-  const aw = seasonAwards(L, c.overseas ? '해외 리그' : 'BASK 리그', L.rookies ?? [], wins);
+  const aw = seasonAwards(L, c.overseas ? '해외 리그' : 'BASK 리그', L.rookies ?? [], wins, (id) => (id === 'me' ? overall(c.me, c.prefPos) : undefined));
   (L.awards ??= []).push(aw);
   const prefix = `${c.overseas ? '해외 ' : ''}${L.season + 1}시즌`;
   const mine = grantTrophies(c, aw, prefix);

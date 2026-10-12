@@ -3,7 +3,7 @@
 import { autoWeek, type AutoPolicy } from '../src/career/autoplay';
 import { createCareer, dateOf, myOverall } from '../src/career/career';
 import { hofScore, proGames } from '../src/career/legacy';
-import { lookFor } from '../src/data/player';
+import { lookFor, overall } from '../src/data/player';
 
 const policy = (process.argv[2] ?? 'simple') as AutoPolicy;
 const seed = Number(process.argv[3] ?? 1);
@@ -31,6 +31,21 @@ for (let w = 0; w < 48 * years; w++) {
     const prizes = tag ? c.trophies.filter((t) => t.includes(`${tag} `)).map((t) => t.replace(`${tag} `, '').replace(/^해외 /, '')) : [];
     const top = Object.entries(c.me.r).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}${v}`).join(' ');
     rows.push(`${y - 1 < 3 ? `고${y}` : `프${y - 3}`}\tOVR ${myOverall(c).toFixed(1)} (${top})\t${gs.length}경기 ${ppg.toFixed(1)}점 ${mpg.toFixed(1)}분\t인기 ${Math.round(c.popularity)}\t돈 ${Math.round(c.money / 10000)}억\t${prizes.join(',')}`);
+    // AW=1: 그해 MVP·베스트 5가 누구였고 종합이 얼마였나, 리그 상위 종합
+    if (process.env.AW && c.league?.awards?.length && y - 1 >= 3) {
+      const a = c.league.awards[c.league.awards.length - 1];
+      const ovrOf = (id: string) => {
+        if (id === 'me') return myOverall(c);
+        for (const t of c.league!.teams) {
+          const p = t.players.find((x) => x.id === id);
+          if (p) return overall(p);
+        }
+        return NaN;
+      };
+      const top = c.league.teams.flatMap((t) => t.players).map((p) => (p.id === 'me' ? myOverall(c) : overall(p))).sort((x, y2) => y2 - x).slice(0, 8);
+      rows.push(`\t시상: ${a.awards.filter((x) => x.key === 'mvp' || x.key === 'best5').map((x) => `${x.label === 'MVP' ? 'MVP ' : ''}${x.name}(${ovrOf(x.id).toFixed(0)}, ${x.value})`).join(' / ')}`);
+      rows.push(`\t리그 상위 종합: ${top.map((v) => v.toFixed(0)).join(' ')}`);
+    }
     lastYear = y;
   }
 }

@@ -49,6 +49,8 @@ function add(L: League, p: Player, team: string, line: Omit<SeasonLine, 'name' |
   cur.blk += line.blk;
 }
 
+const SYNTH_STAR = 3.4;
+
 /** 엔진을 안 돌린 경기: 출전 시간과 능력치 비중으로 팀 기록을 나눈다 */
 export function synthLines(L: League, players: Player[], team: string, pts: number, rng: Rng) {
   const order = [...players].sort((a, b) => overall(b) - overall(a)).slice(0, 12);
@@ -64,7 +66,8 @@ export function synthLines(L: League, players: Player[], team: string, pts: numb
     return out;
   };
   const off = (p: Player) => (p.r.layup + p.r.midRange + p.r.three + p.r.dunk * 0.5) / 3.5;
-  const ptsL = split(order.map((p, i) => mins[i] * off(p) ** 2.6 * (0.8 + rng.next() * 0.4)), pts);
+  // 에이스가 더 많이 넣는다 (리그 득점 1위가 25~28점)
+  const ptsL = split(order.map((p, i) => mins[i] * off(p) ** SYNTH_STAR * (0.8 + rng.next() * 0.4)), pts);
   const rebL = split(order.map((p, i) => mins[i] * ((p.r.defReb + p.r.offReb) / 2) ** 2 * (p.body.heightCm / 195) ** 3), Math.round(36 + rng.normal(0, 4)));
   const astL = split(order.map((p, i) => mins[i] * ((p.r.passing + p.r.vision) / 2) ** 2.4), Math.round(17 + rng.normal(0, 3)));
   const stlL = split(order.map((p, i) => mins[i] * p.r.steal ** 2), Math.max(0, Math.round(7 + rng.normal(0, 2))));
@@ -83,29 +86,48 @@ export function recordEngineGame(L: League, g: GameResult) {
 }
 
 const per = (s: SeasonLine, k: 'pts' | 'reb' | 'ast' | 'stl' | 'blk') => s[k] / Math.max(1, s.g);
+/** MVP 투표에서 팀 승리 하나, 평판(종합) 1점의 무게 */
+export const MVP_WIN = 0.6;
+export const MVP_REP = 1.3;
 
 /** 시즌이 끝나면 상 */
-export function seasonAwards(L: League, league: string, rookies: string[], wins: Record<string, number>): SeasonAwards {
+/** 평판 = 종합 능력치. 내 선수는 커리어 쪽 값을 넘겨준다 */
+function leagueOvr(L: League, id: string): number | undefined {
+  for (const t of L.teams) {
+    const p = t.players.find((x) => x.id === id);
+    if (p) return overall(p);
+  }
+  return undefined;
+}
+
+/** 기록 점수 (득점만이 아니라 리바운드·어시스트·수비까지) */
+const statScore = (s: SeasonLine) => per(s, 'pts') + 1.2 * per(s, 'reb') + 1.5 * per(s, 'ast') + 2 * (per(s, 'stl') + per(s, 'blk'));
+
+/** 시즌이 끝나면 상. MVP·베스트 5는 기자단 투표처럼 기록 + 팀 성적 + 평판(종합 능력치) (M15) */
+export function seasonAwards(L: League, league: string, rookies: string[], wins: Record<string, number>, ovrOf: (id: string) => number | undefined = () => undefined): SeasonAwards {
   const all = Object.entries(L.stats ?? {}).map(([id, s]) => ({ id, s }));
   const enough = all.filter((x) => x.s.g >= 14);
-  const pick = (key: string, label: string, list: typeof all, score: (s: SeasonLine) => number, fmt: (s: SeasonLine) => string): Award | null => {
+  const pick = (key: string, label: string, list: typeof all, score: (x: { id: string; s: SeasonLine }) => number, fmt: (s: SeasonLine) => string): Award | null => {
     if (!list.length) return null;
-    const best = list.reduce((a, b) => (score(b.s) > score(a.s) ? b : a));
+    const best = list.reduce((a, b) => (score(b) > score(a) ? b : a));
     return { key, label, id: best.id, name: best.s.name, team: best.s.team, value: fmt(best.s) };
   };
-  const mvpScore = (s: SeasonLine) => per(s, 'pts') + 1.2 * per(s, 'reb') + 1.5 * per(s, 'ast') + 2 * (per(s, 'stl') + per(s, 'blk')) + (wins[s.team] ?? 0) * 0.5;
+  const rep = (id: string) => (ovrOf(id) ?? leagueOvr(L, id) ?? 60) - 65;
+  const mvpScore = (x: { id: string; s: SeasonLine }) => statScore(x.s) + (wins[x.s.team] ?? 0) * MVP_WIN + rep(x.id) * MVP_REP;
+  const best5Score = (x: { id: string; s: SeasonLine }) => statScore(x.s) + (wins[x.s.team] ?? 0) * 0.3 + rep(x.id) * 0.8;
+  const royScore = (x: { id: string; s: SeasonLine }) => statScore(x.s) + (wins[x.s.team] ?? 0) * 0.2 + rep(x.id) * 0.4;
   const line = (s: SeasonLine) => `${per(s, 'pts').toFixed(1)}점 ${per(s, 'reb').toFixed(1)}리바 ${per(s, 'ast').toFixed(1)}어시`;
   const awards = [
     pick('mvp', 'MVP', enough.filter((x) => x.s.g >= 18), mvpScore, line),
     // 신인왕은 경기당 6점은 넣어야 준다
-    pick('roy', '신인왕', enough.filter((x) => rookies.includes(x.id) && per(x.s, 'pts') >= 6), mvpScore, line),
-    pick('pts', '득점왕', enough, (s) => per(s, 'pts'), (s) => `경기당 ${per(s, 'pts').toFixed(1)}점`),
-    pick('reb', '리바운드왕', enough, (s) => per(s, 'reb'), (s) => `경기당 ${per(s, 'reb').toFixed(1)}개`),
-    pick('ast', '어시스트왕', enough, (s) => per(s, 'ast'), (s) => `경기당 ${per(s, 'ast').toFixed(1)}개`),
-    pick('dpoy', '수비상', enough, (s) => per(s, 'stl') * 1.2 + per(s, 'blk') * 1.4 + per(s, 'reb') * 0.1, (s) => `스틸 ${per(s, 'stl').toFixed(1)} · 블록 ${per(s, 'blk').toFixed(1)}`),
+    pick('roy', '신인왕', enough.filter((x) => rookies.includes(x.id) && per(x.s, 'pts') >= 6), royScore, line),
+    pick('pts', '득점왕', enough, (x) => per(x.s, 'pts'), (s) => `경기당 ${per(s, 'pts').toFixed(1)}점`),
+    pick('reb', '리바운드왕', enough, (x) => per(x.s, 'reb'), (s) => `경기당 ${per(s, 'reb').toFixed(1)}개`),
+    pick('ast', '어시스트왕', enough, (x) => per(x.s, 'ast'), (s) => `경기당 ${per(s, 'ast').toFixed(1)}개`),
+    pick('dpoy', '수비상', enough, (x) => per(x.s, 'stl') * 1.2 + per(x.s, 'blk') * 1.4 + per(x.s, 'reb') * 0.1, (s) => `스틸 ${per(s, 'stl').toFixed(1)} · 블록 ${per(s, 'blk').toFixed(1)}`),
   ].filter((a): a is Award => !!a);
   // 베스트 5: 가드 2, 포워드 2, 센터 1
-  const ranked = [...enough].sort((a, b) => mvpScore(b.s) - mvpScore(a.s));
+  const ranked = [...enough].sort((a, b) => best5Score(b) - best5Score(a));
   const need: Record<string, number> = { G: 2, W: 1, B: 2 };
   for (const x of ranked) {
     const g = POS_GROUP[x.s.pos as keyof typeof POS_GROUP] ?? 'W';

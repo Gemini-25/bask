@@ -2,7 +2,7 @@
 import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
 import { generatePlayer, overall, POSITIONS, type Player, type Position } from '../data/player';
-import { RATING_GROUPS } from '../data/ratings';
+import { RATING_GROUPS, RATING_KEYS } from '../data/ratings';
 import { generateTeam, TEAM_INFOS, type Team, type TeamInfo } from '../data/teams';
 import { expectedMargin, MARGIN_SD } from '../sim/winprob';
 import type { SeasonAwards, SeasonLine } from './awards';
@@ -66,6 +66,7 @@ export interface League {
   awards?: SeasonAwards[];
 }
 
+const ACE_BOOST = 3;
 const PRO_STRENGTH: Record<string, number> = { SEO: 2, BUS: 1, INC: 0, DAE: -1, GWA: 1, DJN: -2, ULS: 0, SUW: -1, CHW: 1, JEJ: -2 };
 
 /** 나이: 신인 19~22, 베테랑 35까지 */
@@ -77,6 +78,9 @@ export function createLeague(rng: Rng): League {
   const teams: LeagueTeam[] = TEAM_INFOS.map((info) => {
     const t = generateTeam(rng.fork(info.id.charCodeAt(0) * 31 + info.id.charCodeAt(1)), info, PRO_STRENGTH[info.id] ?? 0);
     t.players.forEach((p, i) => (p.age = ageFor(rng, i)));
+    // 팀마다 에이스를 조금 더 세게 (M15: 종합 60대 선수가 쉽게 MVP를 못 받게)
+    const ace = [...t.players].sort((a, b) => overall(b) - overall(a))[0];
+    for (const k of RATING_KEYS) ace.r[k] = Math.min(95, ace.r[k] + ACE_BOOST);
     return { info, players: t.players };
   });
   const lastOrder = [...teams].sort((x, y) => teamPower(x) - teamPower(y)).map((t) => t.info.id);
