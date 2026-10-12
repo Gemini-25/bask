@@ -8,7 +8,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 await page.goto('http://localhost:5179/');
 await page.waitForTimeout(1500);
 await page.evaluate(([s, t]) => {
-  window.bask.startGame(Number(s));
+  window.bask.startExhibition(Number(s));
   const pb = window.bask.host.pb;
   pb.speed = 2;
   pb.seek(Number(t) - 30);

@@ -1,6 +1,6 @@
 import { clamp } from '../core/math';
 import type { Rng } from '../core/rng';
-import { koreanName } from './names';
+import { koreanName, type Gender } from './names';
 import { RATING_KEYS, type Body, type RatingKey, type Ratings } from './ratings';
 
 export type Position = 'PG' | 'SG' | 'SF' | 'PF' | 'C';
@@ -56,10 +56,24 @@ const TEMPLATE: Record<Position, Partial<Ratings>> = {
   C: { speed: 42, accel: 42, agility: 40, jump: 58, strength: 70, layup: 54, dunk: 64, floater: 38, midRange: 40, three: 30, postUp: 60, ballHandling: 30, passing: 40, offBall: 52, screen: 66, perimeterD: 38, postD: 64, steal: 36, block: 62, defReb: 68, offReb: 62, helpD: 56, boxOut: 66, iq: 50, vision: 40 },
 };
 
-const HEIGHT: Record<Position, [number, number]> = { PG: [184, 4], SG: [190, 4], SF: [196, 3.5], PF: [201, 3.5], C: [207, 4] };
+export const HEIGHT: Record<Position, [number, number]> = { PG: [184, 4], SG: [190, 4], SF: [196, 3.5], PF: [201, 3.5], C: [207, 4] };
+
+/** 포지션 평균 능력치에 quality를 더한 값 (난수 없음). 선수 만들기의 출발점 */
+export function baseRatings(pos: Position, quality: number): Ratings {
+  const t = TEMPLATE[pos];
+  const r = {} as Ratings;
+  for (const k of RATING_KEYS) r[k] = Math.round(clamp((t[k] ?? 50) + quality, 1, 99));
+  return r;
+}
+
+export interface GenOptions {
+  /** 키 보정 (고교생은 작고, 여자 리그는 더 작다) */
+  heightAdj?: number;
+  gender?: Gender;
+}
 
 /** 포지션과 실력(quality: 0이 평균, ±10이 큰 차이)으로 선수 하나를 만든다 */
-export function generatePlayer(rng: Rng, pos: Position, quality: number, number: number): Player {
+export function generatePlayer(rng: Rng, pos: Position, quality: number, number: number, opts: GenOptions = {}): Player {
   const t = TEMPLATE[pos];
   const r = {} as Ratings;
   for (const k of RATING_KEYS) {
@@ -67,11 +81,11 @@ export function generatePlayer(rng: Rng, pos: Position, quality: number, number:
     r[k] = Math.round(clamp(base + quality + rng.normal(0, 7), 15, 95));
   }
   const [hm, hs] = HEIGHT[pos];
-  const heightCm = Math.round(rng.normal(hm, hs));
+  const heightCm = Math.round(rng.normal(hm + (opts.heightAdj ?? 0), hs));
   const wingspanCm = Math.round(heightCm + rng.normal(4, 4));
-  const weightKg = Math.round(clamp((heightCm - 100) * 0.95 + rng.normal(0, 6), 70, 135));
+  const weightKg = Math.round(clamp((heightCm - 100) * 0.95 + rng.normal(0, 6), opts.heightAdj ? 50 : 70, 135));
   const id = `p${Math.floor(rng.next() * 1e9).toString(36)}`;
-  const name = koreanName(rng);
+  const name = koreanName(rng, opts.gender);
   return { id, name, number, pos, body: { heightCm, wingspanCm, weightKg }, r, look: lookFor(id + name) };
 }
 

@@ -1,0 +1,102 @@
+// 저장 (K4, K5): 브라우저 저장 슬롯 3개 + 세이브 파일 내보내기·불러오기.
+// 버전 번호를 넣어서 나중 버전에서도 예전 세이브를 읽을 수 있게 한다.
+import { dateText, SAVE_VERSION, type Career } from './career';
+import { schoolById } from './schools';
+
+export const SLOTS = 3;
+const KEY = (slot: number) => `bask.save.${slot}`;
+const LAST = 'bask.lastSlot';
+
+export interface SlotInfo {
+  slot: number;
+  name: string;
+  school: string;
+  date: string;
+  savedAt: number;
+}
+
+function store(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function saveCareer(slot: number, c: Career): boolean {
+  const s = store();
+  if (!s) return false;
+  c.savedAt = Date.now();
+  try {
+    s.setItem(KEY(slot), JSON.stringify(c));
+    s.setItem(LAST, String(slot));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadCareer(slot: number): Career | null {
+  const s = store();
+  if (!s) return null;
+  try {
+    const raw = s.getItem(KEY(slot));
+    return raw ? migrate(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function deleteSlot(slot: number) {
+  try {
+    store()?.removeItem(KEY(slot));
+  } catch {
+    // 지우기 실패는 무시
+  }
+}
+
+export function lastSlot(): number | null {
+  try {
+    const v = store()?.getItem(LAST);
+    return v === null || v === undefined ? null : Number(v);
+  } catch {
+    return null;
+  }
+}
+
+export function slotInfo(slot: number): SlotInfo | null {
+  const c = loadCareer(slot);
+  if (!c) return null;
+  return { slot, name: c.me.name, school: schoolById(c.school).name, date: dateText(c.week), savedAt: c.savedAt };
+}
+
+/** 세이브 파일 내용 (JSON 텍스트) */
+export function exportCareer(c: Career): string {
+  return JSON.stringify({ app: 'bask', v: c.v, career: c }, null, 1);
+}
+
+export function importCareer(text: string): Career {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('세이브 파일을 읽을 수 없어 (JSON이 아님)');
+  }
+  const d = data as { app?: string; career?: unknown };
+  if (d.app !== 'bask' || !d.career) throw new Error('BASK 세이브 파일이 아니야');
+  return migrate(d.career);
+}
+
+/** 예전 버전 세이브를 지금 형식으로 맞춘다 */
+export function migrate(raw: unknown): Career {
+  const c = raw as Career;
+  if (!c || typeof c !== 'object' || !c.me || typeof c.week !== 'number') throw new Error('세이브 내용이 망가졌어');
+  if (c.v > SAVE_VERSION) throw new Error(`더 새로운 버전(v${c.v})의 세이브야. 게임 파일을 최신으로 바꿔줘`);
+  // v1이 첫 버전. 다음 버전부터 여기에 변환을 더한다
+  c.xp ??= {};
+  c.counts ??= {};
+  c.log ??= [];
+  c.games ??= [];
+  c.v = SAVE_VERSION;
+  return c;
+}

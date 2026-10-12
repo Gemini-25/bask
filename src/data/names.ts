@@ -4,8 +4,14 @@ const SURNAMES = ['김', '이', '박', '최', '정', '강', '조', '윤', '장',
 const FIRST = ['민', '준', '서', '현', '우', '진', '호', '성', '재', '영', '수', '태', '동', '하', '지', '원', '승', '시', '도', '건', '주', '경', '상', '용', '범', '한', '정', '윤', '규', '석'];
 const SECOND = ['준', '호', '우', '민', '현', '진', '혁', '훈', '빈', '수', '찬', '원', '성', '재', '율', '결', '한', '석', '규', '영', '환', '욱', '오', '기', '섭', '철', '균', '완', '택', '헌'];
 
-export function koreanName(rng: Rng): string {
-  let given = rng.pick(FIRST) + rng.pick(SECOND);
-  while (given[0] === given[1]) given = rng.pick(FIRST) + rng.pick(SECOND);
+const FIRST_F = ['서', '지', '민', '수', '예', '하', '유', '채', '소', '다', '은', '윤', '나', '아', '혜', '가', '연', '시', '주', '세', '보', '희', '수', '정', '미'];
+const SECOND_F = ['연', '은', '윤', '아', '희', '린', '진', '원', '영', '현', '빈', '서', '나', '정', '경', '지', '민', '혜', '율', '미', '람', '솔', '별', '인', '주'];
+
+export type Gender = 'M' | 'F';
+
+export function koreanName(rng: Rng, gender: Gender = 'M'): string {
+  const [a, b] = gender === 'F' ? [FIRST_F, SECOND_F] : [FIRST, SECOND];
+  let given = rng.pick(a) + rng.pick(b);
+  while (given[0] === given[1]) given = rng.pick(a) + rng.pick(b);
   return rng.pick(SURNAMES) + given;
 }

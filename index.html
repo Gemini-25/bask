@@ -3,15 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BASK · 경기 관람</title>
+    <title>BASK</title>
   </head>
   <body>
     <div id="app">
       <header class="top">
-        <div class="brand">BASK <span>M3 경기 관람 테스트</span></div>
-        <div class="seed">경기 번호 <b id="seed">-</b></div>
+        <div class="brand">BASK <span id="subtitle">농구 선수 키우기</span></div>
+        <div class="seed" id="seedbox">경기 번호 <b id="seed">-</b></div>
       </header>
 
+      <section class="screen" id="scr-title"></section>
+      <section class="screen" id="scr-create" hidden></section>
+      <section class="screen" id="scr-home" hidden></section>
+      <section class="screen" id="scr-result" hidden></section>
+
+      <section class="screen" id="scr-game" hidden>
+      <div class="careerbar" id="careerbar" hidden></div>
       <section class="board" aria-label="스코어보드">
         <div class="team t0"><span class="chip" id="chip0"></span><span class="tbox"><span class="tname" id="tname0">-</span><span class="tf" id="tf0"></span></span><span class="score" id="score0">0</span></div>
         <div class="clockbox">
@@ -34,6 +41,8 @@
             <button type="button" id="btnEnd">결과 보기</button>
             <button type="button" id="btnRestart">처음부터</button>
             <button type="button" id="btnNew" class="primary" title="단축키 N">새 경기</button>
+            <button type="button" id="btnDone" class="primary" hidden>경기 결과로 ▶</button>
+            <button type="button" id="btnBack" hidden>타이틀로</button>
           </div>
           <div class="controls modes" id="modes">
             <span class="lbl">보는 방법</span>
@@ -61,8 +70,10 @@
           <div class="tab" id="tab-flow" hidden><h3 class="ctitle">승리 확률</h3></div>
         </aside>
       </div>
-      <footer class="foot">노란 화살표 = 고른 선수, 발밑 막대 = 지친 선수의 체력, 머리 위 별 = 앵클 브레이크·스크린에 걸린 선수. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · H 하이라이트 · N 새 경기</footer>
+      <footer class="foot">노란 화살표 = 고른 선수, 발밑 막대 = 지친 선수의 체력, 머리 위 별 = 앵클 브레이크·스크린에 걸린 선수. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · H 하이라이트 · N 새 경기 (데모)</footer>
+      </section>
     </div>
+    <div class="modal" id="modal" hidden><div class="mbox" id="mbox" role="dialog" aria-modal="true"></div></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -12,6 +12,9 @@ const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(String(e)));
 await page.goto(pathToFileURL(resolve('dist/index.html')).href);
+await page.waitForTimeout(1200);
+await page.screenshot({ path: `${out}/shot-0-title.png` });
+await page.click('[data-act=exhibition]');
 await page.waitForTimeout(wait);
 await page.screenshot({ path: `${out}/shot-1.png` });
 await page.keyboard.press('5'); // 16배속

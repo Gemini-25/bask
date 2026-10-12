@@ -42,6 +42,12 @@ const BENCH_Y = -1.0;
 export interface SimOptions {
   quarterMinutes?: number;
   overtimeMinutes?: number;
+  /** 경기 시작 체력 (두 팀 선수 순서대로, 없으면 100). 누적 피로가 있으면 덜 찬 채로 시작한다 */
+  energy?: number[];
+  /** 감독이 더 기회를 주는 선수 (두 팀 선수 순서 번호 → 교체 판단 가산점). 연습경기에서 신입생 기용 */
+  favor?: Record<number, number>;
+  /** 최소 출전 시간 (분). 그만큼 못 뛰었으면 감독이 먼저 넣고 덜 뺀다 */
+  minMinutes?: Record<number, number>;
 }
 
 export function simulateGame(a: Team, b: Team, seed: number, opts: SimOptions = {}): GameResult {
@@ -260,6 +266,8 @@ class GameSim {
   private shotClock = 24;
   private clockRunning = false;
   private elapsed = 0;
+  private favor: Record<number, number> = {};
+  private minMin: Record<number, number> = {};
   private score: [number, number] = [0, 0];
   private arrow: Side = 0;
   private t = 0;
@@ -338,7 +346,9 @@ class GameSim {
     this.teamOf = this.players.map((_, k) => (k < a.players.length ? 0 : 1));
     this.depth = this.players.map((_, k) => (k < a.players.length ? k : k - a.players.length));
     const n = this.players.length;
-    this.energy = new Array<number>(n).fill(100);
+    this.energy = this.players.map((_, k) => opts.energy?.[k] ?? 100);
+    this.favor = opts.favor ?? {};
+    this.minMin = opts.minMinutes ?? {};
     this.pf = new Array<number>(n).fill(0);
     this.tech = new Array<number>(n).fill(0);
     this.secOn = new Array<number>(n).fill(0);
@@ -1120,6 +1130,15 @@ class GameSim {
     return this.secOn[pid] / 60 - plan * frac;
   }
 
+  /** 약속한 최소 출전 시간보다 얼마나 덜 뛰었나 (분, +면 부족) */
+  private underMinutes(pid: number) {
+    const want = this.minMin[pid];
+    if (!want) return 0;
+    const frac = clamp(this.elapsed / (this.qLen * 4), 0, 1);
+    // 4쿼터 중반까지 채우도록
+    return want * Math.min(1, frac * 1.25) - this.secOn[pid] / 60;
+  }
+
   private foulTrouble(pid: number): boolean {
     const pf = this.pf[pid];
     const q = this.quarter;
@@ -1148,6 +1167,7 @@ class GameSim {
         const e = this.energy[p.pid];
         let need = Math.max(0, 66 - e) * 1.6 + Math.max(0, this.overMinutes(p.pid)) * 1.2;
         if (this.foulTrouble(p.pid)) need += 18;
+        if (this.underMinutes(p.pid) > 0) need *= 0.3;
         if (late) need *= 0.35;
         if (garbage && this.depth[p.pid] < 7) need += 40;
         if (this.out[p.pid]) need = 999;
@@ -1165,8 +1185,9 @@ class GameSim {
           for (const p of onCourt) {
             const group = POS_GROUP[this.players[pid].pos] === POS_GROUP[p.pl.pos];
             if (!group) continue;
-            const gain = overall(this.players[pid], p.pl.pos) * (0.7 + 0.3 * (e / 100)) - overall(p.pl, p.pl.pos) * (0.7 + 0.3 * (this.energy[p.pid] / 100)) - Math.max(0, this.overMinutes(pid)) * 0.8;
-            if (gain > 3 && (!back || gain > back.gain)) back = { p, pid, gain };
+            const gain = overall(this.players[pid], p.pl.pos) * (0.7 + 0.3 * (e / 100)) - overall(p.pl, p.pl.pos) * (0.7 + 0.3 * (this.energy[p.pid] / 100)) - Math.max(0, this.overMinutes(pid)) * 0.8 + (this.favor[pid] ?? 0) - (this.favor[p.pid] ?? 0);
+            const g2 = gain + Math.max(0, this.underMinutes(pid)) * 6 - Math.max(0, this.underMinutes(p.pid)) * 6;
+            if (g2 > 3 && (!back || g2 > back.gain)) back = { p, pid, gain: g2 };
           }
         }
       }
@@ -1198,7 +1219,7 @@ class GameSim {
       const g1 = POS_GROUP[pl.pos];
       const g2 = POS_GROUP[outP.pl.pos];
       const fitPos = g1 === g2 ? 10 : g1 === 'W' || g2 === 'W' ? 2 : -12;
-      let c = overall(pl, outP.pl.pos) * (0.6 + 0.4 * (e / 100)) + fitPos - Math.max(0, this.overMinutes(pid)) * 1.5;
+      let c = overall(pl, outP.pl.pos) * (0.6 + 0.4 * (e / 100)) + fitPos - Math.max(0, this.overMinutes(pid)) * 1.5 + (this.favor[pid] ?? 0) + Math.max(0, this.underMinutes(pid)) * 6;
       if (garbage) c += this.depth[pid] * 3;
       if (c > bc) {
         bc = c;

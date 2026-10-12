@@ -8,7 +8,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
 await page.waitForTimeout(1200);
-if (seed) await page.evaluate((s) => window.bask.startGame(Number(s)), seed);
+await page.evaluate((s) => window.bask.startExhibition(Number(s || 1)), seed);
 // 3쿼터 중간까지 감아 두고 본다
 await page.evaluate(() => {
   const pb = window.bask.host.pb;

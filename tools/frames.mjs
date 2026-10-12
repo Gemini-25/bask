@@ -13,7 +13,7 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const page = await browser.newPage({ viewport: { width: 1300, height: 900 } });
 await page.goto(pathToFileURL(resolve('dist/index.html')).href);
 await page.waitForTimeout(1500);
-await page.evaluate((s) => window.bask.startGame(Number(s)), seed);
+await page.evaluate((s) => window.bask.startExhibition(Number(s)), seed);
 await page.waitForTimeout(300);
 const files = [];
 for (let k = 0; k < Number(count); k++) {

@@ -7,6 +7,17 @@ export class Rng {
     for (let i = 0; i < 4; i++) this.next();
   }
 
+  /** 저장용 내부 상태 */
+  get state(): number {
+    return this.s;
+  }
+
+  static fromState(state: number): Rng {
+    const r = new Rng(0);
+    r.s = state >>> 0;
+    return r;
+  }
+
   /** 0 이상 1 미만 (mulberry32) */
   next(): number {
     let t = (this.s = (this.s + 0x6d2b79f5) >>> 0);

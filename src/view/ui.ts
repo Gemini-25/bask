@@ -47,6 +47,8 @@ export class Ui {
   private box: BoxScore | null = null;
   private cache = new Map<string, string>();
   private focus = -1;
+  /** 내 선수 (커리어 경기), 없으면 -1 */
+  private mine = -1;
   private lastLineup = '';
   private tab = 'log';
   private shots: ShotChart;
@@ -84,6 +86,8 @@ export class Ui {
     $('roster').onclick = pick;
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement) return;
+      // 경기 화면이 보일 때만
+      if ($('scr-game').hidden || !$('modal').hidden) return;
       if (e.code === 'Space') {
         e.preventDefault();
         act.togglePause();
@@ -117,8 +121,9 @@ export class Ui {
     else el.textContent = text;
   }
 
-  setGame(game: GameResult, looks: [TeamLook, TeamLook]) {
+  setGame(game: GameResult, looks: [TeamLook, TeamLook], mine = -1) {
     this.game = game;
+    this.mine = mine;
     this.looks = looks;
     this.cache.clear();
     this.logTick = -1;
@@ -275,8 +280,9 @@ export class Ui {
           const on = onCourt.includes(pid);
           const cls = [pid === this.focus ? 'focus' : '', on ? 'on' : '', l.played ? '' : 'dnp'].join(' ');
           const pm = l.pm > 0 ? `+${l.pm}` : String(l.pm);
-          if (!l.played) return `<tr data-p="${pid}" class="${cls}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)} <small>${p.pos}</small></td><td colspan="12" class="dnpc">출전 안 함</td></tr>`;
-          return `<tr data-p="${pid}" class="${cls}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)} <small>${p.pos}</small></td><td>${minutesText(l.sec)}</td><td>${l.pts}</td><td>${l.oreb + l.dreb}</td><td>${l.ast}</td><td>${l.stl}</td><td>${l.blk}</td><td>${l.tov}</td><td class="${l.pf >= 4 ? 'warn' : ''}">${l.pf}</td><td>${l.fgm}/${l.fga}</td><td>${l.tpm}/${l.tpa}</td><td>${l.ftm}/${l.fta}</td><td>${pm}</td></tr>`;
+          const me = pid === this.mine ? ' <b class="tagme">나</b>' : '';
+          if (!l.played) return `<tr data-p="${pid}" class="${cls}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me} <small>${p.pos}</small></td><td colspan="12" class="dnpc">출전 안 함</td></tr>`;
+          return `<tr data-p="${pid}" class="${cls}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me} <small>${p.pos}</small></td><td>${minutesText(l.sec)}</td><td>${l.pts}</td><td>${l.oreb + l.dreb}</td><td>${l.ast}</td><td>${l.stl}</td><td>${l.blk}</td><td>${l.tov}</td><td class="${l.pf >= 4 ? 'warn' : ''}">${l.pf}</td><td>${l.fgm}/${l.fga}</td><td>${l.tpm}/${l.tpa}</td><td>${l.ftm}/${l.fta}</td><td>${pm}</td></tr>`;
         })
         .join('');
     const tot = (team: 0 | 1) => {
@@ -301,7 +307,7 @@ export class Ui {
           `<div class="rteam">${this.teamTag(team)}${game.players
             .map((p, pid) => ({ p, pid }))
             .filter(({ pid }) => game.teamOf[pid] === team)
-            .map(({ p, pid }) => `<button type="button" data-p="${pid}"><span class="no">${p.number}</span>${esc(p.name)}</button>`)
+            .map(({ p, pid }) => `<button type="button" data-p="${pid}" class="${pid === this.mine ? 'mine' : ''}"><span class="no">${p.number}</span>${esc(p.name)}${pid === this.mine ? ' ★' : ''}</button>`)
             .join('')}</div>`,
       )
       .join('');
