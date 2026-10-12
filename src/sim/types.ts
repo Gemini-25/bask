@@ -4,7 +4,17 @@ import type { Team } from '../data/teams';
 export type Side = 0 | 1;
 
 export type ShotKind = 'dunk' | 'layup' | 'floater' | 'hook' | 'mid' | 'three';
-export type TurnoverKind = 'badPass' | 'stolenPass' | 'stolenDribble' | 'travel' | 'doubleDribble' | 'offFoul' | 'shotClock';
+export type TurnoverKind =
+  | 'badPass'
+  | 'stolenPass'
+  | 'stolenDribble'
+  | 'travel'
+  | 'doubleDribble'
+  | 'offFoul'
+  | 'shotClock'
+  | 'eightSec';
+export type FoulKind = 'shooting' | 'reach' | 'block' | 'charge' | 'loose' | 'screen' | 'holding' | 'technical' | 'intentional';
+export type DefScheme = 'man' | 'zone23' | 'zone32' | 'press';
 
 export type EventType =
   | 'tip'
@@ -16,15 +26,21 @@ export type EventType =
   | 'rebound'
   | 'turnover'
   | 'ankle'
-  | 'screen';
+  | 'screen'
+  | 'foul'
+  | 'ft'
+  | 'sub'
+  | 'timeout'
+  | 'defense'
+  | 'ejected';
 
 export interface GameEvent {
   tick: number;
   type: EventType;
   team: Side;
-  /** 0~9 (팀*5 + 코트 위 자리), 없으면 -1 */
+  /** 선수 번호 (GameResult.players 기준), 없으면 -1 */
   player: number;
-  /** 어시스트한 선수, 블록한 선수, 스틸한 선수 등 */
+  /** 어시스트·블록·스틸한 선수, 파울 당한 선수, 교체로 나간 선수 */
   other: number;
   pts: number;
   shot?: ShotKind;
@@ -35,6 +51,21 @@ export interface GameEvent {
   tov?: TurnoverKind;
   fastBreak?: boolean;
   blocked?: boolean;
+  andOne?: boolean;
+  alleyOop?: boolean;
+  foul?: FoulKind;
+  /** 파울로 얻은 자유투 개수 */
+  fta?: number;
+  /** 파울한 선수의 개인 파울 수 */
+  pf?: number;
+  /** 파울한 팀의 이번 쿼터 팀 파울 */
+  teamFouls?: number;
+  /** 자유투: 몇 번째 / 몇 개 중 */
+  ftN?: number;
+  ftOf?: number;
+  made?: boolean;
+  scheme?: DefScheme;
+  switched?: boolean;
   quarter: number;
   clock: number;
   score: [number, number];
@@ -49,24 +80,37 @@ export const FLAG_SCREEN = 8;
 /** 0.1초마다 찍은 경기 기록. 화면은 이걸 재생만 한다 (E2). */
 export interface Recording {
   n: number;
-  /** n × 20: 선수 10명의 x, y */
+  /** n × 20: 코트 자리 10개의 x, y */
   pos: Float32Array;
   /** n × 3: 공 x, y, 높이 */
   ball: Float32Array;
   clock: Float32Array;
   shotClock: Float32Array;
+  /** 경기 시계가 흐른 누적 시간 (출전 시간 계산용) */
+  elapsed: Float32Array;
   quarter: Uint8Array;
+  /** 공 가진 코트 자리 (0~9), 없으면 -1 */
   holder: Int8Array;
   /** n × 10: FLAG_* */
   flags: Uint8Array;
+  /** n × 10: 체력 0~100 */
+  energy: Uint8Array;
+}
+
+/** 코트 자리 0~4는 팀0, 5~9는 팀1. 교체되면 그 자리에 들어간 선수가 바뀐다. */
+export interface Lineup {
+  tick: number;
+  pids: number[];
 }
 
 export interface GameResult {
   seed: number;
   dt: number;
   teams: [Team, Team];
-  /** 코트 위 선수 (0~4 = 팀0, 5~9 = 팀1) */
-  onCourt: Player[];
+  /** 두 팀 전체 선수 (팀0 → 팀1 순서) */
+  players: Player[];
+  teamOf: Side[];
+  lineups: Lineup[];
   rec: Recording;
   events: GameEvent[];
   final: [number, number];
@@ -82,7 +126,15 @@ export interface Counters {
   intercepts: number;
   drives: number;
   plays: Record<string, number>;
+  schemes: Record<string, number>;
   /** 공격권 시작부터 슛까지 걸린 시간 합계와 횟수 */
   shotTimeSum: number;
   shotTimeN: number;
+  timeouts: number;
+  subs: number;
+  fouledOut: number;
+  techs: number;
+  switches: number;
+  doubles: number;
+  alleyOops: number;
 }

@@ -1,7 +1,8 @@
 import { POSITION_LABEL } from '../data/player';
 import { grade, RATING_GROUPS } from '../data/ratings';
-import { boxScore } from '../sim/stats';
-import type { GameEvent, GameResult } from '../sim/types';
+import { SCHEME_LABEL } from '../sim/engine';
+import { boxScore, minutesText, type BoxScore } from '../sim/stats';
+import type { DefScheme, GameEvent, GameResult, Side } from '../sim/types';
 import type { TeamLook } from './CourtScene';
 import type { Playback } from './playback';
 
@@ -21,7 +22,8 @@ export function quarterText(q: number): string {
   return q <= 4 ? `${q}Q` : `OT${q - 4}`;
 }
 
-const LOG_TYPES = new Set(['tip', 'quarterStart', 'quarterEnd', 'gameEnd', 'made', 'miss', 'rebound', 'turnover', 'ankle']);
+const LOG_TYPES = new Set(['tip', 'quarterStart', 'quarterEnd', 'gameEnd', 'made', 'miss', 'rebound', 'turnover', 'ankle', 'foul', 'ft', 'sub', 'timeout', 'defense', 'ejected']);
+const BANNER_TYPES = new Set(['quarterStart', 'quarterEnd', 'gameEnd', 'timeout']);
 
 export interface UiActions {
   togglePause(): void;
@@ -30,7 +32,7 @@ export interface UiActions {
   toEnd(): void;
   restart(): void;
   newGame(): void;
-  focus(i: number): void;
+  focus(pid: number): void;
 }
 
 export class Ui {
@@ -39,8 +41,10 @@ export class Ui {
   private logTick = -1;
   private boxDirty = true;
   private lastBox = 0;
+  private box: BoxScore | null = null;
   private cache = new Map<string, string>();
   private focus = -1;
+  private lastLineup = '';
 
   constructor(act: UiActions) {
     $('btnPlay').onclick = () => act.togglePause();
@@ -95,6 +99,8 @@ export class Ui {
     this.cache.clear();
     this.logTick = -1;
     this.boxDirty = true;
+    this.box = null;
+    this.lastLineup = '';
     for (const side of [0, 1] as const) {
       const t = game.teams[side];
       $(`tname${side}`).textContent = `${t.city} ${t.name}`;
@@ -107,17 +113,38 @@ export class Ui {
     this.setFocus(-1);
   }
 
-  setFocus(i: number) {
-    this.focus = i;
+  setFocus(pid: number) {
+    this.focus = pid;
     this.boxDirty = true;
-    for (const el of document.querySelectorAll('[data-p]')) el.classList.toggle('focus', Number((el as HTMLElement).dataset.p) === i);
-    this.renderPlayerCard();
-    if (i >= 0) this.showTab('player');
+    for (const el of document.querySelectorAll('[data-p]')) el.classList.toggle('focus', Number((el as HTMLElement).dataset.p) === pid);
+    this.cache.delete('card');
+    if (pid >= 0) this.showTab('player');
   }
 
   setControls(paused: boolean, speed: number) {
     this.set('btnPlay', paused ? '▶ 재생' : '❚❚ 일시정지');
     for (const b of $('speeds').querySelectorAll('button')) b.classList.toggle('on', Number(b.dataset.speed) === speed);
+  }
+
+  private timeoutsLeft(team: Side, tick: number, quarter: number): number {
+    const alloc = quarter <= 2 ? 2 : quarter <= 4 ? 3 : 1;
+    let used = 0;
+    for (const e of this.game!.events) {
+      if (e.tick > tick) break;
+      if (e.type !== 'timeout' || e.team !== team) continue;
+      const same = quarter <= 2 ? e.quarter <= 2 : quarter <= 4 ? e.quarter >= 3 && e.quarter <= 4 : e.quarter === quarter;
+      if (same) used++;
+    }
+    return Math.max(0, alloc - used);
+  }
+
+  private schemeAt(team: Side, tick: number): DefScheme {
+    let s: DefScheme = 'man';
+    for (const e of this.game!.events) {
+      if (e.tick > tick) break;
+      if (e.type === 'defense' && e.team === team && e.scheme) s = e.scheme;
+    }
+    return s;
   }
 
   update(pb: Playback) {
@@ -131,8 +158,7 @@ export class Ui {
     this.set('clock', clockText(fr.clock));
     this.set('shotclock', String(Math.ceil(fr.shotClock)));
     $('shotclock').classList.toggle('low', fr.shotClock <= 5 && fr.shotClock > 0);
-    const pct = (pb.cur / pb.last) * 100;
-    $('progress').style.width = `${pct.toFixed(2)}%`;
+    $('progress').style.width = `${((pb.cur / pb.last) * 100).toFixed(2)}%`;
 
     // 문자 중계
     if (pb.cur < this.logTick) {
@@ -147,11 +173,35 @@ export class Ui {
     }
     this.logTick = pb.cur;
 
+    const lineup = pb.lineupAt(pb.cur);
+    const lineupKey = lineup.pids.join(',');
+    if (lineupKey !== this.lastLineup) {
+      this.lastLineup = lineupKey;
+      this.boxDirty = true;
+      for (const el of $('roster').querySelectorAll('[data-p]')) el.classList.toggle('oncourt', lineup.pids.includes(Number((el as HTMLElement).dataset.p)));
+    }
+
     const now = performance.now();
     if (this.boxDirty && now - this.lastBox > 250) {
-      this.renderBox(pb.cur);
+      this.box = boxScore(game, pb.cur);
+      this.renderBox(lineup.pids);
+      this.renderTeamInfo(pb.cur, fr.quarter);
       this.boxDirty = false;
       this.lastBox = now;
+    }
+    this.renderPlayerCard(lineup.pids, fr.energy);
+  }
+
+  private renderTeamInfo(tick: number, quarter: number) {
+    const box = this.box!;
+    for (const team of [0, 1] as const) {
+      const tf = box.teamFouls[team];
+      const left = this.timeoutsLeft(team, tick, quarter);
+      const alloc = quarter <= 2 ? 2 : quarter <= 4 ? 3 : 1;
+      const pips = '●'.repeat(left) + '○'.repeat(Math.max(0, alloc - left));
+      this.set(`tf${team}`, `<span class="${tf >= 4 ? 'bonus' : ''}">팀파울 ${tf}${tf >= 4 ? ' 보너스' : ''}</span><span class="to" title="남은 타임아웃">${pips}</span>`, true);
+      const s = this.schemeAt(team, tick);
+      this.set(`def${team}`, `${this.teamTag(team)} 수비 <b>${SCHEME_LABEL[s]}</b>`, true);
     }
   }
 
@@ -167,41 +217,47 @@ export class Ui {
       if (!LOG_TYPES.has(e.type)) continue;
       const li = document.createElement('li');
       let cls = e.type;
-      if (e.type === 'made' && (e.pts === 3 || e.shot === 'dunk')) cls += ' big';
+      if (e.type === 'made' && (e.pts === 3 || e.shot === 'dunk' || e.andOne || e.alleyOop)) cls += ' big';
+      if (e.type === 'ft' && !e.made) cls += ' missed';
       li.className = cls;
       const time = `${quarterText(e.quarter)} ${clockText(e.clock)}`;
-      const side = e.type === 'quarterStart' || e.type === 'quarterEnd' || e.type === 'gameEnd' ? '' : this.teamTag(e.team);
-      const sc = e.type === 'made' ? `<b class="sc">${e.score[0]}:${e.score[1]}</b>` : '';
+      const side = BANNER_TYPES.has(e.type) && e.type !== 'timeout' ? '' : this.teamTag(e.team);
+      const sc = e.type === 'made' || (e.type === 'ft' && e.made) ? `<b class="sc">${e.score[0]}:${e.score[1]}</b>` : '';
       li.innerHTML = `<span class="t">${time}</span>${side}<span class="m">${esc(e.text)}</span>${sc}`;
       frag.prepend(li);
     }
     ul.prepend(frag);
-    while (ul.children.length > 220) ul.lastElementChild!.remove();
+    while (ul.children.length > 260) ul.lastElementChild!.remove();
   }
 
-  private renderBox(tick: number) {
+  private renderBox(onCourt: number[]) {
     const game = this.game!;
-    const box = boxScore(game.events, tick);
+    const box = this.box!;
     const rows = (team: 0 | 1) =>
-      [0, 1, 2, 3, 4]
-        .map((k) => {
-          const i = team * 5 + k;
-          const p = game.onCourt[i];
-          const l = box.players[i];
-          return `<tr data-p="${i}" class="${i === this.focus ? 'focus' : ''}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)} <small>${p.pos}</small></td><td>${l.pts}</td><td>${l.oreb + l.dreb}</td><td>${l.ast}</td><td>${l.stl}</td><td>${l.blk}</td><td>${l.tov}</td><td>${l.fgm}/${l.fga}</td><td>${l.tpm}/${l.tpa}</td></tr>`;
+      game.players
+        .map((p, pid) => ({ p, pid }))
+        .filter(({ pid }) => game.teamOf[pid] === team)
+        .map(({ p, pid }) => {
+          const l = box.players[pid];
+          const on = onCourt.includes(pid);
+          const cls = [pid === this.focus ? 'focus' : '', on ? 'on' : '', l.played ? '' : 'dnp'].join(' ');
+          const pm = l.pm > 0 ? `+${l.pm}` : String(l.pm);
+          if (!l.played) return `<tr data-p="${pid}" class="${cls}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)} <small>${p.pos}</small></td><td colspan="12" class="dnpc">출전 안 함</td></tr>`;
+          return `<tr data-p="${pid}" class="${cls}"><td class="nm"><span class="no">${p.number}</span>${esc(p.name)} <small>${p.pos}</small></td><td>${minutesText(l.sec)}</td><td>${l.pts}</td><td>${l.oreb + l.dreb}</td><td>${l.ast}</td><td>${l.stl}</td><td>${l.blk}</td><td>${l.tov}</td><td class="${l.pf >= 4 ? 'warn' : ''}">${l.pf}</td><td>${l.fgm}/${l.fga}</td><td>${l.tpm}/${l.tpa}</td><td>${l.ftm}/${l.fta}</td><td>${pm}</td></tr>`;
         })
         .join('');
     const tot = (team: 0 | 1) => {
       const t = box.teams[team];
       const fg = t.fga ? Math.round((t.fgm / t.fga) * 100) : 0;
       const tp = t.tpa ? Math.round((t.tpm / t.tpa) * 100) : 0;
-      return `<tr class="tot"><td class="nm">합계 <small>야투 ${fg}% · 3점 ${tp}%</small></td><td>${t.pts}</td><td>${t.oreb + t.dreb}</td><td>${t.ast}</td><td>${t.stl}</td><td>${t.blk}</td><td>${t.tov}</td><td>${t.fgm}/${t.fga}</td><td>${t.tpm}/${t.tpa}</td></tr>`;
+      const ft = t.fta ? Math.round((t.ftm / t.fta) * 100) : 0;
+      return `<tr class="tot"><td class="nm">합계 <small>야투 ${fg}% · 3점 ${tp}% · 자유투 ${ft}%</small></td><td></td><td>${t.pts}</td><td>${t.oreb + t.dreb}</td><td>${t.ast}</td><td>${t.stl}</td><td>${t.blk}</td><td>${t.tov}</td><td>${t.pf}</td><td>${t.fgm}/${t.fga}</td><td>${t.tpm}/${t.tpa}</td><td>${t.ftm}/${t.fta}</td><td></td></tr>`;
     };
-    const head = `<tr><th class="nm">선수</th><th>득점</th><th>리바</th><th>어시</th><th>스틸</th><th>블록</th><th>실책</th><th>야투</th><th>3점</th></tr>`;
+    const head = `<tr><th class="nm">선수</th><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>스틸</th><th>블록</th><th>실책</th><th>파울</th><th>야투</th><th>3점</th><th>자유투</th><th>±</th></tr>`;
     const html = ([0, 1] as const)
       .map((team) => `<h3>${this.teamTag(team)} ${esc(game.teams[team].city)} ${esc(game.teams[team].name)}</h3><div class="tablewrap"><table>${head}${rows(team)}${tot(team)}</table></div>`)
       .join('');
-    this.set('tab-box', html + '<p class="hint">선수 이름을 누르면 코트에 표시되고 능력치를 볼 수 있어.</p>', true);
+    this.set('tab-box', html + '<p class="hint">● 표시가 지금 코트에 있는 선수. 이름을 누르면 코트에 노란 화살표가 뜨고 능력치를 볼 수 있어.</p>', true);
   }
 
   private renderRoster() {
@@ -209,26 +265,33 @@ export class Ui {
     const html = ([0, 1] as const)
       .map(
         (team) =>
-          `<div class="rteam">${this.teamTag(team)}${[0, 1, 2, 3, 4]
-            .map((k) => {
-              const i = team * 5 + k;
-              const p = game.onCourt[i];
-              return `<button type="button" data-p="${i}"><span class="no">${p.number}</span>${esc(p.name)}</button>`;
-            })
+          `<div class="rteam">${this.teamTag(team)}${game.players
+            .map((p, pid) => ({ p, pid }))
+            .filter(({ pid }) => game.teamOf[pid] === team)
+            .map(({ p, pid }) => `<button type="button" data-p="${pid}"><span class="no">${p.number}</span>${esc(p.name)}</button>`)
             .join('')}</div>`,
       )
       .join('');
     $('roster').innerHTML = html;
   }
 
-  private renderPlayerCard() {
-    const el = $('card');
-    if (!this.game || this.focus < 0) {
-      el.innerHTML = '<p class="hint">위에서 선수를 고르면 능력치 39개를 볼 수 있어.</p>';
+  private renderPlayerCard(onCourt: number[], energy: Uint8Array) {
+    const game = this.game!;
+    if (this.focus < 0) {
+      this.set('card', '<p class="hint">위에서 선수를 고르면 능력치 39개와 체력을 볼 수 있어. 테두리가 밝은 선수가 지금 코트에 있는 선수야.</p>', true);
       return;
     }
-    const p = this.game.onCourt[this.focus];
-    const team = this.focus < 5 ? 0 : 1;
+    const pid = this.focus;
+    const p = game.players[pid];
+    const team = game.teamOf[pid];
+    const slot = onCourt.indexOf(pid);
+    const l = this.box?.players[pid];
+    const e = slot >= 0 ? energy[slot] : -1;
+    const energyHtml =
+      e >= 0
+        ? `<div class="energy"><span>체력</span><span class="bar"><i style="width:${e}%;background:${e < 45 ? '#ff5a4a' : e < 70 ? '#ffc93c' : '#7bd88f'}"></i></span><b>${e}</b></div>`
+        : `<div class="energy off"><span>벤치</span></div>`;
+    const line = l ? `<div class="body">${minutesText(l.sec)} 출전 · ${l.pts}점 ${l.oreb + l.dreb}리바 ${l.ast}어시 · 파울 ${l.pf}</div>` : '';
     const groups = RATING_GROUPS.map(
       (g) =>
         `<div class="rg"><h4>${g.label}</h4>${g.items
@@ -239,8 +302,15 @@ export class Ui {
           })
           .join('')}</div>`,
     ).join('');
-    el.innerHTML = `<div class="ph">${this.teamTag(team)}<b>#${p.number} ${esc(p.name)}</b><span>${POSITION_LABEL[p.pos]}</span></div>
-      <div class="body">키 ${p.body.heightCm}cm · 윙스팬 ${p.body.wingspanCm}cm · 체중 ${p.body.weightKg}kg</div>${groups}`;
+    // 체력은 매 프레임 바뀌니 숫자를 5 단위로 끊어 다시 그리는 횟수를 줄인다
+    const key = `${pid}|${Math.round(e / 5)}|${l?.pts}|${l?.pf}|${Math.floor((l?.sec ?? 0) / 30)}`;
+    if (this.cache.get('cardKey') === key) return;
+    this.cache.set('cardKey', key);
+    this.set(
+      'card',
+      `<div class="ph">${this.teamTag(team)}<b>#${p.number} ${esc(p.name)}</b><span>${POSITION_LABEL[p.pos]}</span></div>
+      <div class="body">키 ${p.body.heightCm}cm · 윙스팬 ${p.body.wingspanCm}cm · 체중 ${p.body.weightKg}kg</div>${line}${energyHtml}${groups}`,
+      true,
+    );
   }
 }
-

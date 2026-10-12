@@ -8,20 +8,21 @@
   <body>
     <div id="app">
       <header class="top">
-        <div class="brand">BASK <span>M1 경기 엔진 테스트</span></div>
+        <div class="brand">BASK <span>M2 경기 엔진 테스트</span></div>
         <div class="seed">경기 번호 <b id="seed">-</b></div>
       </header>
 
       <section class="board" aria-label="스코어보드">
-        <div class="team t0"><span class="chip" id="chip0"></span><span class="tname" id="tname0">-</span><span class="score" id="score0">0</span></div>
+        <div class="team t0"><span class="chip" id="chip0"></span><span class="tbox"><span class="tname" id="tname0">-</span><span class="tf" id="tf0"></span></span><span class="score" id="score0">0</span></div>
         <div class="clockbox">
           <div class="q" id="quarter">1Q</div>
           <div class="clock" id="clock">10:00</div>
           <div class="sc"><small>샷클락</small><span id="shotclock">24</span></div>
         </div>
-        <div class="team t1"><span class="score" id="score1">0</span><span class="tname" id="tname1">-</span><span class="chip" id="chip1"></span></div>
+        <div class="team t1"><span class="score" id="score1">0</span><span class="tbox"><span class="tname" id="tname1">-</span><span class="tf" id="tf1"></span></span><span class="chip" id="chip1"></span></div>
         <div class="progress"><i id="progress"></i></div>
       </section>
+      <div class="defs"><span id="def0"></span><span id="def1"></span></div>
 
       <div class="main">
         <div class="courtcol">
@@ -49,7 +50,7 @@
           </div>
         </aside>
       </div>
-      <footer class="foot">원 = 선수 (숫자는 등번호), 주황 점 = 공. 노란 화살표는 고른 선수. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · N 새 경기</footer>
+      <footer class="foot">원 = 선수 (숫자는 등번호), 주황 점 = 공, 노란 화살표 = 고른 선수, 발밑 막대 = 지친 선수의 체력. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · N 새 경기</footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

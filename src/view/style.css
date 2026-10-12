@@ -128,6 +128,27 @@ button:focus-visible {
   height: 14px;
   flex: none;
 }
+.tbox {
+  display: grid;
+  min-width: 0;
+}
+.team.t1 .tbox {
+  justify-items: end;
+}
+.tf {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tf .bonus {
+  color: #ff8a5a;
+}
+.tf .to {
+  color: var(--led);
+  letter-spacing: 1px;
+}
 .tname {
   font-size: 15px;
   white-space: nowrap;
@@ -195,6 +216,20 @@ button:focus-visible {
   background: var(--led-dim);
 }
 
+.defs {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: -4px;
+}
+.defs b {
+  color: var(--ink);
+  font-weight: 400;
+}
+
 /* 본문 */
 .main {
   display: grid;
@@ -204,7 +239,7 @@ button:focus-visible {
 }
 @media (min-width: 1080px) {
   .main {
-    grid-template-columns: minmax(0, 1fr) 380px;
+    grid-template-columns: minmax(0, 1fr) 430px;
   }
 }
 .courtcol {
@@ -314,6 +349,25 @@ button:focus-visible {
 .log li.ankle .m {
   color: #ffe066;
 }
+.log li.foul .m {
+  color: #ffb36b;
+}
+.log li.ft .m {
+  color: #d9e4ff;
+}
+.log li.ft.missed .m,
+.log li.sub .m,
+.log li.defense .m {
+  color: var(--muted);
+}
+.log li.timeout,
+.log li.ejected {
+  background: #2a1d24;
+}
+.log li.timeout .m,
+.log li.ejected .m {
+  color: #ff9a8a;
+}
 .log li.big .m {
   color: #fff;
   font-weight: 700;
@@ -356,6 +410,7 @@ table {
 th,
 td {
   padding: 3px 4px;
+  font-size: 12px;
   text-align: right;
   white-space: nowrap;
 }
@@ -380,6 +435,23 @@ tr[data-p]:hover {
 }
 tr.focus {
   background: #3a3220 !important;
+}
+tr.on td.nm::before {
+  content: '●';
+  color: var(--good);
+  font-size: 8px;
+  margin-right: 4px;
+  vertical-align: 2px;
+}
+tr.dnp td {
+  color: #5d6479;
+}
+td.dnpc {
+  text-align: left;
+  font-size: 11px;
+}
+td.warn {
+  color: #ff8a5a;
 }
 tr.tot td {
   border-top: 2px solid var(--line);
@@ -415,6 +487,10 @@ tr.tot td {
   padding: 3px 6px;
   font-size: 12px;
 }
+.rteam button.oncourt {
+  box-shadow: 0 0 0 2px #5f7aa8;
+  color: #fff;
+}
 .rteam button.focus {
   background: #3a3220;
   box-shadow: 0 0 0 2px var(--led);
@@ -434,6 +510,23 @@ tr.tot td {
 .card .body {
   color: var(--muted);
   margin: 4px 0 8px;
+}
+.energy {
+  display: grid;
+  grid-template-columns: 92px 1fr 26px;
+  gap: 6px;
+  align-items: center;
+  margin: 6px 0 2px;
+}
+.energy span:first-child {
+  color: var(--muted);
+}
+.energy b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.energy.off span {
+  color: #6a7189;
 }
 .rg h4 {
   margin: 10px 0 4px;

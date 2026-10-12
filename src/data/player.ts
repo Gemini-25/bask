@@ -48,3 +48,27 @@ export function generatePlayer(rng: Rng, pos: Position, quality: number, number:
     r,
   };
 }
+
+// 포지션별 종합 능력치 (S12). 감독이 출전 선수를 고를 때도 쓴다.
+const OVR_WEIGHTS: Record<Position, Partial<Record<RatingKey, number>>> = {
+  PG: { ballHandling: 3, passing: 3, vision: 2, three: 2, midRange: 1.5, layup: 1.5, speed: 2, accel: 1.5, perimeterD: 1.5, steal: 1, iq: 2 },
+  SG: { three: 3, midRange: 2, layup: 1.5, ballHandling: 1.5, offBall: 1.5, speed: 1.5, perimeterD: 2, steal: 1, iq: 1.5, freeThrow: 1 },
+  SF: { three: 2, midRange: 1.5, layup: 2, dunk: 1, offBall: 1.5, perimeterD: 2, defReb: 1, jump: 1.5, strength: 1, iq: 1.5, speed: 1 },
+  PF: { layup: 1.5, dunk: 1.5, postUp: 1.5, midRange: 1, defReb: 2, offReb: 1.5, postD: 2, block: 1.5, strength: 2, jump: 1, boxOut: 1.5, screen: 1 },
+  C: { postUp: 2, dunk: 2, layup: 1, defReb: 2.5, offReb: 2, postD: 2.5, block: 2.5, strength: 2, boxOut: 2, screen: 1.5, helpD: 1 },
+};
+
+export function overall(p: Player, pos: Position = p.pos): number {
+  const w = OVR_WEIGHTS[pos];
+  let s = 0;
+  let n = 0;
+  for (const [k, wt] of Object.entries(w) as [RatingKey, number][]) {
+    s += p.r[k] * wt;
+    n += wt;
+  }
+  const size: Record<Position, number> = { PG: 184, SG: 190, SF: 196, PF: 201, C: 207 };
+  return s / n + (p.body.heightCm - size[pos]) * 0.4;
+}
+
+export type PosGroup = 'G' | 'W' | 'B';
+export const POS_GROUP: Record<Position, PosGroup> = { PG: 'G', SG: 'G', SF: 'W', PF: 'B', C: 'B' };

@@ -28,6 +28,7 @@ export interface TeamLook {
 export interface SceneHost {
   pb: Playback | null;
   looks: [TeamLook, TeamLook];
+  /** 고른 선수 번호 (GameResult.players 기준), 없으면 -1 */
   focus: number;
   gameId: number;
   onFrame(): void;
@@ -42,6 +43,8 @@ export class CourtScene extends Phaser.Scene {
   private tokens: Phaser.GameObjects.Image[] = [];
   private shadows: Phaser.GameObjects.Image[] = [];
   private dizzy: Phaser.GameObjects.Image[] = [];
+  private slotPid: number[] = new Array(10).fill(-1);
+  private bars!: Phaser.GameObjects.Graphics;
   private ball!: Phaser.GameObjects.Image;
   private ballShadow!: Phaser.GameObjects.Image;
   private marker!: Phaser.GameObjects.Image;
@@ -49,7 +52,6 @@ export class CourtScene extends Phaser.Scene {
   private bannerText!: Phaser.GameObjects.Text;
   private bannerUntil = 0;
   private lastTick = 0;
-  private facing = Array.from({ length: 10 }, () => ({ x: 1, y: 0 }));
   private prev = new Float32Array(20);
 
   constructor(host: SceneHost) {
@@ -71,6 +73,7 @@ export class CourtScene extends Phaser.Scene {
       this.tokens.push(this.add.image(0, 0, 'ball'));
       this.dizzy.push(this.add.image(0, 0, 'dizzy').setDepth(60).setVisible(false));
     }
+    this.bars = this.add.graphics().setDepth(55);
     // 골대: 림 중심이 (골대 바닥 위치 - 림 높이)에 오게
     const rimUp = COURT.rimHeight * ZPX;
     const hy = sy(COURT.width / 2) - rimUp;
@@ -86,7 +89,11 @@ export class CourtScene extends Phaser.Scene {
     this.banner = this.add.container(VIEW_W / 2, VIEW_H / 2, [band, this.bannerText]).setDepth(300).setVisible(false);
   }
 
-  /** 새 경기: 팀 색에 맞춰 코트와 선수 토큰을 다시 만든다 */
+  private tokenKey(pid: number) {
+    return `tok${this.host.gameId}-${pid}`;
+  }
+
+  /** 새 경기: 팀 색에 맞춰 코트와 선수 토큰(로스터 전원)을 다시 만든다 */
   private build() {
     const pb = this.host.pb!;
     const id = this.host.gameId;
@@ -96,13 +103,13 @@ export class CourtScene extends Phaser.Scene {
     this.textures.addCanvas(courtKey, drawCourt([looks[0].paint, looks[1].paint]));
     if (this.court) this.court.setTexture(courtKey);
     else this.court = this.add.image(0, 0, courtKey).setOrigin(0).setDepth(0);
-    for (let i = 0; i < 10; i++) {
-      const key = `tok${id}-${i}`;
+    pb.game.players.forEach((pl, pid) => {
+      const key = this.tokenKey(pid);
       if (this.textures.exists(key)) this.textures.remove(key);
-      const look = looks[i < 5 ? 0 : 1];
-      this.textures.addCanvas(key, drawPlayerToken(look.fill, pb.game.onCourt[i].number, look.num));
-      this.tokens[i].setTexture(key);
-    }
+      const look = looks[pb.game.teamOf[pid]];
+      this.textures.addCanvas(key, drawPlayerToken(look.fill, pl.number, look.num));
+    });
+    this.slotPid.fill(-1);
     for (let i = 0; i < 20; i++) this.prev[i] = pb.game.rec.pos[i];
     this.lastTick = pb.cur;
     this.banner.setVisible(false);
@@ -115,21 +122,18 @@ export class CourtScene extends Phaser.Scene {
     if (this.builtFor !== this.host.gameId) this.build();
     pb.advance(Math.min(delta, 100) / 1000);
     const fr = pb.sample();
+    const lineup = pb.lineupAt(pb.cur);
+    this.bars.clear();
 
     for (let i = 0; i < 10; i++) {
+      const pid = lineup.pids[i];
+      if (this.slotPid[i] !== pid) {
+        this.tokens[i].setTexture(this.tokenKey(pid));
+        this.slotPid[i] = pid;
+      }
       const x = fr.px[i * 2];
       const y = fr.px[i * 2 + 1];
-      const dx = x - this.prev[i * 2];
-      const dy = y - this.prev[i * 2 + 1];
-      const d = Math.hypot(dx, dy);
-      if (d > 0.004) {
-        const f = this.facing[i];
-        f.x += (dx / d - f.x) * 0.25;
-        f.y += (dy / d - f.y) * 0.25;
-        const fl = Math.hypot(f.x, f.y) || 1;
-        f.x /= fl;
-        f.y /= fl;
-      }
+      const d = Math.hypot(x - this.prev[i * 2], y - this.prev[i * 2 + 1]);
       this.prev[i * 2] = x;
       this.prev[i * 2 + 1] = y;
       const px = Math.round(sx(x));
@@ -140,6 +144,13 @@ export class CourtScene extends Phaser.Scene {
       this.shadows[i].setPosition(px, py + 5);
       const stunned = (fr.flags[i] & FLAG_STUN) !== 0;
       this.dizzy[i].setVisible(stunned).setPosition(px, py - 13 + (Math.floor(this.time.now / 120) % 2));
+      // 지친 선수는 발밑에 체력 막대
+      const e = fr.energy[i];
+      if (e < 70) {
+        const w = 12;
+        this.bars.fillStyle(0x0b0d12, 0.85).fillRect(px - w / 2 - 1, py + 7, w + 2, 3);
+        this.bars.fillStyle(e < 45 ? 0xff5a4a : 0xffc93c, 1).fillRect(px - w / 2, py + 8, Math.max(1, Math.round((w * e) / 100)), 1);
+      }
     }
 
     const [bx, by, bz] = fr.ball;
@@ -147,15 +158,15 @@ export class CourtScene extends Phaser.Scene {
     this.ball.setDepth(bz > 2 ? 45 : 10 + by + 0.3);
     this.ballShadow.setPosition(Math.round(sx(bx)), Math.round(sy(by) + 2)).setAlpha(Math.max(0.25, 1 - bz / 5));
 
-    const fi = this.host.focus;
-    if (fi >= 0) {
-      const t = this.tokens[fi];
+    const fs = this.host.focus >= 0 ? lineup.pids.indexOf(this.host.focus) : -1;
+    if (fs >= 0) {
+      const t = this.tokens[fs];
       this.marker.setVisible(true).setPosition(t.x, t.y - 12 - (Math.floor(this.time.now / 250) % 2));
     } else this.marker.setVisible(false);
 
     // 이벤트 연출: 크게 건너뛴 경우엔 생략
     const jump = pb.cur - this.lastTick;
-    if (jump > 0 && jump < 30) for (const e of pb.eventsBetween(this.lastTick, pb.cur)) this.popEvent(e, pb.speed);
+    if (jump > 0 && jump < 30) for (const ev of pb.eventsBetween(this.lastTick, pb.cur)) this.popEvent(ev, pb.speed);
     if (jump < 0 || jump >= 30) this.banner.setVisible(false);
     this.lastTick = pb.cur;
     if (pb.ended) this.showBanner('경기 종료', Infinity);
@@ -180,35 +191,58 @@ export class CourtScene extends Phaser.Scene {
   }
 
   private popEvent(e: GameEvent, speed: number) {
+    const pb = this.host.pb!;
     const looks = this.host.looks;
-    const at = (i: number) => {
-      const fr = this.host.pb!.sample();
-      return { x: sx(fr.px[i * 2]), y: sy(fr.px[i * 2 + 1]) - 10 };
+    const teams = pb.game.teams;
+    /** 선수 머리 위 위치 (벤치에 있으면 코트 가운데) */
+    const at = (pid: number) => {
+      const slot = pid >= 0 ? pb.slotOf(pid, e.tick) : -1;
+      if (slot < 0) return { x: VIEW_W / 2, y: VIEW_H / 2 };
+      const fr = pb.sample();
+      return { x: sx(fr.px[slot * 2]), y: sy(fr.px[slot * 2 + 1]) - 10 };
     };
+    const calm = speed <= 4;
     switch (e.type) {
       case 'made': {
         const p = at(e.player);
         const col = shade(looks[e.team].fill, 0.4);
-        const big = e.shot === 'dunk' || e.pts === 3;
-        const label = e.shot === 'dunk' ? '덩크!' : e.pts === 3 ? '3점!' : '+2';
+        const label = e.alleyOop ? '앨리웁!' : e.andOne ? '앤드원!' : e.shot === 'dunk' ? '덩크!' : e.pts === 3 ? '3점!' : '+2';
+        const big = e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3;
         this.popText(p.x, p.y, label, col, big);
-        if (e.shot === 'dunk' && speed <= 4) this.cameras.main.shake(140, 0.006);
+        if ((e.shot === 'dunk' || e.alleyOop) && calm) this.cameras.main.shake(140, 0.006);
         break;
       }
       case 'miss':
         if (e.blocked && e.other >= 0) {
           const p = at(e.other);
           this.popText(p.x, p.y, '블록!', '#9fd8ff', true);
-          if (speed <= 4) this.cameras.main.shake(100, 0.004);
+          if (calm) this.cameras.main.shake(100, 0.004);
         }
         break;
       case 'turnover':
+        if (e.tov === 'offFoul') break; // 파울 팝업이 대신한다
         if (e.other >= 0) {
           const p = at(e.other);
           this.popText(p.x, p.y, '스틸!', '#b9f6a4', true);
         } else if (speed <= 8) {
-          const p = e.player >= 0 ? at(e.player) : { x: VIEW_W / 2, y: VIEW_H / 2 };
-          this.popText(p.x, p.y, e.tov === 'shotClock' ? '24초!' : '실책', '#ffb3a8');
+          const p = at(e.player);
+          this.popText(p.x, p.y, e.tov === 'shotClock' ? '24초!' : e.tov === 'eightSec' ? '8초!' : '실책', '#ffb3a8');
+        }
+        break;
+      case 'foul': {
+        const p = at(e.player);
+        if (e.foul === 'technical') {
+          this.popText(p.x, p.y, '테크니컬!', '#ff6a5a', true);
+          break;
+        }
+        const label = e.foul === 'charge' ? '차징!' : e.fta ? `파울 · 자유투 ${e.fta}` : '파울';
+        this.popText(p.x, p.y, label, '#ffb36b', e.foul === 'charge');
+        break;
+      }
+      case 'ft':
+        if (calm) {
+          const p = at(e.player);
+          this.popText(p.x, p.y, e.made ? '+1' : '실패', e.made ? shade(looks[e.team].fill, 0.4) : '#aab2c4');
         }
         break;
       case 'ankle': {
@@ -217,10 +251,24 @@ export class CourtScene extends Phaser.Scene {
         break;
       }
       case 'rebound':
-        if (e.offensive && speed <= 4) {
+        if (e.offensive && calm) {
           const p = at(e.player);
           this.popText(p.x, p.y, '공격 리바운드', '#e8e8e8');
         }
+        break;
+      case 'sub':
+        if (calm) {
+          const p = at(e.player);
+          this.popText(p.x, p.y, '교체', '#cfd6e6');
+        }
+        break;
+      case 'ejected': {
+        const p = at(e.player);
+        this.popText(p.x, p.y, '퇴장', '#ff6a5a', true);
+        break;
+      }
+      case 'timeout':
+        this.showBanner(`타임아웃 · ${teams[e.team].city} ${teams[e.team].name}`, 1600);
         break;
       case 'quarterEnd': {
         const q = e.quarter;

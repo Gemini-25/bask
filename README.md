@@ -10,7 +10,7 @@
 
 `play/bask.html` 파일 하나를 받아서 더블클릭하면 브라우저에서 바로 열린다. 인터넷 연결 없이도 된다.
 
-지금 버전은 **M1 경기 엔진 테스트**: 가상 리그 두 팀이 붙는 경기를 위에서 내려다본다.
+지금 버전은 **M2 경기 엔진 테스트**: 가상 리그 두 팀(12명씩)이 붙는 경기를 위에서 내려다본다. 파울·자유투, 체력과 교체, 타임아웃, 지역방어·프레스 같은 수비 전술이 들어 있다.
 
 - Space 재생/정지 · 1~5 배속 (1x, 2x, 4x, 8x, 16x) · Q 쿼터 넘기기 · N 새 경기
 - 박스스코어에서 선수 이름을 누르면 코트에 노란 화살표가 뜨고 능력치 39개를 볼 수 있다
@@ -43,6 +43,6 @@ npm run report     # 100경기 돌려서 평균 통계를 실제 리그와 비�
 - [기획 질문지](docs/planning/01-questions.md): 방향을 정하기 위한 질문 133개와 추천 답
 - [기획 결정 v1](docs/planning/02-decisions.md): 질문지 답변 정리, 해석, 열린 질문
 - [로드맵](docs/planning/03-roadmap.md): 마일스톤 M0~M8
-- [M1 밸런스 리포트](docs/planning/m1-balance-report.txt): 200경기 평균 통계
+- [M1 밸런스 리포트](docs/planning/m1-balance-report.txt), [M2 밸런스 리포트](docs/planning/m2-balance-report.txt): 200경기 평균 통계
 
 폰트: [갈무리](https://github.com/quiple/galmuri) (SIL OFL 1.1)
