@@ -31,10 +31,10 @@ function run(n: number, setup: (p: ReturnType<typeof generateTeam>['players'][nu
 }
 
 describe('성격·특수능력 늘리기 (M18)', () => {
-  it('성격 20가지, 특수능력 26가지 (나쁜 버릇 6)', () => {
-    expect(TRAITS.length).toBe(20);
-    expect(ABILITIES.length).toBe(26);
-    expect(ABILITIES.filter((a) => a.bad).length).toBe(6);
+  it('성격 23가지, 특수능력 30가지 (나쁜 버릇 7) (M21에 배짱 슈터·입담꾼·겸손, 딥쓰리·체이스다운·쇼타임·난사)', () => {
+    expect(TRAITS.length).toBe(23);
+    expect(ABILITIES.length).toBe(30);
+    expect(ABILITIES.filter((a) => a.bad).length).toBe(7);
   });
 
   it('새 성격마다 효과가 있다', () => {
@@ -65,9 +65,10 @@ describe('성격·특수능력 늘리기 (M18)', () => {
     expect(selfish.fga).toBeGreaterThan(base.fga);
   });
 
-  it('소매치기가 있으면 스틸이 늘고, 림 프로텍터가 지키면 골밑 슛이 덜 들어간다', { timeout: 90000 }, () => {
-    const base = run(14, () => {});
-    const thief = run(14, (p) => (p.abilities = { pickpocket: 3 }));
+  it('소매치기가 있으면 스틸이 늘고, 림 프로텍터가 지키면 골밑 슛이 덜 들어간다', { timeout: 150000 }, () => {
+    // 스틸은 경기당 1~2개라 넉넉히
+    const base = run(30, () => {});
+    const thief = run(30, (p) => (p.abilities = { pickpocket: 3 }));
     expect(thief.stl).toBeGreaterThan(base.stl);
     // 센터(자리 4)가 골밑을 지킬 때 상대 야투율
     const rim = (ab: Record<string, number>) => {

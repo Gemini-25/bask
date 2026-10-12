@@ -80,6 +80,10 @@ export interface GameEvent {
   move?: ShotMove;
   /** 블록하러 뜬 수비 위로 찍었다 (인유어페이스) */
   poster?: boolean;
+  /** 체이스다운 블록 (M21) */
+  chase?: boolean;
+  /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
+  fancy?: boolean;
   /** 분석 (M17): 슛 상황, 맡은 수비, 골밑을 지킨 수비, 패스해 준 선수 (안 들어간 슛도) */
   ctx?: ShotCtx;
   def?: number;

@@ -256,6 +256,7 @@ export const EVENTS: EventDef[] = [
       { label: '"상대 에이스를 지우는 선수요."', effect: { trait: 'defender', xp: { perimeterD: 0.3 } } },
       { label: '"동료를 살리는 선수요."', effect: { trait: 'unselfish', friendsAll: 3 } },
       { label: '"공은 저한테 주세요."', effect: { trait: 'selfish', xp: { competitive: 0.3 } } },
+      { label: '"하프라인 넘으면 다 제 사거리예요."', effect: { trait: 'gunslinger', xp: { three: 0.3 } } },
     ],
   },
   {
@@ -270,6 +271,7 @@ export const EVENTS: EventDef[] = [
       { label: '카메라 앞에 서는 거', effect: { trait: 'mediaStar', pop: 2 } },
       { label: '그냥 그날 기분대로', effect: { trait: 'natural', xp: { sense: 0.4 } } },
       { label: '골목에서 공 튀기는 거', effect: { trait: 'streaky', xp: { ballHandling: 0.3 } } },
+      { label: '말싸움에서 안 지는 거', effect: { trait: 'trashTalker', xp: { competitive: 0.3 } } },
     ],
   },
   {
@@ -283,6 +285,7 @@ export const EVENTS: EventDef[] = [
       { label: '이를 악물고 이겨 낸다', effect: { trait: 'competitor', M: 2 } },
       { label: '마음을 비운다', effect: { trait: 'cool', M: 2 } },
       { label: '웃어넘긴다', effect: { trait: 'optimist', condition: 1 } },
+      { label: '조용히 내 할 일을 한다', effect: { trait: 'humble', trust: 2 } },
     ],
   },
   {

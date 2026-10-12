@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COURT } from '../sim/court';
+import { DEEP_DIST, LOGO_DIST } from '../sim/shooting';
 import { ACT, DUNK_LABEL, FLAG_STUN, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
 import { LABELS } from './labels';
@@ -140,6 +141,8 @@ export class CourtScene extends Phaser.Scene {
   private runCache: { f0: number; act: number; start: number; end: number; rel: number }[] = [];
   /** 마지막으로 손에 쥐고 있던 공 위치 (놓은 뒤 잠깐 이어 붙인다) */
   private lastCarry: { x: number; y: number; cur: number } | null = null;
+  /** 슛 이벤트 (틱 순서): 날아가는 공이 딥쓰리인지 알려고 */
+  private shotEvents: GameEvent[] = [];
   private zoomUntil = 0;
   private clock = 0;
   private lastCutIn = -9999;
@@ -272,6 +275,8 @@ export class CourtScene extends Phaser.Scene {
     this.walkers = [];
     this.prevLineup = null;
     this.confetti = [];
+    this.shotEvents = pb.game.events.filter((e) => e.type === 'made' || e.type === 'miss');
+    this.lastCarry = null;
     this.mood = { homeCheer: 0, awayCheer: 0, wave: -1 };
     this.lastTick = pb.cur;
     this.seenCuts = pb.cuts;
@@ -563,6 +568,24 @@ export class CourtScene extends Phaser.Scene {
       bpx = Math.round(lc.x + (bpx - lc.x) * k);
       bpy = Math.round(lc.y + (bpy - lc.y) * k);
     }
+    // 딥쓰리 궤적 (M21): 날아가는 공 뒤로 잔상
+    let trail = 0;
+    if (carrySlot < 0 && bz > 2.2) {
+      const se = this.shotEvents.find((e) => e.tick >= f0);
+      if (se && se.tick - f0 < 16 && se.pts === 3 && (se.dist ?? 0) >= DEEP_DIST) trail = (se.dist ?? 0) >= LOGO_DIST ? 2 : 1;
+    }
+    if (trail) {
+      for (let k = 1; k <= 6; k++) {
+        const g = Math.max(0, pb.cur - k * 0.35);
+        const g0 = Math.floor(g);
+        const gx = sx(rec.ball[g0 * 3]);
+        const gy = szy(rec.ball[g0 * 3 + 1], rec.ball[g0 * 3 + 2]) - 2;
+        ctx.globalAlpha = 0.5 - k * 0.07;
+        ctx.fillStyle = trail === 2 ? (k % 2 ? '#fff3a0' : '#ff9a3a') : '#ffb46a';
+        ctx.fillRect(Math.round(gx) - 1, Math.round(gy) - 1, 3 - (k > 3 ? 1 : 0), 3 - (k > 3 ? 1 : 0));
+      }
+      ctx.globalAlpha = 1;
+    }
     if (carrySlot < 0)
       items.push({
         depth: by + 0.02,
@@ -819,7 +842,11 @@ export class CourtScene extends Phaser.Scene {
         // 슛 동작 (M16): 흔한 캐치앤슛·풀업은 빼고 이름을 띄운다
         const mv = e.move && e.move !== 'catchShoot' && e.move !== 'pullup' ? (e.move === 'putback' ? '풋백 덩크!' : `${shotMove(e.move)?.label ?? ''}!`) : null;
         const flashy = !!e.move && (e.move === 'putback' || !!shotMove(e.move)?.flashy);
-        const label = e.combo ? '콤비!' : e.poster ? '인유어페이스!!' : e.alleyOop ? '앨리웁!' : e.andOne ? (mv ? `${mv.replace('!', '')} 앤드원!` : '앤드원!') : mv ?? (e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2');
+        const d = e.dist ?? 0;
+        const deep = e.pts === 3 && d >= DEEP_DIST;
+        const logo = deep && d >= LOGO_DIST;
+        const threeName = logo ? `로고샷!! ${d.toFixed(1)}m` : deep ? `딥쓰리! ${d.toFixed(1)}m` : '3점!';
+        const label = e.combo ? '콤비!' : e.poster ? '인유어페이스!!' : e.alleyOop ? '앨리웁!' : e.andOne ? (mv ? `${mv.replace('!', '')} 앤드원!` : '앤드원!') : deep ? threeName : mv ?? (e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2');
         const big = e.combo || e.poster || e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3 || flashy;
         if (big) this.emote(e.player, 'note');
         if (loud) sound.play(e.shot === 'dunk' ? 'dunk' : 'swish');
@@ -846,9 +873,30 @@ export class CourtScene extends Phaser.Scene {
         const buzzer = e.clock < 0.6;
         const mine = e.player === this.host.focus && (e.shot === 'dunk' || e.pts === 3);
         const worth = e.alleyOop || e.poster || (buzzer && e.pts >= 2) || (clutch && big) || mine || (flashy && e.player === this.host.focus) || (e.combo && (e.player === this.host.focus || e.other === this.host.focus));
+        // 화려한 패스를 받아 넣었다 (M21)
+        if (e.fancy && e.other >= 0 && calm) {
+          const pp = at(e.other);
+          this.popText(pp.x, pp.y - 4, '쇼타임 패스!', '#9ff0ff');
+        }
+        if (logo && loud) {
+          this.cheer(e.team as 0 | 1, 1);
+          this.mood.wave = 0;
+        }
+        // 위닝 버저비터: 마지막 쿼터 막판에 이 슛으로 이기게 됐다
+        const before = e.team === 0 ? e.score[0] - e.pts - e.score[1] : e.score[1] - e.pts - e.score[0];
+        const after = before + e.pts;
+        const winner = e.quarter >= 4 && e.clock < 1.0 && before <= 0 && after > 0;
+        if (winner) {
+          this.showBanner(`위닝 버저비터!! ${pb.game.players[e.player].name}`, 2600, VIEW_H * 0.24);
+          if (loud) sound.play('cheer');
+          const cols = [looks[e.team].fill, looks[e.team].num, '#ffd23f', '#f7f2e8'];
+          for (let i = 0; i < 70; i++) this.confetti.push({ x: Math.random() * VIEW_W, y: -Math.random() * 100, vx: (Math.random() - 0.5) * 20, vy: 30 + Math.random() * 40, c: cols[i % cols.length], life: 5 });
+          const lu = pb.lineupAt(e.tick).pids;
+          lu.forEach((pid, k) => this.emote(pid, (k < 5 ? 0 : 1) === e.team ? 'note' : 'dots', 3));
+        }
         if (worth && calm && e.tick - this.lastCutIn > 300) {
           this.lastCutIn = e.tick;
-          this.cutIn(e, buzzer ? '버저비터!' : label.replace('+2', '득점!'));
+          this.cutIn(e, winner ? '위닝 버저비터!!' : buzzer ? '버저비터!' : label.replace('+2', '득점!'));
         } else if (calm && big && Math.random() < 0.5) {
           const mate = pb.lineupAt(e.tick).pids.find((q, k) => q !== e.player && (k < 5 ? 0 : 1) === e.team);
           if (mate !== undefined) {
@@ -864,7 +912,8 @@ export class CourtScene extends Phaser.Scene {
           this.emote(e.other, 'bang');
           this.emote(e.player, 'dots');
           const p = at(e.other);
-          this.popText(p.x, p.y, '블록!', '#9fd8ff', true);
+          this.popText(p.x, p.y, e.chase ? '체이스다운!!' : '블록!', '#9fd8ff', true);
+          if (e.chase && calm) this.cameras.main.shake(160, 0.007);
           this.cheer((1 - e.team) as 0 | 1, 0.8);
           if (calm && Math.random() < 0.5) this.bubble(p.x, p.y - 14, '어림없지!');
           if (calm) this.cameras.main.shake(100, 0.004);

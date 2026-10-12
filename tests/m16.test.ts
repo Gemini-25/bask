@@ -16,7 +16,7 @@ import { ACT, DRIBBLE_MOVES, type GameEvent } from '../src/sim/types';
 const spec = (over: Partial<CreateSpec> = {}): CreateSpec => ({ name: '테스트', number: 7, gender: 'M', prefPos: 'SG', background: 'ordinary', growth: 'normal', heightDelta: 0, build: 'normal', look: lookFor('x'), alloc: {}, school: 'HANB', ...over });
 
 /** 2번 선수를 키워서 12경기, 그 선수의 슛 이벤트 */
-function shots(setup: (r: Record<string, number>, ab: Record<string, number>) => void, games = 12) {
+function shots(setup: (r: Record<string, number>, ab: Record<string, number>) => void, games = 12, everyone = false) {
   const out: GameEvent[] = [];
   for (let g = 0; g < games; g++) {
     const a = generateTeam(new Rng(11 + g), TEAM_INFOS[2], 1);
@@ -27,7 +27,7 @@ function shots(setup: (r: Record<string, number>, ab: Record<string, number>) =>
     setup(s.r as unknown as Record<string, number>, ab);
     s.abilities = ab;
     const r = simulateGame(a, b, 77 + g);
-    out.push(...r.events.filter((e) => e.player === 2 && (e.type === 'made' || e.type === 'miss')));
+    out.push(...r.events.filter((e) => (everyone || e.player === 2) && (e.type === 'made' || e.type === 'miss')));
   }
   return out;
 }
@@ -67,7 +67,13 @@ describe('동작 (M16)', () => {
       ab.poster = 3;
     });
     expect(ev.some((e) => e.poster && e.type === 'made' && e.text.includes('인유어페이스'))).toBe(true);
-    expect(ev.some((e) => e.move === 'putback')).toBe(true);
+    // 풋백은 드물어서 그 경기들의 모든 선수로 본다
+    const all = shots((r, ab) => {
+      r.dunk = 94;
+      r.jump = 94;
+      ab.poster = 3;
+    }, 12, true);
+    expect(all.some((e) => e.move === 'putback')).toBe(true);
   });
 
   it('센스: 모든 선수에게 있고, 예전 세이브는 채운다', () => {

@@ -1,7 +1,7 @@
 // 특수능력 (S8, S9): 좋은 능력은 ★1~3으로 진화하고, 나쁜 능력은 조건을 채우면 사라진다.
 import type { Player } from './player';
 
-export type AbilityId = 'clutch' | 'ankle' | 'lockdown' | 'rebound' | 'quickRelease' | 'noLook' | 'zone' | 'moodMaker' | 'genius' | 'poster' | 'stepback' | 'fadeaway' | 'euro' | 'contact' | 'floorGeneral' | 'rimProtector' | 'deadeye' | 'workhorse' | 'pickpocket' | 'transition' | 'glass' | 'chicken' | 'ftPhobia' | 'foulProne' | 'tunnel' | 'lazyD';
+export type AbilityId = 'clutch' | 'ankle' | 'lockdown' | 'rebound' | 'quickRelease' | 'noLook' | 'zone' | 'moodMaker' | 'genius' | 'poster' | 'stepback' | 'fadeaway' | 'euro' | 'contact' | 'floorGeneral' | 'rimProtector' | 'deadeye' | 'workhorse' | 'pickpocket' | 'transition' | 'deepRange' | 'chaseDown' | 'showtime' | 'glass' | 'chicken' | 'ftPhobia' | 'foulProne' | 'tunnel' | 'lazyD' | 'heatChecker';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -33,12 +33,17 @@ export const ABILITIES: AbilityDef[] = [
   { id: 'workhorse', label: '철인', desc: '경기 중 체력이 천천히 떨어진다' },
   { id: 'pickpocket', label: '소매치기', desc: '드리블·패스를 잘 가로챈다' },
   { id: 'transition', label: '속공 머신', desc: '속공 마무리가 더 잘 된다' },
+  // M21
+  { id: 'deepRange', label: '딥쓰리', desc: '3점 라인 한참 뒤에서도 쏜다. 멀어져도 성공률이 덜 떨어지고 수비가 더 멀리서부터 붙는다' },
+  { id: 'chaseDown', label: '체이스다운', desc: '속공을 뒤에서 쫓아가 백보드에 찍어 누른다' },
+  { id: 'showtime', label: '쇼타임', desc: '비하인드 백·노룩 패스를 즐겨 쓴다. 속공 패스가 덜 끊긴다' },
   { id: 'glass', label: '유리몸', desc: '다치기 쉽다', bad: true },
   { id: 'chicken', label: '새가슴', desc: '막판 접전에서 슛과 자유투가 흔들린다', bad: true },
   { id: 'ftPhobia', label: '자유투 공포증', desc: '자유투 성공률이 크게 떨어진다', bad: true },
   { id: 'foulProne', label: '파울 트러블', desc: '파울을 자주 한다', bad: true },
   { id: 'tunnel', label: '터널 시야', desc: '동료가 잘 안 보인다. 패스를 덜 한다', bad: true },
   { id: 'lazyD', label: '게으른 수비', desc: '맡은 선수를 느슨하게 막는다', bad: true },
+  { id: 'heatChecker', label: '난사', desc: '두세 개 연속으로 들어가면 무리한 슛을 쏜다', bad: true },
 ];
 
 export function abilityDef(id: AbilityId) {
@@ -80,4 +85,11 @@ export const FX = {
   workhorse: [0, 0.12, 0.2, 0.28],
   pickpocket: [0, 0.3, 0.5, 0.7],
   transition: [0, 0.035, 0.06, 0.085],
+  /** M21: 딥쓰리 (사거리 +m, 멀어질 때 떨어지는 기울기), 체이스다운 (속공 뒤에서 블록), 쇼타임 (화려한 패스, 속공 패스 끊길 확률 줄이기) */
+  deepExtra: [0, 0.4, 0.75, 1.1],
+  deepSlope: [1, 0.8, 0.65, 0.5],
+  chaseDown: [0, 0.06, 0.1, 0.14],
+  /** 쇼타임이 화려한 패스를 고를 확률 */
+  showtimeFancy: [0, 0.03, 0.05, 0.08],
+  showtime: [0, 0.2, 0.32, 0.45],
 };

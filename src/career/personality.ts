@@ -1,5 +1,6 @@
 // 성격 (M6 결정: 1~2개, M12, M18에 12개 더): 만들 때 하나, 커리어 중 이벤트로 하나 더. 효과는 작게.
 import type { RatingKey } from '../data/ratings';
+import { ACT } from '../sim/types';
 import type { ActionId, Career } from './career';
 
 export type TraitId =
@@ -23,7 +24,11 @@ export type TraitId =
   | 'socialite'
   | 'mediaStar'
   | 'natural'
-  | 'perfectionist';
+  | 'perfectionist'
+  // M21
+  | 'gunslinger'
+  | 'trashTalker'
+  | 'humble';
 
 export interface TraitDef {
   id: TraitId;
@@ -53,6 +58,10 @@ export const TRAITS: TraitDef[] = [
   { id: 'mediaStar', label: '방송 체질', desc: '광고 촬영비 +35%, 인기 +25%' },
   { id: 'natural', label: '감각파', desc: '경기 중 센스가 오르고 화려한 동작이 늘지만 훈련 포인트 -5%' },
   { id: 'perfectionist', label: '완벽주의', desc: '개인 훈련 +6%, 경기 중 자유투·집중력. 기분은 쉽게 가라앉는다' },
+  // M21
+  { id: 'gunslinger', label: '배짱 슈터', desc: '딥쓰리를 겁 없이 쏜다 (사거리 +0.5m). 큰 경기에서 침착성이 오르고, 쏘자마자 돌아선다' },
+  { id: 'trashTalker', label: '입담꾼', desc: '경기 중 승부욕 +5, 침착성 -2. 넣으면 상대 관중을 조용히 시킨다. 인기 +10%' },
+  { id: 'humble', label: '겸손', desc: '감독 신뢰 +20%, 친밀도 +15%, 경기 중 팀워크 +4. 인기는 덜 오른다' },
 ];
 
 export function traitDef(id: TraitId) {
@@ -161,6 +170,35 @@ export function traitGameBoost(c: Career, official: boolean): Partial<Record<Rat
     add('freeThrow', 4);
     add('focus', 2);
   }
+  // M21
+  if (hasTrait(c, 'gunslinger')) {
+    add('three', 1);
+    if (official) add('composure', 3);
+  }
+  if (hasTrait(c, 'trashTalker')) {
+    add('competitive', 5);
+    add('composure', -2);
+  }
+  if (hasTrait(c, 'humble')) add('teamwork', 4);
+  return out;
+}
+
+/** 경기 엔진: 딥쓰리 사거리 더 (m) (M21) */
+export function traitDeep(c: Career): number {
+  return hasTrait(c, 'gunslinger') ? 0.5 : 0;
+}
+
+/** 경기 엔진: 좋아하는 세리머니 (M21) */
+export function traitCeleb(c: Career): number[] {
+  const out: number[] = [];
+  const push = (...a: number[]) => out.push(...a);
+  if (hasTrait(c, 'showman')) push(ACT.SHIMMY, ACT.GOGGLES, ACT.FLEX);
+  if (hasTrait(c, 'mediaStar')) push(ACT.GOGGLES, ACT.SHIMMY);
+  if (hasTrait(c, 'hothead')) push(ACT.ROAR, ACT.FLEX);
+  if (hasTrait(c, 'competitor')) push(ACT.ROAR);
+  if (hasTrait(c, 'trashTalker')) push(ACT.SHH, ACT.SHH, ACT.ROAR);
+  if (hasTrait(c, 'cool') || hasTrait(c, 'gunslinger')) push(ACT.TURNAWAY);
+  if (hasTrait(c, 'humble') || hasTrait(c, 'unselfish')) push(ACT.HIGHFIVE);
   return out;
 }
 
@@ -179,6 +217,10 @@ export function traitSocial(c: Career): { friends: number; trust: number } {
   }
   if (hasTrait(c, 'perfectionist')) st.friends *= 0.9;
   if (hasTrait(c, 'workaholic')) st.trust *= 1.1;
+  if (hasTrait(c, 'humble')) {
+    st.friends *= 1.15;
+    st.trust *= 1.2;
+  }
   return st;
 }
 
@@ -188,6 +230,8 @@ export function traitPop(c: Career): number {
   if (hasTrait(c, 'showman')) m *= 1.25;
   if (hasTrait(c, 'mediaStar')) m *= 1.25;
   if (hasTrait(c, 'socialite')) m *= 1.1;
+  if (hasTrait(c, 'trashTalker')) m *= 1.1;
+  if (hasTrait(c, 'humble')) m *= 0.85;
   return m;
 }
 

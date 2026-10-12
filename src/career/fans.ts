@@ -88,6 +88,10 @@ const TRAIT_ANSWER: Partial<Record<TraitId, InterviewChoice>> = {
   sniper: { label: '"림이 바다만 해 보였어요."', effect: { pop: 2, xp: { three: 0.2 } }, reply: '오늘의 명언으로 뽑혔다.' },
   defender: { label: '"상대 에이스 몇 점 넣었죠?"', effect: { xp: { perimeterD: 0.3 }, trust: 1 }, reply: '상대 팀 라커룸이 조용해졌다.' },
   socialite: { label: '"오늘 밤엔 다 같이 고기 먹으러 갑니다!"', effect: { friends: 3, pop: 1 }, reply: '팀 단톡방이 불이 났다.' },
+  // M21
+  gunslinger: { label: '"로고에서도 들어갈 것 같았어요."', effect: { pop: 2, xp: { three: 0.2 } }, reply: '하이라이트가 하루 종일 돌았다.' },
+  trashTalker: { label: '"상대 수비? 누가 막았는데요?"', effect: { pop: 3, trust: -1 }, reply: '상대 팀 단장이 전화를 걸어왔다는 소문이다.' },
+  humble: { label: '"저는 제 할 일만 했습니다."', effect: { trust: 2, friends: 2 }, reply: '감독님이 어깨를 두드렸다.' },
 };
 
 export function interviewFor(grade: string, official: boolean, traits: TraitId[] = []): { q: string; choices: InterviewChoice[] } | null {

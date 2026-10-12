@@ -10,6 +10,7 @@
 // 그래비티: 공을 가졌을 때 몰려오는 도움 수비 수, 공이 없을 때 맡은 수비와 거리, 수비할 때 상대 골밑 시도 억제
 // 종합: BPM (박스 +/-, 100 공격당), WAR (대체 선수보다 몇 승 더)
 import type { GameResult, ShotCtx, Side } from './types';
+import { DEEP_DIST, LOGO_DIST } from './shooting';
 
 export const SHOT_CTXS: ShotCtx[] = ['catch', 'pullup', 'drive', 'post', 'putback', 'fast', 'other'];
 export const CTX_LABEL: Record<ShotCtx, string> = { catch: '캐치앤슛', pullup: '풀업·드리블', drive: '돌파', post: '포스트', putback: '풋백', fast: '속공', other: '그 밖' };
@@ -49,6 +50,9 @@ export interface AdvRaw {
   open: Att;
   light: Att;
   tight: Att;
+  /** 딥쓰리 (8m+), 로고 샷 (9.5m+) (M21) */
+  deep: Att;
+  logo: Att;
   /** 슛마다 성공 확률 합 (기대 득점) */
   xfg: number;
   /** 1차 수비로 막은 슛, 골밑을 지킨 슛 */
@@ -114,6 +118,8 @@ export function emptyRaw(): AdvRaw {
     ctx: Object.fromEntries(SHOT_CTXS.map((k) => [k, att()])) as Record<ShotCtx, Att>,
     moves: {},
     open: att(),
+    deep: att(),
+    logo: att(),
     light: att(),
     tight: att(),
     xfg: 0,
@@ -205,6 +211,16 @@ export function analyzeGame(g: GameResult): AdvRaw[] {
           mv.a++;
           mv.m += made ? 1 : 0;
           mv.pts += pts;
+        }
+        if (e.pts === 3 && (e.dist ?? 0) >= DEEP_DIST) {
+          p.deep.a++;
+          p.deep.m += made ? 1 : 0;
+          p.deep.pts += pts;
+          if ((e.dist ?? 0) >= LOGO_DIST) {
+            p.logo.a++;
+            p.logo.m += made ? 1 : 0;
+            p.logo.pts += pts;
+          }
         }
         const cb = (e.contest ?? 0) < 0.25 ? p.open : (e.contest ?? 0) < 0.5 ? p.light : p.tight;
         cb.a++;
@@ -341,6 +357,9 @@ export interface AdvMetrics {
   /** 슛 상황별 [시도/경기, 야투율] */
   ctx: Record<ShotCtx, [number, number]>;
   open: [number, number];
+  /** 딥쓰리·로고 샷 [시도/경기, 성공률] (M21) */
+  deep: [number, number];
+  logo: [number, number];
   light: [number, number];
   tight: [number, number];
   xfg: number;
@@ -409,6 +428,8 @@ export function derive(r: AdvRaw): AdvMetrics {
     onOff,
     ctx,
     open: [r.open.a / g, pct(r.open.m, r.open.a)],
+    deep: [(r.deep?.a ?? 0) / g, pct(r.deep?.m ?? 0, r.deep?.a ?? 0)],
+    logo: [(r.logo?.a ?? 0) / g, pct(r.logo?.m ?? 0, r.logo?.a ?? 0)],
     light: [r.light.a / g, pct(r.light.m, r.light.a)],
     tight: [r.tight.a / g, pct(r.tight.m, r.tight.a)],
     xfg: pct(r.xfg, r.fga),

@@ -12,6 +12,17 @@ export interface ShotInfo {
   pOpen: number;
 }
 
+/** 딥쓰리 (M21): 림에서 8m 넘게 (3점 라인보다 1.25m 이상 뒤), 로고 샷: 9.5m 넘게 */
+export const DEEP_DIST = 8.0;
+export const LOGO_DIST = 9.5;
+
+/** 사거리: 3점이 멀어질수록 떨어지는 성공률이 시작되는 거리 (+m)와 떨어지는 기울기 배율 */
+export interface Range {
+  extra: number;
+  slope: number;
+}
+export const NO_RANGE: Range = { extra: 0, slope: 1 };
+
 export function canDunk(p: Player, dist: number): boolean {
   const lift = p.r.jump + (p.body.heightCm - 190) * 1.6;
   return dist < 1.5 && p.r.dunk >= 45 && lift >= 52;
@@ -21,7 +32,7 @@ export function canDunk(p: Player, dist: number): boolean {
 /** 아주 높은 능력치는 효과가 조금 줄어든다 (75를 넘으면 0.75씩, M16에서 0.5 → 0.75: 99는 99답게) */
 const soft = (v: number) => (v <= 75 ? v : 75 + (v - 75) * 0.75);
 
-export function shotInfo(p: Player, u: number, v: number, post = false, contest = 0): ShotInfo {
+export function shotInfo(p: Player, u: number, v: number, post = false, contest = 0, range: Range = NO_RANGE): ShotInfo {
   const dist = Math.hypot(u - COURT.hoopFromBaseline, v);
   const three = isThreeLocal(u, v);
   const raw = p.r;
@@ -50,7 +61,7 @@ export function shotInfo(p: Player, u: number, v: number, post = false, contest 
     pOpen = 0.48 + (r.midRange - 50) * 0.005 - (dist - 4.2) * 0.012;
   } else {
     kind = 'three';
-    pOpen = 0.385 + (r.three - 50) * 0.005 - Math.max(0, dist - 7.0) * 0.07;
+    pOpen = 0.385 + (r.three - 50) * 0.005 - Math.max(0, dist - 7.0 - range.extra) * 0.07 * range.slope;
   }
   return { kind, dist, three, pts: three ? 3 : 2, pOpen: clamp(pOpen, 0.01, 0.97) };
 }

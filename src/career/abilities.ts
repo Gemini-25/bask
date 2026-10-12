@@ -39,10 +39,14 @@ export interface CareerStats {
   blocks?: number;
   fastMakes?: number;
   minutes?: number;
+  /** M21: 딥쓰리 성공, 체이스다운 블록, 화려한 패스 어시스트 */
+  deepMade?: number;
+  chaseBlocks?: number;
+  fancyAst?: number;
 }
 
 export function emptyStats(): CareerStats {
-  return { games: 0, clutchMade: 0, clutchMiss: 0, ankles: 0, threesMade: 0, ast: 0, reb: 0, stlblk: 0, ftm: 0, fta: 0, foulOuts: 0, big: 0, injuries: 0, lastInjury: -99, recentPf: [], ftAfter: { m: 0, a: 0 }, moves: 0, posters: 0, stepbacks: 0, fades: 0, euros: 0, andOnes: 0, steals: 0, blocks: 0, fastMakes: 0, minutes: 0 };
+  return { games: 0, clutchMade: 0, clutchMiss: 0, ankles: 0, threesMade: 0, ast: 0, reb: 0, stlblk: 0, ftm: 0, fta: 0, foulOuts: 0, big: 0, injuries: 0, lastInjury: -99, recentPf: [], ftAfter: { m: 0, a: 0 }, moves: 0, posters: 0, stepbacks: 0, fades: 0, euros: 0, andOnes: 0, steals: 0, blocks: 0, fastMakes: 0, minutes: 0, deepMade: 0, chaseBlocks: 0, fancyAst: 0 };
 }
 
 /** 단계별 조건: [기록 하한, 능력치 하한] × 3단계 */
@@ -69,6 +73,10 @@ const GOOD: { id: AbilityId; stat: (c: Career) => number; key: RatingKey; need: 
   { id: 'workhorse', stat: (c) => Math.round(c.stats.minutes ?? 0), key: 'stamina', need: [[600, 60], [1800, 70], [4000, 80]], how: '출전 시간(분) + 지구력' },
   { id: 'pickpocket', stat: (c) => c.stats.steals ?? 0, key: 'steal', need: [[20, 58], [70, 68], [160, 78]], how: '스틸 + 스틸 능력치' },
   { id: 'transition', stat: (c) => c.stats.fastMakes ?? 0, key: 'speed', need: [[15, 60], [50, 70], [120, 80]], how: '속공 득점 + 스피드' },
+  // M21
+  { id: 'deepRange', stat: (c) => c.stats.deepMade ?? 0, key: 'three', need: [[6, 72], [20, 80], [50, 88]], how: '딥쓰리 성공 + 3점슛' },
+  { id: 'chaseDown', stat: (c) => (c.stats.chaseBlocks ?? 0) + Math.floor((c.stats.blocks ?? 0) / 15), key: 'speed', need: [[2, 62], [6, 72], [14, 82]], how: '체이스다운·블록 + 스피드' },
+  { id: 'showtime', stat: (c) => (c.stats.fancyAst ?? 0) + Math.floor(c.stats.ast / 20), key: 'sense', need: [[6, 65], [20, 74], [50, 84]], how: '화려한 패스 어시스트·어시스트 + 센스' },
 ];
 
 /** 다음 단계까지 남은 조건 (화면 안내용) */
@@ -131,6 +139,8 @@ export function checkAbilities(c: Career): string[] {
   // M18 나쁜 버릇: 어시스트가 거의 없으면 터널 시야, 스틸·블록이 거의 없으면 게으른 수비
   bad('tunnel', s.games >= 20 && s.ast / s.games < 0.8 && c.me.r.vision < 40, c.me.r.vision >= 50 && s.games >= 20 && s.ast / s.games >= 1.5);
   bad('lazyD', s.games >= 20 && s.stlblk / s.games < 0.3 && c.me.r.hustle < 40, c.me.r.hustle >= 50);
+  // M21 나쁜 버릇: 3점을 많이 쏘는데 잘 안 들어가고 침착하지 못하면 난사, 집중력이 오르면 사라진다
+  bad('heatChecker', s.games >= 20 && c.me.r.focus < 42 && c.me.r.composure < 45 && (c.stats.threesMade ?? 0) >= 20 && c.me.r.three < 55, c.me.r.focus >= 55 || c.me.r.three >= 65);
   bad('foulProne', s.foulOuts >= 2 && s.recentPf.length >= 3 && s.recentPf.slice(-3).some((p) => p >= 5), s.recentPf.length >= 5 && s.recentPf.slice(-5).every((p) => p <= 2));
   return out;
 }

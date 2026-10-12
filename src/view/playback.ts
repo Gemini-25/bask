@@ -1,6 +1,9 @@
 import type { GameEvent, GameResult, Lineup } from '../sim/types';
 import { shotMove } from '../data/moves';
 
+/** 느리게 보여 줄 화려한 덩크 (M21) */
+const SLOW_DUNKS = new Set(['windmill', 'd360', 'tomahawk', 'reverse', 'double', 'elbow', 'cradle', 'hammer', 'superman', 'between', 'ftline', 'scorpion', 'selfOop']);
+
 export interface Frame {
   px: Float32Array; // 20
   ball: [number, number, number];
@@ -59,6 +62,8 @@ export class Playback {
         const margin = Math.abs(prevScore[0] - prevScore[1]);
         const clutch = e.quarter >= 4 && e.clock < 6 && margin <= 3;
         if (buzzer || clutch) this.slow.push([e.tick - 14, e.tick + 4]);
+        // M21: 인유어페이스·화려한 덩크·로고샷도 느리게
+        else if (e.type === 'made' && (e.poster || (e.dunk && SLOW_DUNKS.has(e.dunk)) || (e.pts === 3 && (e.dist ?? 0) >= 9.5))) this.slow.push([e.tick - 8, e.tick + 2]);
       }
       prevScore = e.score;
     }
@@ -97,12 +102,15 @@ export class Playback {
     // 하이라이트 모드는 건너뛰지 않고 빨리 감는다 (advance)
     if (this.mode === 'highlights') return;
     else if (this.focusPid >= 0 && !this.lineupAt(this.cur).pids.includes(this.focusPid)) {
-      const next = this.game.lineups.find((l) => l.tick > this.cur && l.pids.includes(this.focusPid));
+      // 같은 틱에 교체가 여러 번이면 그 틱의 마지막 라인업으로 본다
+      const ls = this.game.lineups;
+      const next = ls.find((l, i) => l.tick > this.cur && (i + 1 >= ls.length || ls[i + 1].tick !== l.tick) && l.pids.includes(this.focusPid));
       to = next ? next.tick : this.last;
     }
-    if (to > this.cur + 1) {
+    if (to > this.cur) {
+      // 1틱 안쪽이면 장면 전환 없이 붙여서 넘어간다
+      if (to > this.cur + 1) this.cuts++;
       this.cur = to;
-      this.cuts++;
     }
   }
 

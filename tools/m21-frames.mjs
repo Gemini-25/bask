@@ -16,7 +16,7 @@ await page.waitForTimeout(500);
 const found = await page.evaluate(
   ([kind, n]) => {
     const g = window.bask.host.pb.game;
-    const ev = g.events.filter((e) => (e.type === 'made' || e.type === 'miss') && (e.shot === kind || e.move === kind || e.dunk === kind));
+    const ev = g.events.filter((e) => (e.type === 'made' || e.type === 'miss') && (kind === 'deep' ? e.type === 'made' && e.pts === 3 && e.dist >= 8 : kind === 'chase' ? e.chase : e.shot === kind || e.move === kind || e.dunk === kind));
     return ev.slice(0, Number(n)).map((e) => ({ tick: e.tick, x: e.x, y: e.y, text: e.text, player: e.player }));
   },
   [kind, scenes],

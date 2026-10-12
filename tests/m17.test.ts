@@ -53,6 +53,7 @@ describe('분석 지표 (M17)', () => {
     expect(s.gravityBall).toBeGreaterThan(l.gravityBall);
     expect(s.gravityOff).toBeLessThan(l.gravityOff);
     expect(s.dfgPct).toBeLessThan(l.dfgPct);
-    expect(s.rimDeter).toBeGreaterThan(l.rimDeter);
+    // 골밑을 지킬 때 상대 야투율 (수비 그래비티 rimDeter는 벤치 시간이 몇 분이라 10경기로는 크게 흔들려서 이걸로 본다)
+    expect(s.rimPct).toBeLessThan(l.rimPct - 0.08);
   });
 });

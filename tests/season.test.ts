@@ -46,7 +46,8 @@ describe('시즌 일정 (W8)', () => {
     const seniors = c.roster.filter((e) => e.grade === 3).length;
     let games = 0;
     for (let w = 0; w < 48; w++) {
-      playWeek(c, w % 3 === 0 ? 'rest' : 'team');
+      // 다치면 재활 (경기 흐름에 따라 다칠 수도 있다)
+      playWeek(c, c.injury ? 'rehab' : w % 3 === 0 ? 'rest' : 'team');
       if (c.pendingEvent) resolveEvent(c, c.pendingEvent, 0);
       if (c.pendingGame) {
         applyMatch(c, playMatch(c));
@@ -140,7 +141,7 @@ describe('특수능력 (S8)', () => {
   it('배경에 따라 시작 능력, 천재는 전부 ★3', () => {
     expect(createCareer(spec({ background: 'street' }), 8).me.abilities).toEqual({ ankle: 1 });
     const g = createCareer(spec({ background: 'genius' }), 8).me.abilities!;
-    expect(Object.values(g).length).toBe(20);
+    expect(Object.values(g).length).toBe(23);
     expect(Object.values(g).every((n) => n === 3)).toBe(true);
   });
 

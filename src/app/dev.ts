@@ -380,11 +380,11 @@ export class DevPanel {
       .sort((a, b) => g.teamOf[a.pid] - g.teamOf[b.pid] || b.m.bpm - a.m.bpm)
       .map(
         ({ p, pid, m }) =>
-          `<tr><td class="nm"><i class="sw" style="background:${g.teams[g.teamOf[pid]].color}"></i>${esc(p.name)}</td><td>${m.mpg.toFixed(0)}</td><td>${m.ppg.toFixed(0)}</td><td>${(m.ts * 100).toFixed(0)}</td><td>${(m.usg * 100).toFixed(0)}</td><td>${m.bpm.toFixed(1)}</td><td>${m.onOff.toFixed(0)}</td><td>${m.drivesPg.toFixed(0)}</td><td>${m.gravityBall.toFixed(2)}</td><td>${m.dfgaPg ? `${(m.dfgPct * 100).toFixed(0)}` : '-'}</td></tr>`,
+          `<tr><td class="nm"><i class="sw" style="background:${g.teams[g.teamOf[pid]].color}"></i>${esc(p.name)}</td><td>${m.mpg.toFixed(0)}</td><td>${m.ppg.toFixed(0)}</td><td>${(m.ts * 100).toFixed(0)}</td><td>${(m.usg * 100).toFixed(0)}</td><td>${m.bpm.toFixed(1)}</td><td>${m.onOff.toFixed(0)}</td><td>${m.drivesPg.toFixed(0)}</td><td>${m.gravityBall.toFixed(2)}</td><td>${m.dfgaPg ? `${(m.dfgPct * 100).toFixed(0)}` : '-'}</td><td>${m.deep[0] ? `${Math.round(m.deep[0] * m.deep[1])}/${Math.round(m.deep[0])}` : '-'}</td></tr>`,
       )
       .join('');
     return `<div class="dvgrp"><h5>이 경기 고급 기록 (경기 끝 기준)</h5>
-      <table class="ttable dvt"><tr><th class="nm">선수</th><th>분</th><th>점</th><th title="트루 슈팅 %">TS</th><th title="공격 점유율 %">USG</th><th title="박스 +/- (100 공격당)">BPM</th><th title="코트에 있을 때와 없을 때 넷 레이팅 차이">온오프</th><th>돌파</th><th title="공 가졌을 때 몰려온 도움 수비 (명)">그래비티</th><th title="1차 수비로 막은 슛의 상대 야투율 %">DFG</th></tr>${rows}</table>
+      <table class="ttable dvt"><tr><th class="nm">선수</th><th>분</th><th>점</th><th title="트루 슈팅 %">TS</th><th title="공격 점유율 %">USG</th><th title="박스 +/- (100 공격당)">BPM</th><th title="코트에 있을 때와 없을 때 넷 레이팅 차이">온오프</th><th>돌파</th><th title="공 가졌을 때 몰려온 도움 수비 (명)">그래비티</th><th title="1차 수비로 막은 슛의 상대 야투율 %">DFG</th><th title="딥쓰리 (8m 넘게) 성공/시도">딥3</th></tr>${rows}</table>
       <p class="hint">전체 지표는 npx tsx tools/analytics.ts (돌파 결과, 슛 상황·견제별 성공률, 리바운드·스틸·블록 %, WAR, 수비 그래비티 등)</p></div>`;
   }
 
