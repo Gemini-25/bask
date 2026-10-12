@@ -59,8 +59,9 @@ describe('성격·특수능력 늘리기 (M18)', () => {
   });
 
   it('이기적이면 더 많이 쏜다 (엔진 슛 욕심)', { timeout: 60000 }, () => {
-    const base = run(8, () => {});
-    const selfish = run(8, () => {}, { usage: { 2: 0.08 } });
+    // 경기마다 흐름이 달라서 넉넉히 돌린다
+    const base = run(24, () => {});
+    const selfish = run(24, () => {}, { usage: { 2: 0.08 } });
     expect(selfish.fga).toBeGreaterThan(base.fga);
   });
 

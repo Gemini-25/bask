@@ -4,6 +4,7 @@ import { generatePlayer, type Player } from '../data/player';
 import type { ActionId, FocusId, Points } from '../career/career';
 import { ACT } from '../sim/types';
 import { drawBenchFigure, drawFigure, type Kit } from '../view/character';
+import { isOneShot } from '../view/anims';
 import { drawDigits } from '../view/pixel';
 import { liveCanvas } from './figure';
 
@@ -65,7 +66,8 @@ export function trainingScene(canvas: HTMLCanvasElement, o: SceneOpts) {
   const mateKit: Kit = { jersey: '#5b6478', trim: '#e9ecf3' };
   const fig = (ctx: CanvasRenderingContext2D, pl: Player, kit: Kit, x: number, y: number, act: number, t: number, extra: Partial<Parameters<typeof drawFigure>[3]> = {}) => {
     shadow(ctx, x, y);
-    return drawFigure(ctx, x, y, { pl, kit, facing: 'side', flip: false, act, speed: 0, lift: 0, time: t, seed: 3, tired: false, ...extra });
+    const prog = extra.prog ?? (isOneShot(act) ? (t * 1.1) % 1 : undefined);
+    return drawFigure(ctx, x, y, { pl, kit, facing: 'side', flip: false, act, speed: 0, lift: 0, time: t, seed: 3, tired: false, scale: 0.82, ...extra, prog });
   };
   let meTop = 40;
   let meX = 70;

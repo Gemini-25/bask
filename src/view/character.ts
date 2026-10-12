@@ -1,8 +1,9 @@
-// 부위별 도트 캐릭터 (G4, G6): 머리·머리카락·몸통·등번호·팔·다리·신발을 코드로 찍고,
-// 관절 각도로 동작을 만든다. 2.5~3등신 치비, 키 차이가 보이게 다리·몸통 길이가 다르다.
+// 부위별 도트 캐릭터 (G4, G6 → M21 다시 그림): 머리·몸통·위팔·아래팔·허벅지·정강이·손·신발을 코드로 찍는다.
+// 동작은 anims.ts의 키프레임 (관절 각도). 공을 들고 있으면 손 위치에 공을 그린다.
+// 2.5~3등신 치비. 키가 크면 다리·몸통·팔이 길다. scale로 작게 그릴 수 있다 (경기 밖 화면).
 
 import type { Player } from '../data/player';
-import { ACT } from '../sim/types';
+import { BENCH_SIT, BENCH_UP, poseAt, type BallAt } from './anims';
 import { drawDigits, shade } from './pixel';
 
 export const SKIN = ['#f6d2b0', '#e8b48a', '#c98d5f', '#8d5a3b', '#5a3a26'];
@@ -28,811 +29,499 @@ export interface Figure {
   speed: number;
   /** 점프 높이 (px) */
   lift: number;
-  /** 애니메이션 시계 (초) */
+  /** 애니메이션 시계 (초): 되풀이 동작 (달리기, 드리블)에 쓴다 */
   time: number;
   /** 같은 동작에서 선수마다 박자가 다르게 */
   seed: number;
-  /** 0~1, 지친 정도 표시 (땀) */
   tired: boolean;
+  /** 한 번 하는 동작의 진행 0~1 (M21). 없으면 time으로 짐작 */
+  prog?: number;
+  /** 공이 손을 떠난 진행 (슛·덩크 키프레임을 맞춘다) */
+  rel?: number;
+  /** 공을 쥐고 있다: 손 위치에 공을 그린다 */
+  carry?: boolean;
+  /** 크기 (1 = 경기 화면) */
+  scale?: number;
+  /** 잔상 (테두리 없이) */
+  ghost?: boolean;
 }
 
-interface Limb {
-  /** 0 = 아래, π/2 = 앞, π = 위 */
-  a: number;
-  len: number;
+export interface Rig {
+  /** 머리 꼭대기 y */
+  top: number;
+  /** 그린 공 위치 (carry일 때) */
+  ball: { x: number; y: number } | null;
+  handF: { x: number; y: number };
+  handB: { x: number; y: number };
 }
 
-interface Pose {
-  armF: Limb;
-  armB: Limb;
-  legF: Limb;
-  legB: Limb;
-  crouch: number;
-  lean: number;
-  bob: number;
-  eyes: 'open' | 'dizzy' | 'happy' | 'focus' | 'sad' | 'angry';
-  /** 정면/뒷모습에서 팔을 몸 앞에 모은다 (스크린) */
-  crossed?: boolean;
-}
+const D = Math.PI / 180;
 
-function sizes(pl: Player) {
+function sizes(pl: Player, s: number) {
   const h = pl.body.heightCm;
-  const leg = Math.round(4 + (h - 178) / 8); // 178cm → 4px, 210cm → 8px
-  const torso = h >= 200 ? 7 : 6;
-  const w = pl.body.weightKg >= 104 ? 9 : pl.body.weightKg >= 90 ? 8 : 7;
-  return { leg: Math.max(4, Math.min(8, leg)), torso, w };
+  const L = Math.max(5, Math.round(Math.max(7, Math.min(12, 7 + (h - 178) / 6.4)) * s));
+  const T = Math.max(5, Math.round((h >= 200 ? 11 : 10) * s));
+  const W = Math.max(6, Math.round((pl.body.weightKg >= 104 ? 13 : pl.body.weightKg >= 90 ? 12 : 11) * s));
+  const R = Math.max(3, Math.round(6 * s));
+  const arm = Math.max(3, Math.round((h >= 200 ? 6 : 5) * s));
+  return { L, thigh: Math.ceil(L / 2), shin: L - Math.ceil(L / 2), T, W, R, Lu: arm, Lf: arm };
 }
 
-function poseFor(f: Figure, leg: number): Pose {
-  const t = f.time + f.seed * 0.37;
-  const run = f.speed > 0.5;
-  const cyc = t * (5 + f.speed * 1.4);
-  const sw = run ? Math.sin(cyc) * Math.min(0.8, 0.25 + f.speed * 0.1) : 0;
-  // 뒤로 차는 다리는 무릎이 굽어서 짧아 보인다
-  const knee = (a: number) => (run && a < -0.2 ? leg - 1 : leg);
-  const base: Pose = {
-    armF: { a: 0.15 - sw * 0.8, len: 5 },
-    armB: { a: 0.1 + sw * 0.8, len: 5 },
-    legF: { a: sw, len: knee(sw) },
-    legB: { a: -sw, len: knee(-sw) },
-    crouch: 0,
-    lean: run && f.speed > 3 ? 1 : 0,
-    bob: run ? (Math.abs(Math.sin(cyc)) > 0.7 ? 1 : 0) : Math.sin(t * 2.2) > 0.6 ? 1 : 0,
-    eyes: 'open',
-  };
-  const air = f.lift > 1;
-  switch (f.act) {
-    case ACT.DRIBBLE: {
-      const bounce = Math.abs(Math.sin(t * Math.PI * 1.7));
-      base.armF = { a: 0.55 + bounce * 0.35, len: 5 };
-      base.armB = { a: 0.9, len: 4 };
-      base.crouch = 1;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.HOLD:
-    case ACT.POST:
-      base.armF = { a: 1.25, len: 4 };
-      base.armB = { a: 1.15, len: 4 };
-      base.crouch = f.act === ACT.POST ? 2 : 1;
-      if (f.act === ACT.POST) base.lean = -1;
-      base.eyes = 'focus';
-      break;
-    case ACT.FT: {
-      const bounce = Math.abs(Math.sin(t * Math.PI * 1.2));
-      base.armF = { a: 0.4 + bounce * 0.4, len: 5 };
-      base.armB = { a: 0.4, len: 5 };
-      base.crouch = 1;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.SHOOT: {
-      const up = air ? 3.0 : 2.4;
-      base.armF = { a: up, len: 5 };
-      base.armB = { a: up - 0.25, len: 4 };
-      base.legF = { a: air ? 0.15 : 0, len: leg };
-      base.legB = { a: air ? -0.1 : 0, len: leg };
-      base.crouch = air ? 0 : 1;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.LAYUP:
-      base.armF = { a: 2.9, len: 5 };
-      base.armB = { a: 0.7, len: 4 };
-      base.legF = { a: 1.25, len: leg - 1 };
-      base.legB = { a: -0.25, len: leg };
-      break;
-    case ACT.DUNK:
-      base.armF = { a: 3.05, len: 6 };
-      base.armB = { a: 1.4, len: 4 };
-      base.legF = { a: 0.9, len: leg - 1 };
-      base.legB = { a: 0.35, len: leg - 1 };
-      base.eyes = 'focus';
-      break;
-    case ACT.HANG:
-      base.armF = { a: 3.1, len: 6 };
-      base.armB = { a: 3.0, len: 6 };
-      base.legF = { a: 0.25, len: leg };
-      base.legB = { a: -0.15, len: leg };
-      base.eyes = 'happy';
-      break;
-    case ACT.PASS:
-      base.armF = { a: 1.6, len: 6 };
-      base.armB = { a: 1.45, len: 5 };
-      base.lean = 1;
-      break;
-    case ACT.REBOUND:
-    case ACT.BLOCK:
-      base.armF = { a: 3.0, len: 6 };
-      base.armB = { a: f.act === ACT.BLOCK ? 2.2 : 2.9, len: 5 };
-      base.legF = { a: 0.25, len: leg };
-      base.legB = { a: -0.2, len: leg };
-      base.eyes = 'focus';
-      break;
-    case ACT.CONTEST:
-      base.armF = { a: 2.85, len: 6 };
-      base.armB = { a: 1.3, len: 4 };
-      break;
-    case ACT.STANCE: {
-      base.armF = { a: 1.15, len: 5 };
-      base.armB = { a: 0.95, len: 5 };
-      // 움직이면 옆걸음 (다리를 벌렸다 모았다)
-      const slide = run ? Math.abs(Math.sin(cyc * 0.8)) * 0.35 : 0;
-      base.legF = { a: 0.3 + slide, len: leg };
-      base.legB = { a: -0.3 - slide, len: leg };
-      base.crouch = 2;
-      base.lean = 0;
-      base.bob = 0;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.STEAL:
-      base.armF = { a: 1.5, len: 7 };
-      base.armB = { a: 0.6, len: 4 };
-      base.legF = { a: 0.9, len: leg };
-      base.legB = { a: -0.5, len: leg };
-      base.crouch = 2;
-      base.lean = 2;
-      base.eyes = 'focus';
-      break;
-    case ACT.BOXOUT:
-      base.armF = { a: 1.0, len: 5 };
-      base.armB = { a: 1.0, len: 5 };
-      base.legF = { a: 0.5, len: leg };
-      base.legB = { a: -0.5, len: leg };
-      base.crouch = 2;
-      base.lean = -1;
-      base.eyes = 'angry';
-      break;
-    case ACT.FALL:
-      base.armF = { a: 2.2, len: 5 };
-      base.armB = { a: 1.8, len: 5 };
-      base.legF = { a: 1.4, len: leg };
-      base.legB = { a: 1.1, len: leg };
-      base.crouch = Math.max(2, leg - 1);
-      base.lean = -2;
-      base.bob = 0;
-      base.eyes = 'dizzy';
-      break;
-    case ACT.HIGHFIVE:
-      base.armF = { a: 2.9, len: 6 };
-      base.armB = { a: 0.2, len: 5 };
-      base.bob = Math.abs(Math.sin(t * 9)) > 0.6 ? 1 : 0;
-      base.eyes = 'happy';
-      break;
-    case ACT.DEJECT:
-      base.armF = { a: 0.05, len: 5 };
-      base.armB = { a: 0.05, len: 5 };
-      base.lean = 1;
-      base.bob = 0;
-      base.crouch = 0;
-      base.eyes = 'sad';
-      break;
-    case ACT.INJURED:
-      base.armF = { a: 0.9, len: 4 };
-      base.armB = { a: 0.7, len: 4 };
-      base.legF = { a: 1.3, len: leg - 1 };
-      base.legB = { a: 0.1, len: leg };
-      base.crouch = 2;
-      base.lean = 1;
-      base.bob = 0;
-      base.eyes = 'sad';
-      break;
-    case ACT.BOUNCE:
-      base.armF = { a: 0.9, len: 6 };
-      base.armB = { a: 0.8, len: 5 };
-      base.lean = 1;
-      base.crouch = 1;
-      break;
-    case ACT.LOB:
-      base.armF = { a: 2.4, len: 6 };
-      base.armB = { a: 2.2, len: 5 };
-      break;
-    case ACT.DUNK2:
-      base.armF = { a: 3.05, len: 6 };
-      base.armB = { a: 3.0, len: 6 };
-      base.legF = { a: 0.8, len: leg - 1 };
-      base.legB = { a: 0.3, len: leg - 1 };
-      base.eyes = 'angry';
-      break;
-    case ACT.TOMAHAWK:
-      // 공을 머리 뒤로 젖혔다가 내리꽂는다
-      base.armF = { a: air && f.lift > 6 ? 3.6 : 2.9, len: 6 };
-      base.armB = { a: 1.2, len: 4 };
-      base.legF = { a: 1.0, len: leg - 1 };
-      base.legB = { a: 0.2, len: leg - 1 };
-      base.lean = -1;
-      base.eyes = 'angry';
-      break;
-    case ACT.REVERSE:
-      base.armF = { a: 3.1, len: 6 };
-      base.armB = { a: 3.0, len: 6 };
-      base.legF = { a: 0.6, len: leg - 1 };
-      base.legB = { a: -0.2, len: leg };
-      base.eyes = 'focus';
-      break;
-    case ACT.WINDMILL: {
-      // 팔을 크게 한 바퀴
-      const a = (t * 9) % (Math.PI * 2);
-      base.armF = { a: 0.2 + Math.abs(Math.sin(a / 2)) * 2.9, len: 6 };
-      base.armB = { a: 1.1, len: 4 };
-      base.legF = { a: 0.9, len: leg - 1 };
-      base.legB = { a: 0.4, len: leg - 1 };
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.D360:
-      base.armF = { a: 2.8, len: 6 };
-      base.armB = { a: 2.6, len: 5 };
-      base.legF = { a: 0.7, len: leg - 1 };
-      base.legB = { a: 0.5, len: leg - 1 };
-      base.eyes = 'focus';
-      break;
-    // 드리블 기술 (M10)
-    case ACT.CROSSOVER: {
-      const k = Math.sin(t * 14);
-      base.armF = { a: 0.5 + 0.5 * k, len: 5 };
-      base.armB = { a: 0.9 - 0.4 * k, len: 4 };
-      base.legF = { a: 0.45, len: leg };
-      base.legB = { a: -0.45, len: leg };
-      base.crouch = 2;
-      base.lean = 1;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.BEHIND:
-      base.armF = { a: 0.8, len: 4 };
-      base.armB = { a: -0.55, len: 5 };
-      base.legF = { a: 0.4, len: leg };
-      base.legB = { a: -0.3, len: leg };
-      base.crouch = 1;
-      base.eyes = 'focus';
-      break;
-    case ACT.LEGS:
-      base.armF = { a: 0.15, len: 5 };
-      base.armB = { a: 0.45, len: 4 };
-      base.legF = { a: 0.7, len: leg };
-      base.legB = { a: -0.6, len: leg };
-      base.crouch = 2;
-      base.eyes = 'focus';
-      break;
-    case ACT.SPIN:
-      base.armF = { a: 1.0, len: 5 };
-      base.armB = { a: 1.4, len: 4 };
-      base.legF = { a: 0.3, len: leg };
-      base.legB = { a: -0.3, len: leg };
-      base.crouch = 1;
-      base.eyes = 'focus';
-      break;
-    case ACT.HESI:
-      base.armF = { a: 1.15, len: 4 };
-      base.armB = { a: 0.9, len: 4 };
-      base.legF = { a: 0.15, len: leg };
-      base.legB = { a: -0.15, len: leg };
-      base.crouch = 0;
-      base.lean = -1;
-      base.bob = 0;
-      base.eyes = 'focus';
-      break;
-    // 덩크 (M10)
-    case ACT.DOUBLE:
-      // 공중에서 공을 내렸다가 다시 올린다
-      base.armF = { a: 2.4 + 0.7 * Math.sin(t * 12), len: 6 };
-      base.armB = { a: 1.8, len: 5 };
-      base.legF = { a: 0.9, len: leg - 1 };
-      base.legB = { a: 0.4, len: leg - 1 };
-      base.eyes = 'focus';
-      break;
-    case ACT.ELBOW:
-      // 팔꿈치까지 림에 넣고 매달린다
-      base.armF = { a: 3.25, len: 7 };
-      base.armB = { a: 2.2, len: 5 };
-      base.legF = { a: 0.15, len: leg };
-      base.legB = { a: -0.1, len: leg };
-      base.eyes = 'angry';
-      break;
-    case ACT.BETWEEN: {
-      // 다리 사이로 공을 넘긴다
-      const k = Math.abs(Math.sin(t * 7));
-      base.armF = { a: 0.3 + k * 2.8, len: 6 };
-      base.armB = { a: 0.4, len: 4 };
-      base.legF = { a: 1.3, len: leg - 1 };
-      base.legB = { a: -0.6, len: leg };
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.FTLINE:
-      // 자유투 라인에서 날아오른다
-      base.armF = { a: 3.1, len: 6 };
-      base.armB = { a: 1.0, len: 4 };
-      base.legF = { a: 1.2, len: leg - 1 };
-      base.legB = { a: -0.7, len: leg };
-      base.lean = 1;
-      base.eyes = 'angry';
-      break;
-    // 슛·레이업·덩크 동작 (M16)
-    case ACT.STEPBACK:
-      // 한 발 뒤로 뛰면서 공을 올린다
-      base.armF = { a: air ? 2.9 : 2.2, len: 5 };
-      base.armB = { a: air ? 2.6 : 2.0, len: 4 };
-      base.legF = { a: 0.55, len: leg };
-      base.legB = { a: -0.45, len: leg };
-      base.crouch = air ? 0 : 1;
-      base.lean = -1;
-      base.eyes = 'focus';
-      break;
-    case ACT.SIDESTEP:
-      base.armF = { a: air ? 3.0 : 2.4, len: 5 };
-      base.armB = { a: 2.2, len: 4 };
-      base.legF = { a: 0.65, len: leg };
-      base.legB = { a: -0.65, len: leg };
-      base.crouch = air ? 0 : 1;
-      base.eyes = 'focus';
-      break;
-    case ACT.FADE:
-    case ACT.TURNFADE:
-      // 뒤로 떨어지며 던진다
-      base.armF = { a: 3.05, len: 5 };
-      base.armB = { a: 2.8, len: 4 };
-      base.legF = { a: 0.6, len: leg };
-      base.legB = { a: -0.1, len: leg };
-      base.lean = -2;
-      base.eyes = 'focus';
-      break;
-    case ACT.ONELEG:
-      // 한쪽 무릎을 들고 페이더
-      base.armF = { a: 3.05, len: 5 };
-      base.armB = { a: 2.7, len: 4 };
-      base.legF = { a: 1.45, len: Math.max(2, leg - 2) };
-      base.legB = { a: 0, len: leg };
-      base.lean = -2;
-      base.eyes = 'focus';
-      break;
-    case ACT.EURO:
-      // 옆으로 크게 한 발, 공은 몸 쪽으로
-      base.armF = { a: 1.25, len: 4 };
-      base.armB = { a: 1.0, len: 4 };
-      base.legF = { a: 0.95, len: leg };
-      base.legB = { a: -0.75, len: leg };
-      base.crouch = 1;
-      base.lean = 1;
-      base.eyes = 'focus';
-      break;
-    case ACT.SCOOP:
-      // 아래에서 떠 올린다
-      base.armF = { a: 1.9, len: 6 };
-      base.armB = { a: 0.4, len: 4 };
-      base.legF = { a: 1.2, len: leg - 1 };
-      base.legB = { a: -0.2, len: leg };
-      base.lean = 1;
-      break;
-    case ACT.REVLAY:
-      base.armF = { a: 3.0, len: 5 };
-      base.armB = { a: 0.8, len: 4 };
-      base.legF = { a: 1.1, len: leg - 1 };
-      base.legB = { a: -0.3, len: leg };
-      break;
-    case ACT.FINGER:
-      // 팔을 쭉 뻗어 손끝으로 굴린다
-      base.armF = { a: 2.95, len: 7 };
-      base.armB = { a: 0.3, len: 4 };
-      base.legF = { a: 1.25, len: leg - 1 };
-      base.legB = { a: -0.25, len: leg };
-      break;
-    case ACT.POWERLAY:
-      // 두 발로 뛰어 두 손으로
-      base.armF = { a: 2.8, len: 5 };
-      base.armB = { a: 2.75, len: 5 };
-      base.legF = { a: 0.3, len: leg - 1 };
-      base.legB = { a: 0.2, len: leg - 1 };
-      base.eyes = 'angry';
-      break;
-    case ACT.CLUTCH:
-      // 공중에서 내렸다가 다시 올린다
-      base.armF = { a: 1.3 + 1.6 * Math.abs(Math.sin(t * 9)), len: 6 };
-      base.armB = { a: 0.9, len: 4 };
-      base.legF = { a: 1.1, len: leg - 1 };
-      base.legB = { a: -0.2, len: leg };
-      base.eyes = 'focus';
-      break;
-    case ACT.POSTER:
-      // 수비 머리 위로 크게
-      base.armF = { a: 3.15, len: 7 };
-      base.armB = { a: 1.6, len: 4 };
-      base.legF = { a: 1.25, len: leg - 1 };
-      base.legB = { a: -0.6, len: leg };
-      base.lean = 1;
-      base.eyes = 'angry';
-      break;
-    case ACT.CONTACT:
-      // 어깨로 밀고 들어가며
-      base.armF = { a: 2.6, len: 5 };
-      base.armB = { a: 1.0, len: 4 };
-      base.legF = { a: 0.45, len: leg };
-      base.legB = { a: -0.3, len: leg };
-      base.lean = 2;
-      base.eyes = 'angry';
-      break;
-    case ACT.SKYHOOK:
-      base.armF = { a: 3.25, len: 7 };
-      base.armB = { a: 1.1, len: 4 };
-      base.legF = { a: 0.9, len: leg - 1 };
-      base.legB = { a: -0.1, len: leg };
-      base.eyes = 'focus';
-      break;
-    case ACT.INOUT: {
-      const k = Math.sin(t * 12);
-      base.armF = { a: 0.6 + 0.3 * k, len: 5 };
-      base.armB = { a: 0.9, len: 4 };
-      base.legF = { a: 0.3, len: leg };
-      base.legB = { a: -0.3, len: leg };
-      base.crouch = 1;
-      base.lean = k > 0 ? 1 : 0;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.SHAKE: {
-      // 어깨를 좌우로 흔든다
-      const k = Math.sin(t * 13);
-      base.armF = { a: 0.7 + 0.3 * k, len: 5 };
-      base.armB = { a: 0.9 - 0.3 * k, len: 4 };
-      base.legF = { a: 0.4, len: leg };
-      base.legB = { a: -0.4, len: leg };
-      base.crouch = 2;
-      base.lean = k > 0 ? 1 : -1;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.SNAP:
-      base.armF = { a: 0.8, len: 4 };
-      base.armB = { a: 1.0, len: 4 };
-      base.legF = { a: -0.35, len: leg };
-      base.legB = { a: 0.5, len: leg };
-      base.crouch = 1;
-      base.lean = -1;
-      base.eyes = 'focus';
-      break;
-    case ACT.KILLER: {
-      const k = Math.sin(t * 20);
-      base.armF = { a: 0.5 + 0.5 * k, len: 5 };
-      base.armB = { a: 0.9 - 0.5 * k, len: 4 };
-      base.legF = { a: 0.55, len: leg };
-      base.legB = { a: -0.55, len: leg };
-      base.crouch = 2;
-      base.lean = 1;
-      base.eyes = 'focus';
-      break;
-    }
-    case ACT.CRADLE:
-      // 공을 팔에 감싸 크게 휘돌린다
-      base.armF = { a: 1.0 + 2.2 * Math.abs(Math.sin(t * 6)), len: 6 };
-      base.armB = { a: 0.6, len: 4 };
-      base.legF = { a: 0.9, len: leg - 1 };
-      base.legB = { a: 0.4, len: leg - 1 };
-      base.eyes = 'focus';
-      break;
-    // 덩크 (M20)
-    case ACT.HAMMER:
-      // 두 손으로 머리 뒤까지 젖혔다가 망치처럼 내리친다
-      base.armF = { a: air && f.lift > 6 ? 3.7 : 3.0, len: 6 };
-      base.armB = { a: air && f.lift > 6 ? 3.6 : 2.9, len: 6 };
-      base.legF = { a: 0.7, len: leg - 1 };
-      base.legB = { a: 0.2, len: leg - 1 };
-      base.lean = -1;
-      base.eyes = 'angry';
-      break;
-    case ACT.SUPERMAN:
-      // 몸을 눕혀 한 팔을 쭉 뻗고 다리는 뒤로
-      base.armF = { a: 2.4, len: 7 };
-      base.armB = { a: 1.6, len: 5 };
-      base.legF = { a: -0.5, len: leg };
-      base.legB = { a: -0.9, len: leg };
-      base.lean = 1;
-      base.eyes = 'focus';
-      break;
-    case ACT.SCORPION:
-      // 공을 머리 뒤로, 다리를 뒤로 높이 차올린다
-      base.armF = { a: 3.5, len: 6 };
-      base.armB = { a: 3.4, len: 5 };
-      base.legF = { a: 0.6, len: leg - 1 };
-      base.legB = { a: -1.7, len: leg - 1 };
-      base.lean = -1;
-      base.eyes = 'focus';
-      break;
-    case ACT.SELFOOP:
-      // 스스로 띄운 공을 공중에서 잡는다
-      base.armF = { a: air ? 2.9 + 0.2 * Math.sin(t * 10) : 2.4, len: 6 };
-      base.armB = { a: air ? 2.7 : 1.4, len: 5 };
-      base.legF = { a: 0.9, len: leg - 1 };
-      base.legB = { a: 0.3, len: leg - 1 };
-      base.eyes = 'happy';
-      break;
-    case ACT.SCREEN:
-      base.armF = { a: 0.9, len: 3 };
-      base.armB = { a: 0.9, len: 3 };
-      base.legF = { a: 0.3, len: leg };
-      base.legB = { a: -0.3, len: leg };
-      base.crossed = true;
-      break;
-    case ACT.STUN:
-      base.armF = { a: 2.3 + Math.sin(t * 14) * 0.4, len: 5 };
-      base.armB = { a: 1.9 - Math.sin(t * 14) * 0.4, len: 5 };
-      base.legF = { a: 0.45, len: leg };
-      base.legB = { a: -0.35, len: leg };
-      base.lean = -1;
-      base.eyes = 'dizzy';
-      break;
-    case ACT.CELEBRATE:
-      base.armF = { a: 2.75, len: 6 };
-      base.armB = { a: 2.75, len: 6 };
-      base.bob = Math.abs(Math.sin(t * 11)) > 0.5 ? 2 : 0;
-      base.eyes = 'happy';
-      break;
-    default:
-      break;
-  }
-  return base;
+/** 서서 팔을 위로 뻗었을 때 손끝 높이 (px, 위로 든 팔은 늘어난다): 덩크 때 림에 손이 닿게 화면에서 맞춘다 */
+export function reachPx(pl: Player, scale = 1) {
+  const z = sizes(pl, scale);
+  return z.L + z.T + z.Lu + Math.round(1.5 * scale) + z.Lf + Math.round(4 * scale) - 1;
 }
 
-/** 굵기 2px 선 */
+/** 테두리 색 (도트 캐릭터 외곽선) */
+export const OUTLINE = '#2a1c15';
+
+/** 굵기 w px 선 */
 function line(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, color: string, w = 2) {
   ctx.fillStyle = color;
   const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))));
+  const o = Math.floor(w / 2);
   for (let i = 0; i <= steps; i++) {
     const x = Math.round(x0 + ((x1 - x0) * i) / steps);
     const y = Math.round(y0 + ((y1 - y0) * i) / steps);
-    ctx.fillRect(x - (w > 1 ? 1 : 0), y, w, w > 1 ? 2 : 1);
+    ctx.fillRect(x - o, y - o, w, w);
   }
 }
 
-/** 팔다리 끝 위치. side 시점은 앞(+)으로, 정면·뒷모습은 옆으로 벌어진다. */
-function end(x: number, y: number, l: Limb, dir: number, facing: Facing, side: number) {
-  if (facing === 'side') return { x: x + Math.sin(l.a) * l.len * dir, y: y + Math.cos(l.a) * l.len };
-  const spread = Math.abs(Math.sin(l.a)) * l.len * 0.55 + 0.5;
-  return { x: x + side * spread, y: y + Math.cos(l.a) * l.len };
+
+/** 돌린 직사각형: 원점 o에서 축 u 방향으로 a0~a1, 옆(n)으로 b0~b1 */
+function rotRect(ctx: CanvasRenderingContext2D, ox: number, oy: number, ux: number, uy: number, a0: number, a1: number, b0: number, b1: number, color: (a: number, b: number) => string | null) {
+  const nx = -uy;
+  const ny = ux;
+  const pts = [
+    [a0, b0],
+    [a0, b1],
+    [a1, b0],
+    [a1, b1],
+  ].map(([a, b]) => [ox + ux * a + nx * b, oy + uy * a + ny * b]);
+  const x0 = Math.floor(Math.min(...pts.map((p) => p[0])));
+  const x1 = Math.ceil(Math.max(...pts.map((p) => p[0])));
+  const y0 = Math.floor(Math.min(...pts.map((p) => p[1])));
+  const y1 = Math.ceil(Math.max(...pts.map((p) => p[1])));
+  let cur = '';
+  for (let py = y0; py <= y1; py++)
+    for (let px = x0; px <= x1; px++) {
+      const rx = px + 0.5 - ox;
+      const ry = py + 0.5 - oy;
+      const a = rx * ux + ry * uy;
+      const b = rx * nx + ry * ny;
+      if (a < a0 || a >= a1 || b < b0 || b >= b1) continue;
+      const c = color(a, b);
+      if (!c) continue;
+      if (c !== cur) {
+        ctx.fillStyle = c;
+        cur = c;
+      }
+      ctx.fillRect(px, py, 1, 1);
+    }
 }
 
-/**
- * (x, y)는 발이 땅에 닿는 화면 좌표. 점프 높이는 f.lift.
- * 반환값: 머리 꼭대기 y (말풍선, 화살표 위치용)
- */
-export function drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, f0: Figure): number {
-  let f = f0;
-  // 360 덩크는 공중에서 한 바퀴, 리버스 덩크는 등지고 넣는다
-  if (f.act === ACT.D360 || f.act === ACT.SPIN) {
-    const k = Math.floor(f.time * (f.act === ACT.SPIN ? 14 : 10)) % 4;
-    f = { ...f, facing: (['side', 'front', 'side', 'back'] as Facing[])[k], flip: k === 2 ? !f.flip : f.flip };
-  } else if (f.act === ACT.REVERSE || f.act === ACT.REVLAY) f = { ...f, facing: 'back' };
-  else if (f.act === ACT.TURNFADE) {
-    // 등지고 있다가 돌아서며 던진다
-    const k = Math.floor(f.time * 7) % 3;
-    if (k === 0) f = { ...f, facing: 'back' };
+export function drawBall(ctx: CanvasRenderingContext2D, x: number, y: number, small = false) {
+  const bx = Math.round(x);
+  const by = Math.round(y);
+  if (small) {
+    ctx.fillStyle = '#6b2a08';
+    ctx.fillRect(bx - 2, by - 1, 4, 3);
+    ctx.fillRect(bx - 1, by - 2, 2, 5);
+    ctx.fillStyle = '#f07a24';
+    ctx.fillRect(bx - 1, by - 1, 2, 2);
+    return;
   }
+  ctx.fillStyle = '#6b2a08';
+  ctx.fillRect(bx - 2, by - 1, 5, 3);
+  ctx.fillRect(bx - 1, by - 2, 3, 5);
+  ctx.fillStyle = '#f07a24';
+  ctx.fillRect(bx - 1, by - 1, 3, 3);
+  ctx.fillStyle = '#ffb877';
+  ctx.fillRect(bx - 1, by - 1, 1, 1);
+}
+
+/** 그림 (발이 땅에 닿는 화면 좌표 x, y). 반환값: 머리 꼭대기 y */
+export function drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, f: Figure): number {
+  return drawFigureRig(ctx, x, y, f).top;
+}
+
+export function drawFigureRig(ctx: CanvasRenderingContext2D, x: number, y: number, f: Figure): Rig {
+  const s = f.scale ?? 1;
   const pl = f.pl;
-  const { leg, torso, w } = sizes(pl);
-  const pose = poseFor(f, leg);
+  const z = sizes(pl, s);
+  const pose = poseAt(f.act, { prog: f.prog, rel: f.rel, time: f.time, speed: f.speed, seed: f.seed });
+  // 바라보는 방향: 동작이 정한 게 있으면 그걸로
+  let facing: Facing = f.facing;
+  let flip = f.flip;
+  const fm = pose.face;
+  if (fm === 'front' || fm === 'back') facing = fm;
+  else if (fm === 'side') facing = 'side';
+  else if (fm === 'away') {
+    if (facing === 'side') flip = !flip;
+    else facing = facing === 'front' ? 'back' : 'front';
+  } else if (fm === 'spin') {
+    const k = Math.floor((((pose.rot % 1) + 1) % 1) * 4);
+    const seq: [Facing, boolean][] = [
+      ['side', flip],
+      ['front', flip],
+      ['side', !flip],
+      ['back', flip],
+    ];
+    [facing, flip] = seq[k];
+  }
+  const dir = flip ? -1 : 1;
+  const side = facing === 'side';
+
   const skin = SKIN[pl.look.skin % SKIN.length];
   const skinD = shade(skin, -0.2);
-  const hair = HAIR[pl.look.hairColor % HAIR.length];
+  const hairC = HAIR[pl.look.hairColor % HAIR.length];
   const shoe = SHOE[pl.look.shoe % SHOE.length];
   const jersey = f.kit.jersey;
   const shorts = shade(jersey, -0.28);
   const trim = f.kit.trim;
-  const dir = f.facing === 'side' && f.flip ? -1 : 1;
+  const sleeve = pl.look.sleeve;
 
-  x = Math.round(x);
-  const feet = Math.round(y - f.lift - pose.bob);
-  const hipY = feet - leg + pose.crouch;
-  const shoulderY = hipY - torso + 1;
-  const tx = x + pose.lean * dir;
-  const left = Math.round(tx - w / 2);
+  // 엉덩이 높이: 땅에 있으면 더 펴진 다리가 땅에 닿고, 떠 있으면 다리를 접어도 몸은 그대로
+  const ext = (l: readonly [number, number]) => z.thigh * Math.cos(l[0] * D) + z.shin * Math.cos((l[0] + l[1]) * D);
+  const stance = Math.max(ext(pose.lF), ext(pose.lB));
+  const airK = Math.max(0, Math.min(1, f.lift / (6 * s)));
+  const hipH = stance + (z.L - stance) * airK - pose.crouch * s;
+  const rootX = Math.round(x + pose.dx * s * dir);
+  const groundY = Math.round(y);
+  const hipY = groundY - f.lift - hipH + pose.dy * s;
+  const lean = pose.lean * D;
 
-  // 다리
-  const legX = f.facing === 'side' ? [x, x] : [x - 2, x + 1];
-  const legs: [Limb, number, string][] = [
-    [pose.legB, legX[1], f.facing === 'side' ? skinD : skin],
-    [pose.legF, legX[0], skin],
-  ];
-  const drawLeg = (l: Limb, lx: number, col: string, side: number) => {
-    const e = end(lx, hipY, l, dir, f.facing, side);
-    line(ctx, lx, hipY, e.x, e.y, col);
+  // 몸통 축
+  let ux: number;
+  let uy: number;
+  if (side) {
+    ux = Math.sin(lean) * dir;
+    uy = -Math.cos(lean);
+  } else {
+    ux = 0;
+    uy = -Math.max(0.55, Math.cos(lean));
+  }
+  const hipX = rootX;
+  const shX = hipX + ux * (z.T - 1);
+  const shY = hipY + uy * (z.T - 1);
+
+  // 팔다리 끝 위치 계산
+  type V = { x: number; y: number };
+  const sgF = side ? 0 : facing === 'front' ? dir : -dir;
+  const lat = (a: number, len: number, w: number) => Math.abs(Math.sin(a)) * len * (w >= 0 ? 0.25 + 0.75 * w : 0.25 + 1.6 * w);
+  const limb = (o: V, ang: readonly [number, number], l1: number, l2: number, w: number, sg: number, arm = false, w2 = w): [V, V, number] => {
+    const a = ang[0] * D;
+    const b = (ang[0] + ang[1]) * D;
+    if (arm) {
+      // 치비라 머리가 커서, 위로 든 팔은 늘려야 머리 위로 손이 나온다
+      const upA = Math.max(0, Math.min(1, (-Math.cos(a) - 0.1) / 0.8));
+      const upB = Math.max(0, Math.min(1, (-Math.cos(b) - 0.1) / 0.8));
+      l1 += Math.round(upA * 1.5 * s);
+      l2 += Math.round(upB * 4 * s);
+    }
+    if (side) {
+      const m = { x: o.x + Math.sin(a) * l1 * dir, y: o.y + Math.cos(a) * l1 };
+      return [m, { x: m.x + Math.sin(b) * l2 * dir, y: m.y + Math.cos(b) * l2 }, Math.sin(b)];
+    }
+    const m = { x: o.x + sg * lat(a, l1, w), y: o.y + Math.cos(a) * l1 };
+    return [m, { x: m.x + sg * lat(b, l2, w2), y: m.y + Math.cos(b) * l2 }, Math.sin(b)];
+  };
+  const halfW = Math.floor(z.W / 2);
+  const shoulderF: V = side ? { x: shX + dir, y: shY + 2 * s } : { x: shX + sgF * (halfW - 0.5), y: shY + 2 * s };
+  const shoulderB: V = side ? { x: shX - dir, y: shY + 2 * s } : { x: shX - sgF * (halfW - 0.5), y: shY + 2 * s };
+  const [elF, handF, fwdF] = limb(shoulderF, pose.aF, z.Lu, z.Lf, pose.wF, sgF, true, pose.wFe ?? pose.wF);
+  const [elB, handB, fwdB] = limb(shoulderB, pose.aB, z.Lu, z.Lf, pose.wB, -sgF, true, pose.wBe ?? pose.wB);
+  const legOff = side ? 0 : Math.max(2, Math.round((pose.ws * s) / 2 + z.W / 5));
+  const hipF: V = { x: hipX + (side ? 0 : sgF * legOff), y: hipY };
+  const hipB: V = { x: hipX - (side ? 0 : sgF * legOff), y: hipY };
+  const [knF, ftF] = limb(hipF, pose.lF, z.thigh, z.shin, 0.2, sgF);
+  const [knB, ftB] = limb(hipB, pose.lB, z.thigh, z.shin, 0.2, -sgF);
+
+  // 공 위치
+  const anchor = (b: BallAt | undefined): (V & { behind: boolean }) | null => {
+    if (!b) return null;
+    if (b === 'F' || b === 'B') {
+      const h = b === 'F' ? handF : handB;
+      const e = b === 'F' ? elF : elB;
+      const fwd = b === 'F' ? fwdF : fwdB;
+      const dx = h.x - e.x;
+      const dy = h.y - e.y;
+      const n = Math.hypot(dx, dy) || 1;
+      // 옆모습에선 뒷손 공은 몸 뒤, 정면·뒷모습에선 손이 몸 뒤로 가면 몸 뒤
+      const behind = side ? b === 'B' : facing === 'front' ? fwd < -0.25 : fwd > 0.25;
+      return { x: h.x + (dx / n) * 2 * s, y: h.y + (dy / n) * 2 * s, behind };
+    }
+    if (b === 'FB') {
+      const behind = !side && facing === 'back' && fwdF > 0.25;
+      return { x: (handF.x + handB.x) / 2 + (side ? dir * 2 * s : 0), y: (handF.y + handB.y) / 2 + (side ? 0 : 1), behind };
+    }
+    const [fw, h, l = 0, bh = false] = b;
+    const px = side ? rootX + fw * s * dir : rootX + l * s * (facing === 'front' ? dir : -dir);
+    return { x: px, y: groundY - h * s - 2, behind: facing === 'back' ? !bh && fw > 0 : bh };
+  };
+  let ball: (V & { behind: boolean }) | null = null;
+  if (f.carry) {
+    const [b0, b1, k] = pose.ball2 ?? [pose.ball, pose.ball, 0];
+    const p0 = anchor(b0 ?? b1 ?? 'F');
+    const p1 = anchor(b1 ?? b0 ?? 'F');
+    if (p0 && p1) ball = { x: p0.x + (p1.x - p0.x) * k, y: p0.y + (p1.y - p0.y) * k, behind: k < 0.5 ? p0.behind : p1.behind };
+  }
+  const small = s < 0.8;
+  const drawBallHere = () => ball && drawBall(ctx, ball.x, ball.y, small);
+
+  const thick = small ? 2 : 3;
+  const armW = 2;
+  const ol = !small && !f.ghost;
+  const drawLeg = (hip: V, kn: V, ft: V, col: string) => {
+    const fx = Math.round(ft.x);
+    const fy = Math.round(ft.y);
+    const w = side ? (small ? 4 : 5) : 3;
+    const sx0 = side ? (dir > 0 ? fx - 1 : fx - w + 2) : fx - 1;
+    if (ol) {
+      line(ctx, hip.x, hip.y, kn.x, kn.y, OUTLINE, thick + 2);
+      line(ctx, kn.x, kn.y, ft.x, ft.y, OUTLINE, 4);
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(sx0 - 1, fy - 1, w + 2, 4);
+    }
+    line(ctx, hip.x, hip.y, kn.x, kn.y, col, thick);
+    line(ctx, kn.x, kn.y, ft.x, ft.y, col, small ? 1 : 2);
     // 양말 + 신발
     ctx.fillStyle = '#f4f4f4';
-    ctx.fillRect(Math.round(e.x) - 1, Math.round(e.y) - 1, 2, 1);
+    ctx.fillRect(fx - 1, fy - 1, 2, 1);
     ctx.fillStyle = shoe;
-    const sxp = f.facing === 'side' ? (dir > 0 ? Math.round(e.x) - 1 : Math.round(e.x) - 2) : Math.round(e.x) - 1;
-    ctx.fillRect(sxp, Math.round(e.y) + 1, f.facing === 'side' ? 4 : 3, 2);
+    ctx.fillRect(sx0, fy, w, 2);
     ctx.fillStyle = shade(shoe, -0.35);
-    ctx.fillRect(sxp, Math.round(e.y) + 2, f.facing === 'side' ? 4 : 3, 1);
+    ctx.fillRect(sx0, fy + 1, w, 1);
   };
-  drawLeg(legs[0][0], legs[0][1], legs[0][2], 1);
-  if (f.facing !== 'side') drawLeg(legs[1][0], legs[1][1], legs[1][2], -1);
+  const drawArm = (sh: V, el: V, hd: V, col: string) => {
+    if (ol) {
+      line(ctx, sh.x, sh.y, el.x, el.y, OUTLINE, armW + 2);
+      line(ctx, el.x, el.y, hd.x, hd.y, OUTLINE, armW + 2);
+      ctx.fillStyle = OUTLINE;
+      ctx.fillRect(Math.round(hd.x) - 2, Math.round(hd.y) - 2, 4, 4);
+    }
+    line(ctx, sh.x, sh.y, el.x, el.y, sleeve ? trim : col, armW);
+    line(ctx, el.x, el.y, hd.x, hd.y, col, armW);
+    ctx.fillStyle = col;
+    ctx.fillRect(Math.round(hd.x) - 1, Math.round(hd.y) - 1, 2, 2);
+  };
 
-  // 뒷팔 (side 시점에서 몸 뒤)
-  const shX = f.facing === 'side' ? tx : tx;
-  const armOut = Math.floor(w / 2);
-  const armSkin = pl.look.sleeve ? trim : skinD;
-  if (f.facing === 'side') {
-    const e = end(shX, shoulderY + 1, pose.armB, dir, f.facing, 1);
-    line(ctx, shX, shoulderY + 1, e.x, e.y, skinD);
-  }
+  // ── 몸통 그리기 함수
+  const drawTorso = () => {
+    if (side) {
+      const depth = Math.max(4, Math.round(z.W * 0.72));
+      const hb = depth / 2;
+      if (ol) rotRect(ctx, hipX, hipY, ux, uy, -4 * s - 1, z.T + 1, -hb - 1.5, hb + 1.5, () => OUTLINE);
+      // 반바지
+      rotRect(ctx, hipX, hipY, ux, uy, -4 * s, 1, -hb - 0.5, hb + 0.5, (a) => (a < -3 * s ? shade(shorts, -0.25) : shorts));
+      // 유니폼
+      rotRect(ctx, hipX, hipY, ux, uy, 0, z.T, -hb, hb, (a, b) => {
+        if (a < 1) return trim;
+        if (a >= z.T - 1) return shade(jersey, 0.25);
+        if (b * dir > hb - 1.5 && a > 2) return trim;
+        return jersey;
+      });
+    } else {
+      const top = Math.round(shY);
+      const h = Math.max(3, Math.round(hipY - shY + 1));
+      const left = Math.round(hipX - z.W / 2);
+      if (ol) {
+        ctx.fillStyle = OUTLINE;
+        ctx.fillRect(left - 1, top - 1, z.W + 2, h + 1);
+        ctx.fillRect(left - 2, Math.round(hipY) - 2, z.W + 4, Math.round(5 * s) + 2);
+      }
+      ctx.fillStyle = shorts;
+      ctx.fillRect(left - 1, Math.round(hipY) - 1, z.W + 2, Math.round(5 * s));
+      ctx.fillStyle = shade(shorts, -0.25);
+      ctx.fillRect(left - 1, Math.round(hipY) - 1 + Math.round(5 * s) - 1, z.W + 2, 1);
+      ctx.fillStyle = jersey;
+      ctx.fillRect(left, top, z.W, h);
+      ctx.fillStyle = shade(jersey, 0.25);
+      ctx.fillRect(left, top, z.W, 1);
+      ctx.fillStyle = trim;
+      ctx.fillRect(left, Math.round(hipY) - 1, z.W, 1);
+      ctx.fillRect(left, top, 1, 3);
+      ctx.fillRect(left + z.W - 1, top, 1, 3);
+      if (h >= 7 && !small) drawDigits(ctx, String(pl.number), hipX + 0.5, top + 2, trim);
+    }
+  };
 
-  // 반바지 + 유니폼
-  ctx.fillStyle = shorts;
-  ctx.fillRect(left, hipY - 2, w, 4);
-  ctx.fillStyle = shade(shorts, -0.25);
-  ctx.fillRect(left, hipY + 1, w, 1);
-  ctx.fillStyle = jersey;
-  ctx.fillRect(left, shoulderY, w, torso - 1);
-  ctx.fillStyle = shade(jersey, 0.25);
-  ctx.fillRect(left, shoulderY, w, 1);
-  ctx.fillStyle = trim;
-  ctx.fillRect(left, hipY - 2, w, 1);
-  if (f.facing !== 'side') {
-    // 민소매 라인
-    ctx.fillStyle = trim;
-    ctx.fillRect(left, shoulderY, 1, 2);
-    ctx.fillRect(left + w - 1, shoulderY, 1, 2);
-    const num = String(pl.number);
-    if (torso >= 6) drawDigits(ctx, num, tx + 0.5, shoulderY + 1, trim);
-  } else {
-    ctx.fillStyle = trim;
-    ctx.fillRect(dir > 0 ? left + w - 2 : left + 1, shoulderY + 1, 1, torso - 3);
-  }
-
-  if (f.facing === 'side') drawLeg(legs[1][0], legs[1][1], legs[1][2], 1);
-
-  // 머리 (지름 9px)
-  const hx = tx + (f.facing === 'side' ? dir : 0);
-  const hy = shoulderY - 5;
-  const R = 4;
-  ctx.fillStyle = skin;
-  for (let dy = -R; dy <= R; dy++) {
-    const half = Math.floor(Math.sqrt(R * R - dy * dy + R * 0.9));
-    ctx.fillRect(hx - half, hy + dy, half * 2 + 1, 1);
-  }
-  // 턱 그림자
-  ctx.fillStyle = skinD;
-  ctx.fillRect(hx - 2, hy + R, 5, 1);
-  drawHair(ctx, hx, hy, R, pl.look.hair, hair, f.facing, dir);
-  if (pl.look.headband) {
-    ctx.fillStyle = trim;
-    ctx.fillRect(hx - R, hy - 1, R * 2 + 1, 1);
-  }
-  // 눈
-  if (f.facing !== 'back') {
+  // ── 머리
+  const hx = Math.round(shX + ux * (z.R + 1) + (side ? dir : 0));
+  const hy = Math.round(shY + uy * (z.R + 1) - (side ? 0 : 0));
+  const R = z.R;
+  const drawHead = () => {
+    if (ol) {
+      ctx.fillStyle = OUTLINE;
+      const r1 = R + 1;
+      for (let dy = -r1; dy <= r1; dy++) {
+        const half = Math.floor(Math.sqrt(Math.max(0, r1 * r1 - dy * dy + r1 * 0.9)));
+        ctx.fillRect(hx - half, hy + dy, half * 2 + 1, 1);
+      }
+    }
+    ctx.fillStyle = skin;
+    for (let dy = -R; dy <= R; dy++) {
+      const half = Math.floor(Math.sqrt(R * R - dy * dy + R * 0.9));
+      ctx.fillRect(hx - half, hy + dy, half * 2 + 1, 1);
+    }
+    ctx.fillStyle = skinD;
+    ctx.fillRect(hx - Math.floor(R / 2), hy + R, R + 1, 1);
+    if (side) {
+      // 코
+      ctx.fillStyle = skinD;
+      ctx.fillRect(hx + dir * (R + 1) - (dir < 0 ? 0 : 0), hy + 1, 1, 1);
+    }
+    drawHair(ctx, hx, hy, R, pl.look.hair, hairC, facing, dir);
+    if (pl.look.headband) {
+      ctx.fillStyle = trim;
+      ctx.fillRect(hx - R, hy - Math.ceil(R / 3), R * 2 + 1, Math.max(1, Math.round(s * 1.5)));
+    }
+    if (facing === 'back') return;
     ctx.fillStyle = '#1b1410';
-    const ey = hy;
-    const eyes = f.facing === 'side' ? [hx + dir * 2] : [hx - 2, hx + 2];
+    const ey = hy + (small ? 0 : 1);
+    const eyes = side ? [hx + dir * (R - 2)] : [hx - Math.ceil(R / 2), hx + Math.ceil(R / 2)];
     for (const ex of eyes) {
-      if (pose.eyes === 'dizzy') {
+      const e = pose.eyes;
+      if (e === 'dizzy') {
         ctx.fillRect(ex - 1, ey, 1, 1);
         ctx.fillRect(ex, ey + 1, 1, 1);
         ctx.fillRect(ex + 1, ey, 1, 1);
-      } else if (pose.eyes === 'happy') {
+      } else if (e === 'happy') {
         ctx.fillRect(ex - 1, ey + 1, 1, 1);
         ctx.fillRect(ex, ey, 1, 1);
         ctx.fillRect(ex + 1, ey + 1, 1, 1);
-      } else if (pose.eyes === 'sad') {
-        // 처진 눈
+      } else if (e === 'sad') {
         ctx.fillRect(ex, ey + 1, 1, 1);
         ctx.fillRect(ex + (ex < hx ? -1 : 1), ey, 1, 1);
-      } else if (pose.eyes === 'angry') {
-        // 치켜 올라간 눈썹
+      } else if (e === 'angry') {
         ctx.fillRect(ex, ey, 1, 2);
-        ctx.fillRect(ex + (ex < hx ? -1 : 1), ey - 1, 1, 1);
-      } else ctx.fillRect(ex, ey, 1, pose.eyes === 'focus' ? 1 : 2);
+        ctx.fillRect(ex + (side ? -dir : ex < hx ? -1 : 1), ey - 1, 1, 1);
+      } else ctx.fillRect(ex, ey, 1, e === 'focus' ? 1 : 2);
     }
-    // 볼터치
-    if (pose.eyes === 'happy') {
+    if (pose.eyes === 'happy' && !small) {
       ctx.fillStyle = '#ff9a8a';
-      for (const ex of eyes) ctx.fillRect(ex + (f.facing === 'side' ? dir : 0), ey + 2, 1, 1);
+      for (const ex of eyes) ctx.fillRect(ex + (side ? dir : ex < hx ? -1 : 1), ey + 2, 1, 1);
     }
-  }
-  // 팔: 머리 뒤에 가려지지 않게 머리 다음에 그린다. 올린 팔은 머리 위까지 닿는다.
-  const reach = (l: Limb) => (l.a > 2 ? { a: l.a, len: l.len + 4 } : l);
-  if (f.facing === 'side') {
-    const l = reach(pose.armF);
-    const e = end(shX, shoulderY + 1, l, dir, f.facing, 1);
-    line(ctx, shX + dir, shoulderY + 1, e.x + dir, e.y, pl.look.sleeve ? shade(trim, 0.1) : skin);
-  } else if (pose.crossed) {
-    ctx.fillStyle = skin;
-    ctx.fillRect(left - 1, shoulderY + 2, w + 2, 2);
+    if (pose.mouth && !small) {
+      const mx = side ? hx + dir * (R - 3) : hx;
+      ctx.fillStyle = pose.eyes === 'angry' ? '#7a1f1a' : '#a8423a';
+      ctx.fillRect(mx - (side ? 0 : 1), hy + R - 2, side ? 1 : 2, pose.eyes === 'angry' ? 2 : 1);
+    }
+  };
+
+  // ── 그리는 순서
+  const armCol = (back: boolean) => (back && side ? skinD : skin);
+  if (side) {
+    drawLeg(hipB, knB, ftB, skinD);
+    drawArm(shoulderB, elB, handB, armCol(true));
+    if (ball?.behind) drawBallHere();
+    drawLeg(hipF, knF, ftF, skin);
+    drawTorso();
+    drawHead();
+    drawArm(shoulderF, elF, handF, armCol(false));
+    if (ball && !ball.behind) drawBallHere();
   } else {
-    for (const [l0, side] of [
-      [pose.armF, -1],
-      [pose.armB, 1],
-    ] as [Limb, number][]) {
-      const l = reach(l0);
-      const sxp = side < 0 ? left - 1 : left + w;
-      if (l.a > 2) {
-        // 머리 옆으로 뻗어 올린 팔
-        const ex = hx + side * (R + 2);
-        line(ctx, sxp, shoulderY + 1, ex, shoulderY + 1 + Math.cos(l.a) * l.len, armSkin === trim ? trim : skin);
-      } else {
-        const e = end(sxp, shoulderY + 1, l, dir, f.facing, side * (armOut > 3 ? 1.2 : 1));
-        line(ctx, sxp, shoulderY + 1, e.x, e.y, armSkin === trim ? trim : skin);
-      }
-    }
+    const front = facing === 'front';
+    // 몸 뒤로 간 팔 (정면: 앞으로 뻗은 정도가 음수, 뒷모습: 양수)
+    const behindF = front ? fwdF < -0.25 : fwdF > 0.25;
+    const behindB = front ? fwdB < -0.25 : fwdB > 0.25;
+    if (ball?.behind) drawBallHere();
+    if (behindF) drawArm(shoulderF, elF, handF, skinD);
+    if (behindB) drawArm(shoulderB, elB, handB, skinD);
+    drawLeg(hipB, knB, ftB, skin);
+    drawLeg(hipF, knF, ftF, skin);
+    drawTorso();
+    drawHead();
+    if (!behindF) drawArm(shoulderF, elF, handF, skin);
+    if (!behindB) drawArm(shoulderB, elB, handB, skin);
+    if (ball && !ball.behind) drawBallHere();
   }
   // 땀방울
   if (f.tired && Math.sin(f.time * 3 + f.seed) > 0.3) {
     ctx.fillStyle = '#9fd8ff';
-    ctx.fillRect(hx + (f.facing === 'side' ? -dir * 4 : 4), hy - 3, 1, 2);
+    ctx.fillRect(hx + (side ? -dir * (R - 1) : R - 1), hy - R + 2, 1, 2);
   }
-  return hy - R - 2;
+  return { top: hy - R - 2, ball: ball ? { x: ball.x, y: ball.y } : null, handF, handB };
 }
 
 function drawHair(ctx: CanvasRenderingContext2D, hx: number, hy: number, R: number, style: number, color: string, facing: Facing, dir: number) {
   ctx.fillStyle = color;
   const back = facing === 'back';
+  const top = (rows: number) => {
+    for (let dy = -R; dy < -R + rows; dy++) {
+      const half = Math.floor(Math.sqrt(Math.max(0, R * R - dy * dy + R * 0.9)));
+      ctx.fillRect(hx - half, hy + dy, half * 2 + 1, 1);
+    }
+  };
+  const backFill = (rows: number) => {
+    for (let dy = -R; dy < -R + rows; dy++) {
+      const half = Math.floor(Math.sqrt(Math.max(0, R * R - dy * dy + R * 0.9)));
+      ctx.fillRect(hx - half, hy + dy, half * 2 + 1, 1);
+    }
+  };
+  const sideBack = (rows: number) => {
+    // 옆모습: 뒤통수 쪽 절반
+    for (let dy = -R; dy < -R + rows; dy++) {
+      const half = Math.floor(Math.sqrt(Math.max(0, R * R - dy * dy + R * 0.9)));
+      if (dir > 0) ctx.fillRect(hx - half, hy + dy, half, 1);
+      else ctx.fillRect(hx + 1, hy + dy, half, 1);
+    }
+  };
   switch (style % 7) {
     case 0: // 짧은 머리
-      ctx.fillRect(hx - R, hy - R, R * 2 + 1, 2);
-      ctx.fillRect(hx - R - 0, hy - R + 2, 1, 2);
-      ctx.fillRect(hx + R, hy - R + 2, 1, 2);
-      if (back) ctx.fillRect(hx - R, hy - R, R * 2 + 1, R + 2);
-      else if (facing === 'side') ctx.fillRect(dir > 0 ? hx - R : hx + 1, hy - R, R, R + 1);
+      top(Math.ceil(R * 0.55));
+      if (back) backFill(R + 3);
+      else if (facing === 'side') sideBack(R + 2);
+      else {
+        ctx.fillRect(hx - R, hy - R + 2, 1, 3);
+        ctx.fillRect(hx + R, hy - R + 2, 1, 3);
+      }
       break;
     case 1: // 삭발에 가까운 짧은 머리
       ctx.globalAlpha = 0.85;
-      ctx.fillRect(hx - R + 1, hy - R, R * 2 - 1, 1);
-      ctx.fillRect(hx - R, hy - R + 1, R * 2 + 1, 1);
-      if (back) ctx.fillRect(hx - R, hy - R, R * 2 + 1, R + 1);
+      top(2);
+      if (back) backFill(R + 1);
+      else if (facing === 'side') sideBack(R);
       ctx.globalAlpha = 1;
       break;
-    case 2: // 아프로
-      for (let dy = -R - 2; dy <= 0; dy++) {
-        const rr = R + 2;
+    case 2: {
+      // 아프로
+      const rr = R + 2;
+      for (let dy = -rr; dy <= 0; dy++) {
         const half = Math.floor(Math.sqrt(rr * rr - dy * dy + rr));
-        ctx.fillRect(hx - half, hy + dy, half * 2 + 1, 1);
+        ctx.fillRect(hx - half, hy + dy - 1, half * 2 + 1, 1);
       }
-      if (back) ctx.fillRect(hx - R - 1, hy - 1, R * 2 + 3, R);
+      if (back) backFill(R * 2);
+      else if (facing === 'side') sideBack(R + 3);
       break;
+    }
     case 3: // 뾰족 머리
-      ctx.fillRect(hx - R, hy - R, R * 2 + 1, 2);
-      ctx.fillRect(hx - 3, hy - R - 2, 1, 2);
-      ctx.fillRect(hx, hy - R - 2, 1, 2);
-      ctx.fillRect(hx + 3, hy - R - 2, 1, 2);
-      if (back) ctx.fillRect(hx - R, hy - R, R * 2 + 1, R + 1);
+      top(Math.ceil(R * 0.5));
+      for (let k = -2; k <= 2; k++) ctx.fillRect(hx + k * Math.ceil(R / 2.5), hy - R - 2, 1, 2);
+      if (back) backFill(R + 2);
+      else if (facing === 'side') sideBack(R + 1);
       break;
-    case 4: // 묶은 머리
-      ctx.fillRect(hx - R, hy - R, R * 2 + 1, 2);
-      ctx.fillRect(hx - R, hy - R + 2, 1, 3);
-      ctx.fillRect(hx + R, hy - R + 2, 1, 3);
-      if (back) ctx.fillRect(hx - R, hy - R, R * 2 + 1, R + 2);
-      {
-        const px = facing === 'side' ? hx - dir * (R + 1) : hx;
-        ctx.fillRect(px - 1, hy - 1, 2, 4);
-      }
+    case 4: {
+      // 묶은 머리
+      top(Math.ceil(R * 0.55));
+      if (back) backFill(R + 3);
+      else if (facing === 'side') sideBack(R + 2);
+      const px = facing === 'side' ? hx - dir * (R + 1) : hx;
+      ctx.fillRect(px - 1, hy - 1, 3, R);
       break;
+    }
     case 5: // 대머리 (반짝)
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.fillRect(hx - 2, hy - R + 1, 2, 1);
+      ctx.fillRect(hx - 2, hy - R + 1, 3, 1);
       break;
     case 6: // 모히칸
-      ctx.fillRect(hx - 1, hy - R - 2, 3, R + 1);
+      ctx.fillRect(hx - 1, hy - R - 3, 3, R + 2);
       break;
   }
 }
 
-/** 벤치에 앉은 선수 (작게). cheer면 일어나서 팔을 든다. */
-export function drawBenchFigure(ctx: CanvasRenderingContext2D, x: number, y: number, pl: Player, kit: Kit, cheer: boolean, time: number) {
-  const skin = SKIN[pl.look.skin % SKIN.length];
-  const hair = HAIR[pl.look.hairColor % HAIR.length];
-  const up = cheer ? 3 + (Math.sin(time * 12 + pl.number) > 0 ? 1 : 0) : 0;
-  const top = y - 9 - up;
-  ctx.fillStyle = kit.jersey;
-  ctx.fillRect(x - 3, top + 5, 7, 5);
-  ctx.fillStyle = kit.trim;
-  ctx.fillRect(x - 3, top + 9, 7, 1);
-  ctx.fillStyle = skin;
-  ctx.fillRect(x - 2, top, 5, 5);
-  ctx.fillStyle = hair;
-  ctx.fillRect(x - 2, top, 5, 2);
-  if (cheer) {
-    ctx.fillStyle = skin;
-    ctx.fillRect(x - 5, top - 1, 1, 5);
-    ctx.fillRect(x + 5, top - 1, 1, 5);
-  }
+/** 벤치 선수. cheer면 일어나서 팔을 든다 */
+export function drawBenchFigure(ctx: CanvasRenderingContext2D, x: number, y: number, pl: Player, kit: Kit, cheer: boolean, time: number, scale = 0.8) {
+  drawFigureRig(ctx, x, y, { pl, kit, facing: 'front', flip: false, act: cheer ? BENCH_UP : BENCH_SIT, speed: 0, lift: 0, time: time + pl.number * 0.13, seed: pl.number, tired: false, scale });
 }

@@ -43,16 +43,16 @@ function register(l: Live) {
 
 /** 선수 한 명을 제자리에서 움직이게 그린다 */
 export function figureCanvas(canvas: HTMLCanvasElement, get: () => { pl: Player; kit: Kit; act?: number; facing?: Facing }) {
-  canvas.width = 40;
-  canvas.height = 44;
+  canvas.width = 48;
+  canvas.height = 53;
   register({
     canvas,
     draw(ctx, t) {
       const { pl, kit, act = ACT.IDLE, facing = 'front' } = get();
       // 바닥 그림자
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx.fillRect(13, 39, 14, 2);
-      drawFigure(ctx, 20, 40, { pl, kit, facing, flip: false, act, speed: 0, lift: 0, time: t, seed: 3, tired: false });
+      ctx.fillRect(16, 48, 16, 2);
+      drawFigure(ctx, 24, 48, { pl, kit, facing, flip: false, act, speed: 0, lift: 0, time: t, seed: 3, tired: false });
     },
   });
 }

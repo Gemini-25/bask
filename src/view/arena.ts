@@ -301,6 +301,10 @@ export function drawCheerBanner(ctx: CanvasRenderingContext2D, home: string, dec
   ctx.fillText(text, x + 5, y + 2);
 }
 
+/** 림 크기 (px, M21에 캐릭터와 같이 키움) */
+const RIM_RX = 6;
+const RIM_RY = 2.8;
+
 /** 골대: 뒤쪽(백보드, 림 뒷부분)과 앞쪽(림 앞부분, 그물)을 나눠 그려서 공이 림을 통과하는 것처럼 */
 export function drawHoopBack(ctx: CanvasRenderingContext2D, side: 0 | 1) {
   const d = side === 0 ? 1 : -1;
@@ -326,28 +330,30 @@ export function drawHoopBack(ctx: CanvasRenderingContext2D, side: 0 | 1) {
   const rx = sx(base + d * COURT.hoopFromBaseline);
   const ry = szy(7.5, COURT.rimHeight);
   ctx.fillStyle = '#c84a12';
-  for (let a = Math.PI; a <= Math.PI * 2; a += 0.12) ctx.fillRect(Math.round(rx + Math.cos(a) * 4.5), Math.round(ry + Math.sin(a) * 2.2), 1, 1);
+  for (let a = Math.PI; a <= Math.PI * 2; a += 0.1) ctx.fillRect(Math.round(rx + Math.cos(a) * RIM_RX), Math.round(ry + Math.sin(a) * RIM_RY), 1, 1);
   // 바닥 그림자
   ctx.fillStyle = 'rgba(0,0,0,0.18)';
   ctx.fillRect(Math.round(rx) - 4, Math.round(groundY), 9, 2);
 }
 
-export function drawHoopFront(ctx: CanvasRenderingContext2D, side: 0 | 1, swish: number) {
+export function drawHoopFront(ctx: CanvasRenderingContext2D, side: 0 | 1, swish: number, bend = 0) {
   const d = side === 0 ? 1 : -1;
   const base = side === 0 ? 0 : COURT.length;
   const rx = sx(base + d * COURT.hoopFromBaseline);
-  const ry = szy(7.5, COURT.rimHeight);
+  const ry = szy(7.5, COURT.rimHeight) + Math.round(bend);
   // 그물 (공이 들어가면 출렁)
   ctx.fillStyle = 'rgba(255,255,255,0.8)';
   const sway = swish > 0 ? Math.round(Math.sin(swish * 30) * 1) : 0;
-  for (let i = -4; i <= 4; i += 2) {
-    const len = 6 - Math.abs(i) * 0.4 + (swish > 0 ? 1 : 0);
-    for (let k = 0; k < len; k++) ctx.fillRect(Math.round(rx + i * (1 - k / 12) + (k > 2 ? sway : 0)), Math.round(ry + 1 + k), 1, 1);
+  for (let i = -6; i <= 6; i += 2) {
+    const len = 8 - Math.abs(i) * 0.4 + (swish > 0 ? 1 : 0);
+    for (let k = 0; k < len; k++) ctx.fillRect(Math.round(rx + i * (1 - k / 14) + (k > 3 ? sway : 0)), Math.round(ry + 1 + k), 1, 1);
   }
-  ctx.fillRect(Math.round(rx) - 2 + sway, Math.round(ry) + 6, 5, 1);
-  // 림 앞부분
+  ctx.fillRect(Math.round(rx) - 3 + sway, Math.round(ry) + 8, 7, 1);
+  // 림 앞부분 (덩크하면 휘청)
   ctx.fillStyle = '#ff6a1f';
-  for (let a = 0; a <= Math.PI; a += 0.1) ctx.fillRect(Math.round(rx + Math.cos(a) * 4.5), Math.round(ry + Math.sin(a) * 2.2), 1, 1);
+  for (let a = 0; a <= Math.PI; a += 0.08) ctx.fillRect(Math.round(rx + Math.cos(a) * RIM_RX), Math.round(ry + Math.sin(a) * RIM_RY), 1, 1);
+  ctx.fillStyle = '#ffa05a';
+  ctx.fillRect(Math.round(rx) - 2, Math.round(ry + RIM_RY), 4, 1);
 }
 
 // ---------------------------------------------------------------- 관중

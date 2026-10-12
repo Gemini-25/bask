@@ -126,6 +126,8 @@ interface SP {
   jt: number;
   jd: number;
   jh: number;
+  /** 화면용 점프 모양: 0 = 포물선, 1 = 림에 매달렸다가 떨어진다 (M21) */
+  jk: number;
   /** 화면용: 잠깐 보여줄 동작과 끝나는 시각 */
   fx: number;
   fxUntil: number;
@@ -140,7 +142,17 @@ interface SP {
 type Phase =
   | { k: 'tip'; t: number; jumped?: boolean }
   | { k: 'live' }
-  | { k: 'gather'; shooter: number; t: number; dur: number; post: boolean; alley: boolean; move?: ShotMove }
+  | {
+      k: 'gather';
+      shooter: number;
+      t: number;
+      dur: number;
+      post: boolean;
+      alley: boolean;
+      move?: ShotMove;
+      /** 모으기 시작한 기록 칸 (M21: 손을 떠날 때 마무리가 정해지면 그동안의 화면용 동작을 다시 쓴다) */
+      f0: number;
+    }
   | {
       k: 'shot';
       shooter: number;
@@ -164,6 +176,8 @@ type Phase =
       combo?: boolean;
       move?: ShotMove;
       poster?: boolean;
+      /** 뱅크슛: 백보드를 맞고 들어간다 (M21) */
+      bank?: boolean;
       ctx?: ShotCtx;
       def?: number;
       rim?: number;
@@ -401,6 +415,7 @@ class GameSim {
   private rEnergy: number[] = [];
   private rAct: number[] = [];
   private rPz: number[] = [];
+  private rCarry: number[] = [];
 
   constructor(
     a: Team,
@@ -484,6 +499,7 @@ class GameSim {
       jt: 0,
       jd: 0,
       jh: 0,
+      jk: 0,
       fx: 0,
       fxUntil: 0,
       fxT: 0,
@@ -529,6 +545,7 @@ class GameSim {
         energy: Uint8Array.from(this.rEnergy),
         act: Uint8Array.from(this.rAct),
         pz: Uint8Array.from(this.rPz),
+        carry: Int8Array.from(this.rCarry),
       },
       events: this.events,
       final: [this.score[0], this.score[1]],
@@ -647,9 +664,7 @@ class GameSim {
       if (p.screenFlag > 0) f |= FLAG_SCREEN;
       this.rFlags.push(f);
       this.rEnergy.push(Math.round(this.energy[p.pid]));
-      let z = 0;
-      if (this.t < p.jt + p.jd && p.jd > 0) z = p.jh * Math.sin(Math.PI * clamp((this.t - p.jt) / p.jd, 0, 1));
-      this.rPz.push(Math.round(clamp(z, 0, 5) * 50));
+      this.rPz.push(Math.round(clamp(this.zOf(p), 0, 5) * 50));
       this.rAct.push(this.actOf(p));
     }
     this.rBall.push(this.ball.x, this.ball.y, this.ball.z);
@@ -658,6 +673,17 @@ class GameSim {
     this.rElapsed.push(this.elapsed);
     this.rQ.push(this.quarter);
     this.rHolder.push(this.ball.holder);
+    // 공이 손에 붙어 있는 선수: 들고 있거나, 슛을 모으는 중이거나, 덩크로 꽂는 중
+    const ph = this.ph;
+    let carry = this.ball.holder;
+    if (carry < 0 && ph.k === 'gather') carry = ph.shooter;
+    else if (carry < 0 && ph.k === 'shot') {
+      // 덩크는 꽂을 때까지, 레이업은 림 가까이 올라갈 때까지 공이 손에 있다
+      const s = (this.t - ph.t) / ph.dur;
+      const k = ph.info.kind;
+      if (ph.dunk || (k === 'layup' && s < 0.4) || ((k === 'floater' || k === 'hook') && s < 0.12)) carry = ph.shooter;
+    }
+    this.rCarry.push(carry);
   }
 
   /** 화면에 보여줄 동작 */
@@ -690,14 +716,30 @@ class GameSim {
     return ACT.IDLE;
   }
 
-  /** 화면용 점프 */
-  private jumpFx(p: SP, h: number, dur: number, act: number) {
-    p.jt = this.t;
+  /** 화면용 점프 (delay초 뒤에 뛴다) */
+  private jumpFx(p: SP, h: number, dur: number, act: number, delay = 0) {
+    p.jt = this.t + delay;
     p.jd = dur;
     p.jh = h;
+    p.jk = 0;
     p.fx = act;
     p.fxT = this.t;
-    p.fxUntil = this.t + dur;
+    p.fxUntil = this.t + delay + dur;
+  }
+
+  /** 지금 점프 높이 (m, 화면용) */
+  private zOf(p: SP) {
+    if (p.jd <= 0 || this.t < p.jt || this.t >= p.jt + p.jd) return 0;
+    const s = (this.t - p.jt) / p.jd;
+    if (p.jk === 1) return s < 0.62 ? p.jh : p.jh * (1 - ((s - 0.62) / 0.38) ** 2);
+    return p.jh * Math.sin(Math.PI * s);
+  }
+
+  /** 덩크 뒤 림에 매달린다: 지금 높이 그대로 있다가 떨어진다 (M21) */
+  private hangFx(p: SP, dur: number) {
+    const z = Math.max(0.6, this.zOf(p));
+    this.jumpFx(p, z, dur, ACT.HANG);
+    p.jk = 1;
   }
 
   private poseFx(p: SP, act: number, dur: number) {
@@ -1995,12 +2037,14 @@ class GameSim {
     const def = move ? shotMove(move) : undefined;
     let dur = alley || forced === 'putback' ? 0.12 : si.kind === 'three' ? 0.32 : si.kind === 'dunk' || si.kind === 'layup' ? 0.18 : 0.28;
     dur += def?.extra ?? 0;
+    // 화면용 동작은 일단 예상으로. 손을 떠날 때 마무리가 정해지면 그 동작으로 다시 쓴다 (retroFinish)
     const j = h.pl.r.jump;
-    const act = def && def.act !== ACT.SHOOT ? def.act : undefined;
-    if (alley || si.kind === 'dunk' || move === 'poster' || move === 'contactDunk') this.jumpFx(h, (move === 'poster' ? 0.95 : 0.75) + j / 250, dur + 0.45, act ?? ACT.DUNK);
-    else if (si.kind === 'layup') this.jumpFx(h, 0.5 + j / 300, dur + 0.4, act ?? ACT.LAYUP);
-    else if (si.kind === 'hook') this.jumpFx(h, 0.3 + j / 400, dur + 0.35, act ?? ACT.SHOOT);
-    else this.jumpFx(h, 0.3 + j / 400, dur + 0.32, act ?? ACT.SHOOT);
+    const dunkish = alley || si.kind === 'dunk' || move === 'poster' || move === 'contactDunk';
+    const act = this.finishAct(dunkish ? 'dunk' : si.kind, move, alley, undefined);
+    if (dunkish) this.jumpFx(h, this.dunkHeight(h, move), (dur + 0.6) * 2, act);
+    else if (si.kind === 'layup') this.jumpFx(h, 0.5 + j / 300, dur + 0.4, act);
+    else if (si.kind === 'hook' || si.kind === 'floater') this.jumpFx(h, 0.3 + j / 400, dur + 0.35, act);
+    else this.jumpFx(h, 0.3 + j / 400, dur + 0.32, act, def?.slide ? Math.min(0.14, dur * 0.4) : 0);
     // 스텝백은 수비에게서 한 발 뒤로, 유로스텝·사이드스텝은 옆으로
     if (def?.slide) {
       const d = ct.blocker >= 0 ? this.P[ct.blocker] : this.defenderOf(h.i);
@@ -2010,8 +2054,8 @@ class GameSim {
       ax /= al;
       ay /= al;
       if (def.slide.dir === 'side') {
-        const s = this.rng.chance(0.5) ? 1 : -1;
-        [ax, ay] = [-ay * s, ax * s];
+        const sg = this.rng.chance(0.5) ? 1 : -1;
+        [ax, ay] = [-ay * sg, ax * sg];
       }
       const T = Math.max(0.12, dur);
       h.slideX = (ax * def.slide.m) / T;
@@ -2019,7 +2063,62 @@ class GameSim {
       h.slideUntil = this.t + T;
     }
     this.act = { k: 'hold', u: L.u, v: L.v, t: this.t };
-    this.ph = { k: 'gather', shooter: h.i, t: this.t, dur, post, alley, move };
+    this.ph = { k: 'gather', shooter: h.i, t: this.t, dur, post, alley, move, f0: this.tick };
+  }
+
+  /** 마무리 동작 (M21): 덩크는 덩크 종류마다, 레이업·훅·플로터·점프슛은 각자, 슛 동작이 있으면 그 동작 */
+  private finishAct(kind: ShotInfo['kind'], move: ShotMove | undefined, alley: boolean, dunk: DunkStyle | undefined): number {
+    if (kind === 'dunk') {
+      if (move === 'poster') return ACT.POSTER;
+      if (move === 'contactDunk') return ACT.CDUNK;
+      if (move === 'putback') return ACT.PUTBACK;
+      if (alley) return ACT.ALLEY;
+      return dunk ? DUNK_ACT[dunk] : ACT.DUNK;
+    }
+    const def = move ? shotMove(move) : undefined;
+    if (def && def.act !== ACT.SHOOT && def.kinds.includes(kind) && !DUNK_MOVES.includes(def.id)) return def.act;
+    return kind === 'layup' ? ACT.LAYUP : kind === 'hook' ? ACT.HOOK : kind === 'floater' ? ACT.FLOAT : ACT.SHOOT;
+  }
+
+  /** 덩크 점프 높이 (화면용): 림에 손이 닿게. 큰 선수는 덜 뛰어도 닿는다 */
+  private dunkHeight(h: SP, move?: ShotMove) {
+    return clamp(1.5 - (h.pl.body.heightCm - 185) / 110, 1.1, 1.55) + (h.pl.r.jump - 60) / 600 + (move === 'poster' ? 0.1 : 0);
+  }
+
+  /**
+   * 손을 떠날 때 (M21): 마무리가 정해졌으니 모으는 동안 찍어 둔 화면용 동작·점프를 그 마무리로 다시 쓴다.
+   * 경기 결과에는 영향이 없다 (화면 기록만)
+   */
+  private retroFinish(h: SP, ph: Extract<Phase, { k: 'gather' }>, kind: ShotInfo['kind'], act: number, flight: number) {
+    const j = h.pl.r.jump;
+    const t0 = ph.t;
+    if (kind === 'dunk') {
+      // 모으기부터 꽂을 때까지 한 번 뛰고, 꼭대기에서 꽂는다
+      h.jt = t0;
+      h.jd = (ph.dur + flight) * 2;
+      h.jh = this.dunkHeight(h, ph.move);
+      h.jk = 0;
+    } else if (kind === 'layup') {
+      h.jt = t0;
+      h.jd = ph.dur + flight * 0.5 + 0.35;
+      h.jh = 0.55 + j / 300;
+      h.jk = 0;
+    } else if (kind === 'hook' || kind === 'floater') {
+      h.jt = t0;
+      h.jd = ph.dur + 0.42;
+      h.jh = 0.32 + j / 400;
+      h.jk = 0;
+    }
+    h.fx = act;
+    h.fxT = t0;
+    h.fxUntil = this.t + (kind === 'dunk' ? flight + 0.05 : kind === 'layup' ? flight * 0.6 + 0.2 : 0.34);
+    for (let f = ph.f0; f < this.tick; f++) {
+      this.rAct[f * 10 + h.i] = act;
+      const t = f * DT;
+      let z = 0;
+      if (h.jd > 0 && t >= h.jt && t < h.jt + h.jd) z = h.jh * Math.sin((Math.PI * (t - h.jt)) / h.jd);
+      this.rPz[f * 10 + h.i] = Math.round(clamp(z, 0, 5) * 50);
+    }
   }
 
   /** 동작 성향: 성격(옵션) × 센스 × 천재 */
@@ -2225,21 +2324,28 @@ class GameSim {
     const made = this.rng.chance(p);
     if (DEBUG.shot) DEBUG.shot(si.kind, c, p, made, this.shotClock);
     let dunk: DunkStyle | undefined;
+    if (si.kind === 'dunk') dunk = mv === 'putback' ? 'putback' : ph.alley ? (h.pl.r.strength >= 62 && this.fxr.chance(0.5) ? 'two' : 'one') : this.pickDunk(h, c, fast || ph.alley);
+    const flight = 0.55 + si.dist * 0.07;
+    // 화면 (M21): 모으는 동안의 동작을 실제 마무리로 다시 쓰고, 덩크는 공을 쥔 채 림 앞까지 날아가 꽂는다
+    this.retroFinish(h, ph, si.kind, this.finishAct(si.kind, mv, ph.alley, dunk), flight);
     if (si.kind === 'dunk') {
-      dunk = mv === 'putback' ? 'putback' : this.pickDunk(h, c, fast || ph.alley);
-      // 점프 중 동작을 덩크 종류에 맞춘다 (인유어페이스·컨택트는 그 동작 그대로)
-      if (mv !== 'poster' && mv !== 'contactDunk') h.fx = DUNK_ACT[dunk];
+      const w = this.wrl(h.team, COURT.hoopFromBaseline + 0.45, clamp(L.v * 0.35, -0.45, 0.45));
+      h.vx = 0;
+      h.vy = 0;
+      h.slideX = (w.x - h.x) / flight;
+      h.slideY = (w.y - h.y) / flight;
+      h.slideUntil = this.t + flight;
     }
     this.ph = {
       k: 'shot',
       dunk,
       shooter: h.i,
       t: this.t,
-      dur: 0.55 + si.dist * 0.07,
+      dur: flight,
       sx: h.x,
       sy: h.y,
       z0: si.kind === 'dunk' ? 3.0 : 2.3,
-      peak: si.kind === 'dunk' ? 0.1 : si.kind === 'layup' ? 0.5 : 1.2 + si.dist * 0.13,
+      peak: si.kind === 'dunk' ? 0.1 : si.kind === 'layup' ? 0.5 : si.kind === 'floater' ? 1.5 + si.dist * 0.1 : 1.2 + si.dist * 0.13,
       info: si,
       made,
       assist,
@@ -2250,6 +2356,7 @@ class GameSim {
       contest: cAdj,
       combo: comboShot,
       move: mv,
+      bank: mv === 'bank' || undefined,
       poster: poster && si.kind === 'dunk',
       ...meta,
     };
@@ -2275,7 +2382,7 @@ class GameSim {
       const fb = ph.fast ? '속공 ' : '';
       const ao = ph.alley ? '앨리웁 ' : '';
       if (ph.alley) this.cnt.alleyOops++;
-      if (si.kind === 'dunk') this.jumpFx(h, 0.8, 0.45, ACT.HANG);
+      if (si.kind === 'dunk') this.hangFx(h, 0.6);
       else this.poseFx(h, ACT.CELEBRATE, si.pts === 3 ? 1.4 : 0.8);
       // 가까운 팀원과 하이파이브
       const mate = this.mates(h.team).filter((m) => m !== h && dist(m.x, m.y, h.x, h.y) < 4.5).sort((a, b) => dist(a.x, a.y, h.x, h.y) - dist(b.x, b.y, h.x, h.y))[0];
@@ -3485,7 +3592,25 @@ class GameSim {
       }
       case 'shot': {
         const s = clamp((t - ph.t) / ph.dur, 0, 1);
-        const H = this.hoop(this.P[ph.shooter].team);
+        const team = this.P[ph.shooter].team;
+        const H = this.hoop(team);
+        if (ph.bank) {
+          // 뱅크슛: 백보드 (림 뒤 0.37m, 림보다 0.5m 위)를 맞고 떨어진다
+          const back = this.wrl(team, COURT.backboardFromBaseline + 0.05, (ph.sy - H.y) * 0.18);
+          const bz = COURT.rimHeight + 0.5;
+          if (s < 0.78) {
+            const q = s / 0.78;
+            b.x = lerp(ph.sx, back.x, q);
+            b.y = lerp(ph.sy, back.y, q);
+            b.z = ph.z0 + (bz - ph.z0) * q + ph.peak * 0.8 * Math.sin(Math.PI * q);
+          } else {
+            const q = (s - 0.78) / 0.22;
+            b.x = lerp(back.x, H.x, q);
+            b.y = lerp(back.y, H.y, q);
+            b.z = lerp(bz, COURT.rimHeight, q);
+          }
+          break;
+        }
         b.x = lerp(ph.sx, H.x, s);
         b.y = lerp(ph.sy, H.y, s);
         b.z = ph.z0 + (COURT.rimHeight - ph.z0) * s + ph.peak * Math.sin(Math.PI * s);

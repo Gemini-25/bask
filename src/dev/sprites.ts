@@ -1,38 +1,46 @@
-// 개발용: 모든 동작 × 방향을 한 장에 그려서 확인
+// 개발용 (M21): 동작마다 진행 순서대로 찍어 한 장에 (필름 띠). ?acts=SHOOT,DUNK 로 골라 볼 수 있다
 import { Rng } from '../core/rng';
 import { generatePlayer } from '../data/player';
 import { ACT } from '../sim/types';
-import { drawFigure, type Facing } from '../view/character';
+import { ANIMS, isOneShot } from '../view/anims';
+import { drawFigureRig, type Facing } from '../view/character';
 
 const c = document.getElementById('c') as HTMLCanvasElement;
 const ctx = c.getContext('2d')!;
-// 동작 수에 맞춰 높이를 늘린다
-c.height = 50 + Math.ceil(Object.keys(ACT).length / 9) * 70;
-ctx.fillStyle = '#d8a66a';
-ctx.fillRect(0, 0, c.width, c.height);
+const q = new URLSearchParams(location.search);
+const pick = q.get('acts')?.split(',');
+const facingQ = (q.get('facing') ?? 'side') as Facing;
 const rng = new Rng(4);
 const players = [generatePlayer(rng, 'PG', 0, 7), generatePlayer(rng, 'C', 0, 34), generatePlayer(rng, 'SF', 0, 23)];
 players[0].look.hair = 2;
 players[1].look.hair = 6;
-const acts = Object.entries(ACT);
-const facings: [Facing, boolean][] = [
-  ['side', false],
-  ['side', true],
-  ['front', false],
-  ['back', false],
-];
-acts.forEach(([name, act], k) => {
-  const col = k % 9;
-  const row = Math.floor(k / 9);
-  facings.forEach(([facing, flip], fi) => {
-    const pl = players[(k + fi) % 3];
-    const x = 14 + col * 52 + fi * 11;
-    const y = 50 + row * 70 + (fi % 2) * 4;
-    const air: number[] = [ACT.SHOOT, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.HANG, ACT.DUNK2, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE, ACT.STEPBACK, ACT.SIDESTEP, ACT.FADE, ACT.TURNFADE, ACT.ONELEG, ACT.SCOOP, ACT.REVLAY, ACT.FINGER, ACT.POWERLAY, ACT.CLUTCH, ACT.POSTER, ACT.CONTACT, ACT.SKYHOOK, ACT.CRADLE, ACT.HAMMER, ACT.SUPERMAN, ACT.SCORPION, ACT.SELFOOP];
-    const lift = air.includes(act) ? 8 : 0;
-    drawFigure(ctx, x, y, { pl, kit: { jersey: fi % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing, flip, act, speed: (act === ACT.IDLE && fi === 0) || (act === ACT.STANCE && fi === 1) ? 4 : 0, lift, time: 0.3, seed: k, tired: false });
-  });
+const air = new Set<number>([ACT.SHOOT, ACT.DEEP, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.DUNK2, ACT.CDUNK, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE, ACT.FADE, ACT.TURNFADE, ACT.ONELEG, ACT.SCOOP, ACT.REVLAY, ACT.FINGER, ACT.POWERLAY, ACT.CLUTCH, ACT.POSTER, ACT.CONTACT, ACT.SKYHOOK, ACT.HOOK, ACT.FLOAT, ACT.CRADLE, ACT.HAMMER, ACT.SUPERMAN, ACT.SCORPION, ACT.SELFOOP, ACT.PUTBACK, ACT.ALLEY, ACT.CHASE, ACT.CONTEST]);
+const late = new Set<number>([ACT.STEPBACK, ACT.SIDESTEP, ACT.EURO]);
+const acts = Object.entries(ACT).filter(([n, a]) => ANIMS[a] && (!pick || pick.includes(n)));
+const COLS = 9;
+const CW = 40;
+const RH = 62;
+c.width = 70 + COLS * CW;
+c.height = 10 + acts.length * RH;
+c.style.width = `${c.width * 2}px`;
+ctx.fillStyle = '#d8a66a';
+ctx.fillRect(0, 0, c.width, c.height);
+acts.forEach(([name, act], row) => {
+  const y = 10 + row * RH + 48;
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.fillRect(0, y + 3, c.width, 1);
   ctx.fillStyle = '#1b1f2a';
   ctx.font = '8px monospace';
-  ctx.fillText(name, 4 + col * 52, 62 + row * 70);
+  ctx.fillText(name, 2, y - 20);
+  for (let k = 0; k < COLS; k++) {
+    const p = k / (COLS - 1);
+    const one = isOneShot(act);
+    const pl = players[row % 3];
+    // 점프: 동작 가운데쯤이 꼭대기
+    let lift = 0;
+    if (air.has(act)) lift = Math.round(Math.sin(Math.PI * Math.min(1, p * 1.1)) * 16);
+    if (late.has(act)) lift = p > 0.45 ? Math.round(Math.sin(Math.PI * ((p - 0.45) / 0.55)) * 12) : 0;
+    if (act === ACT.HANG) lift = 18;
+    drawFigureRig(ctx, 70 + k * CW + 14, y, { pl, kit: { jersey: row % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing: facingQ, flip: false, act, speed: 0, lift, time: one ? 0 : p, seed: 0, tired: false, prog: p, carry: true });
+  }
 });

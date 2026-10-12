@@ -4,7 +4,8 @@ import { ACT, DUNK_LABEL, FLAG_STUN, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
 import { LABELS } from './labels';
 import { drawArena, drawCheerBanner, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type ArenaDeco, type CrowdMood } from './arena';
-import { drawBenchFigure, drawFigure, type Facing, type Kit } from './character';
+import { drawBall, drawBenchFigure, drawFigure, drawFigureRig, reachPx, type Facing, type Kit } from './character';
+import { hasTrail, isOneShot } from './anims';
 import { sx, sy, szy, VIEW_H, VIEW_W, ZH } from './iso';
 import type { Playback } from './playback';
 import { drawDigits, shade } from './pixel';
@@ -101,6 +102,15 @@ interface Confetto {
 
 const WALK_TICKS = 16;
 
+/** 림 쪽을 보고 하는 동작 (슛·레이업·덩크·자유투) */
+const FACE_HOOP = new Set<number>([ACT.SHOOT, ACT.DEEP, ACT.STEPBACK, ACT.SIDESTEP, ACT.FADE, ACT.TURNFADE, ACT.ONELEG, ACT.CONTACT, ACT.HOOK, ACT.SKYHOOK, ACT.FLOAT, ACT.LAYUP, ACT.FINGER, ACT.SCOOP, ACT.REVLAY, ACT.EURO, ACT.POWERLAY, ACT.CLUTCH, ACT.FT]);
+/** 덩크 동작 (꼭대기에서 손이 림에 닿게 높이를 맞춘다) */
+const DUNK_ACTS = new Set<number>([ACT.DUNK, ACT.DUNK2, ACT.CDUNK, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE, ACT.CRADLE, ACT.HAMMER, ACT.SUPERMAN, ACT.SCORPION, ACT.SELFOOP, ACT.POSTER, ACT.PUTBACK, ACT.ALLEY]);
+const smooth = (a: number, b: number, x: number) => {
+  const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
 const FONT = 'Galmuri11, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 
 interface Drawable {
@@ -123,6 +133,13 @@ export class CourtScene extends Phaser.Scene {
   private mood: CrowdMood = { homeCheer: 0, awayCheer: 0, wave: -1 };
   private benchCheer: [number, number] = [0, 0];
   private swish: [number, number] = [0, 0];
+  /** 덩크로 림이 휘청이는 남은 시간, 매달린 선수가 있는 림 */
+  private rimShake: [number, number] = [0, 0];
+  private hanging: [boolean, boolean] = [false, false];
+  /** 동작 시작~끝 (기록 칸), 공이 손을 떠난 칸 (M21) */
+  private runCache: { f0: number; act: number; start: number; end: number; rel: number }[] = [];
+  /** 마지막으로 손에 쥐고 있던 공 위치 (놓은 뒤 잠깐 이어 붙인다) */
+  private lastCarry: { x: number; y: number; cur: number } | null = null;
   private zoomUntil = 0;
   private clock = 0;
   private lastCutIn = -9999;
@@ -282,6 +299,7 @@ export class CourtScene extends Phaser.Scene {
     if (this.mood.wave >= 0) this.mood.wave = this.mood.wave > VIEW_W + 30 ? -1 : this.mood.wave + dt * 320;
     this.benchCheer = [Math.max(0, this.benchCheer[0] - dt), Math.max(0, this.benchCheer[1] - dt)];
     this.swish = [Math.max(0, this.swish[0] - dt), Math.max(0, this.swish[1] - dt)];
+    this.rimShake = [Math.max(0, this.rimShake[0] - dt), Math.max(0, this.rimShake[1] - dt)];
 
     const ctx = this.ctx;
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
@@ -351,10 +369,21 @@ export class CourtScene extends Phaser.Scene {
     const items: Drawable[] = [];
     for (const side of [0, 1] as const) {
       items.push({ depth: 7.5 - 0.05, draw: () => drawHoopBack(ctx, side) });
-      items.push({ depth: 7.5 + 0.05, draw: () => drawHoopFront(ctx, side, this.swish[side]) });
+      items.push({
+        depth: 7.5 + 0.05,
+        draw: () => {
+          const sh = this.rimShake[side];
+          const bend = Math.max(this.hanging[side] ? 2 : 0, sh > 0 ? 1 + Math.round(Math.abs(Math.sin(sh * 40)) * 2) : 0);
+          drawHoopFront(ctx, side, this.swish[side], bend);
+        },
+      });
     }
 
     const focusRef: { v: { x: number; y: number } | null } = { v: null };
+    // 공을 손에 쥔 자리 (M21: 그 선수 그림이 손 위치에 공을 그린다)
+    const carrySlot = rec.carry ? rec.carry[f0] : rec.holder[f0];
+    this.hanging = [false, false];
+    const rimY = szy(7.5, COURT.rimHeight);
     const tags: ({ x: number; y: number; name: string; team: number } | null)[] = new Array(10).fill(null);
     const labelMode = LABELS.mode;
     for (let i = 0; i < 10; i++) {
@@ -396,10 +425,36 @@ export class CourtScene extends Phaser.Scene {
           face.flip = dx < 0;
         } else face.f = dy > 0 ? 'front' : 'back';
       }
+      // 슛·덩크는 림을 본다, 쏘고 돌아서는 세리머니는 림을 등진다
+      const hs = this.hoopSide(team, fr.quarter);
+      const hoopX = hs ? COURT.length - COURT.hoopFromBaseline : COURT.hoopFromBaseline;
+      if (FACE_HOOP.has(act) || DUNK_ACTS.has(act) || act === ACT.HANG) {
+        face.f = 'side';
+        face.flip = hoopX < x;
+      } else if (act === ACT.TURNAWAY) {
+        face.f = 'side';
+        face.flip = hoopX > x;
+      }
+      // 한 번 하는 동작의 진행도
+      const run = isOneShot(act) ? this.actRun(i, f0, act) : null;
+      const len = run ? run.end + 1 - run.start : 1;
+      const prog = run ? Math.max(0, Math.min(1, (pb.cur - run.start) / len)) : undefined;
+      const rel = run && run.rel >= run.start ? (run.rel + 1 - run.start) / len : undefined;
       const stunned = (fr.flags[i] & FLAG_STUN) !== 0;
       const energy = fr.energy[i];
       const px = Math.round(sx(x));
       const py = Math.round(sy(y));
+      // 덩크·매달리기: 손이 림에 닿게 높이를 맞춘다
+      let lift2 = lift;
+      if (act === ACT.HANG || DUNK_ACTS.has(act)) {
+        const need = py - rimY - reachPx(pl) + 1;
+        if (act === ACT.HANG) {
+          lift2 = Math.max(lift, need);
+          if (Math.abs(x - hoopX) < 1.6) this.hanging[hs] = true;
+        } else lift2 = Math.max(lift, need * smooth(0.4, 0.85, prog ?? 0.5));
+      }
+      const carry = carrySlot === i;
+      const ghosts = run && hasTrail(act) && pb.speed <= 8 ? [2, 1] : [];
       items.push({
         depth: y,
         draw: () => {
@@ -408,18 +463,39 @@ export class CourtScene extends Phaser.Scene {
           ctx.fillStyle = 'rgba(30,18,8,0.32)';
           ctx.fillRect(px - Math.floor(sw / 2), py, sw, 2);
           ctx.fillRect(px - Math.floor(sw / 2) + 1, py + 2, sw - 2, 1);
-          const top = drawFigure(ctx, px, py, {
+          // 잔상: 조금 전 자리와 자세를 흐리게
+          for (const k of ghosts) {
+            const gc = pb.cur - k * 0.7;
+            const g0 = Math.max(0, Math.floor(gc));
+            const gx = rec.pos[g0 * 20 + i * 2];
+            const gy = rec.pos[g0 * 20 + i * 2 + 1];
+            const glift = (rec.pz[g0 * 10 + i] / 50) * ZH;
+            ctx.globalAlpha = k === 2 ? 0.14 : 0.26;
+            drawFigureRig(ctx, Math.round(sx(gx)), Math.round(sy(gy)), { pl, kit: this.kit(team), facing: face.f, flip: face.flip, act, speed, lift: Math.max(glift, lift2 - k * 3), time: this.clock, seed: i, tired: false, prog: Math.max(0, (gc - run!.start) / len), rel, ghost: true });
+            ctx.globalAlpha = 1;
+          }
+          if (carry) {
+            // 공 그림자 (드리블하면 발 앞에)
+            ctx.fillStyle = 'rgba(30,18,8,0.3)';
+            ctx.fillRect(px + (face.f === 'side' ? (face.flip ? -6 : 4) : 3), py, 5, 2);
+          }
+          const rig = drawFigureRig(ctx, px, py, {
             pl,
             kit: this.kit(team),
             facing: face.f,
             flip: face.flip,
             act: stunned ? ACT.STUN : act,
             speed,
-            lift,
-            time: this.clock,
+            lift: lift2,
+            time: pb.cur * pb.game.dt,
             seed: i,
             tired: energy < 45,
+            prog,
+            rel,
+            carry,
           });
+          const top = rig.top;
+          if (carry && rig.ball) this.lastCarry = { x: rig.ball.x, y: rig.ball.y, cur: pb.cur };
           if (stunned) {
             const k = Math.floor(this.clock * 8) % 4;
             ctx.fillStyle = '#ffe066';
@@ -476,24 +552,26 @@ export class CourtScene extends Phaser.Scene {
       });
     }
 
-    // 공
+    // 공 (손에 쥐고 있으면 그 선수 그림이 그린다)
     const [bx, by, bz] = fr.ball;
-    const bpx = Math.round(sx(bx));
-    const bpy = Math.round(szy(by, bz)) - 2;
-    items.push({
-      depth: by + 0.02,
-      draw: () => {
-        ctx.fillStyle = 'rgba(30,18,8,0.3)';
-        ctx.fillRect(Math.round(sx(bx)) - 2, Math.round(sy(by)), 5, 2);
-        ctx.fillStyle = '#6b2a08';
-        ctx.fillRect(bpx - 2, bpy - 1, 5, 3);
-        ctx.fillRect(bpx - 1, bpy - 2, 3, 5);
-        ctx.fillStyle = '#f07a24';
-        ctx.fillRect(bpx - 1, bpy - 1, 3, 3);
-        ctx.fillStyle = '#ffb877';
-        ctx.fillRect(bpx - 1, bpy - 1, 1, 1);
-      },
-    });
+    let bpx = Math.round(sx(bx));
+    let bpy = Math.round(szy(by, bz)) - 2;
+    const lc = this.lastCarry;
+    if (carrySlot < 0 && lc && pb.cur >= lc.cur && pb.cur - lc.cur < 1.5) {
+      // 손을 떠난 직후: 손 위치에서 실제 공 자리로 이어 준다
+      const k = (pb.cur - lc.cur) / 1.5;
+      bpx = Math.round(lc.x + (bpx - lc.x) * k);
+      bpy = Math.round(lc.y + (bpy - lc.y) * k);
+    }
+    if (carrySlot < 0)
+      items.push({
+        depth: by + 0.02,
+        draw: () => {
+          ctx.fillStyle = 'rgba(30,18,8,0.3)';
+          ctx.fillRect(Math.round(sx(bx)) - 2, Math.round(sy(by)), 5, 2);
+          drawBall(ctx, bpx, bpy);
+        },
+      });
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) it.draw();
 
@@ -617,11 +695,11 @@ export class CourtScene extends Phaser.Scene {
     const team = pb.game.teamOf[e.player];
     const key = `cut${this.host.gameId}-${e.player}-${e.tick}`;
     const cv = document.createElement('canvas');
-    cv.width = 40;
-    cv.height = 44;
+    cv.width = 56;
+    cv.height = 62;
     const cctx = cv.getContext('2d')!;
     cctx.imageSmoothingEnabled = false;
-    drawFigure(cctx, 20, 42, { pl, kit: this.kit(team as 0 | 1), facing: 'front', flip: false, act: e.shot === 'dunk' ? ACT.HANG : ACT.CELEBRATE, speed: 0, lift: 0, time: 0.2, seed: 1, tired: false });
+    drawFigure(cctx, 28, 58, { pl, kit: this.kit(team as 0 | 1), facing: 'front', flip: false, act: e.shot === 'dunk' ? ACT.FLEX : e.pts === 3 ? ACT.GOGGLES : ACT.CELEBRATE, speed: 0, lift: 0, time: 0.2, seed: 1, tired: false });
     if (this.textures.exists(key)) this.textures.remove(key);
     this.textures.addCanvas(key, cv);
     const col = Phaser.Display.Color.HexStringToColor(this.host.looks[team].fill).color;
@@ -634,7 +712,7 @@ export class CourtScene extends Phaser.Scene {
       const yy = -50 + k * 6;
       lines.lineBetween(-VIEW_W / 2 - 20 + ((k * 53) % 120), yy, VIEW_W / 2 + 20, yy);
     }
-    const img = this.add.image(-150, 6, key).setScale(3);
+    const img = this.add.image(-150, 4, key).setScale(1.9);
     const name = this.add.text(-60, -26, `#${pl.number} ${pl.name}`, { fontFamily: FONT, fontSize: '16px', color: '#ffffff', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5);
     const big = this.add.text(-60, 10, label, { fontFamily: FONT, fontSize: '30px', color: '#ffe066', stroke: '#000000', strokeThickness: 5 }).setOrigin(0, 0.5);
     const c = this.ui(this.add.container(VIEW_W / 2 - VIEW_W, VIEW_H / 2, [band, stripe, stripe2, lines, img, name, big]).setDepth(400));
@@ -754,6 +832,7 @@ export class CourtScene extends Phaser.Scene {
         }
         const side = this.hoopSide(e.team, e.quarter);
         this.swish[side] = 0.5;
+        if (e.shot === 'dunk') this.rimShake[side] = 0.45;
         this.cheer(e.team as 0 | 1, big ? 1 : 0.6);
         if (e.team === 0 && e.pts === 3 && this.mood.wave < 0 && Math.random() < 0.25) this.mood.wave = 0;
         if ((e.shot === 'dunk' || e.alleyOop) && calm) {
@@ -898,6 +977,22 @@ export class CourtScene extends Phaser.Scene {
       default:
         break;
     }
+  }
+
+  /** 이 자리의 동작이 시작한 칸과 끝나는 칸, 공이 마지막으로 손에 있던 칸 (M21) */
+  private actRun(slot: number, f0: number, act: number) {
+    const c = this.runCache[slot];
+    if (c && c.f0 === f0 && c.act === act) return c;
+    const rec = this.host.pb!.game.rec;
+    let start = f0;
+    while (start > 0 && f0 - start < 60 && rec.act[(start - 1) * 10 + slot] === act) start--;
+    let end = f0;
+    while (end < rec.n - 1 && end - f0 < 60 && rec.act[(end + 1) * 10 + slot] === act) end++;
+    let rel = -1;
+    if (rec.carry) for (let f = start; f <= end; f++) if (rec.carry[f] === slot) rel = f;
+    const r = { f0, act, start, end, rel };
+    this.runCache[slot] = r;
+    return r;
   }
 
   private emote(pid: number, k: Emote, dur = 1.3) {

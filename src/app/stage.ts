@@ -2,7 +2,8 @@
 import { Rng } from '../core/rng';
 import { generatePlayer, type Player } from '../data/player';
 import { ACT, DUNK_ACT, type DunkStyle } from '../sim/types';
-import { drawFigure, type Kit } from '../view/character';
+import { drawFigure, reachPx, type Kit } from '../view/character';
+import { isOneShot } from '../view/anims';
 import { numberColorFor, shade } from '../view/pixel';
 import { liveCanvas } from './figure';
 
@@ -20,10 +21,15 @@ const people = (() => {
 
 const SUIT: Kit = { jersey: '#2b2f3a', trim: '#e9ecf3' };
 
+/** 무대 장면의 선수 크기 (M21: 캐릭터가 커져서 줄여 그린다) */
+const FIG = 0.82;
+
 function fig(ctx: CanvasRenderingContext2D, pl: Player, kit: Kit, x: number, y: number, act: number, t: number, o: Partial<Parameters<typeof drawFigure>[3]> = {}) {
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.fillRect(Math.round(x) - 6, Math.round(y) - 1, 12, 2);
-  return drawFigure(ctx, Math.round(x), Math.round(y - (o.lift ?? 0)), { pl, kit, facing: 'side', flip: false, act, speed: 0, lift: 0, time: t, seed: 5, tired: false, ...o });
+  // 한 번 하는 동작은 되풀이해서 보여 준다
+  const prog = o.prog ?? (isOneShot(act) ? (t * 0.9) % 1 : undefined);
+  return drawFigure(ctx, Math.round(x), Math.round(y), { pl, kit, facing: 'side', flip: false, act, speed: 0, lift: 0, time: t, seed: 5, tired: false, scale: FIG, ...o, prog });
 }
 
 function ballAt(ctx: CanvasRenderingContext2D, x: number, y: number) {
@@ -114,45 +120,53 @@ export function dunkScene(canvas: HTMLCanvasElement) {
     ctx.fillRect(4, 66, 46, 8);
     if (!cur) return;
     const ft = cur.style === 'ftline';
-    const runEnd = ft ? 0.32 : 0.38;
-    const take = runEnd;
+    const runEnd = ft ? 0.3 : 0.36;
     const land = 0.72;
+    // 림 (y=28)에 손이 닿는 높이
+    const need = 74 - 28 - reachPx(cur.pl, FIG) + 2;
     let x: number;
     let lift = 0;
     let act: number = ACT.DRIBBLE;
-    let bx: number;
-    let by: number;
+    let prog: number | undefined;
+    let carry = true;
+    let speed = 0;
+    let bx = 0;
+    let by = 0;
     if (k < runEnd) {
-      // 도움닫기
+      // 도움닫기 (드리블)
       const q = k / runEnd;
-      x = 30 + q * ((ft ? 92 : 108) - 30);
-      bx = x + 4;
-      by = 74 - Math.abs(Math.sin(q * Math.PI * 5)) * 10;
+      x = 30 + q * ((ft ? 88 : 104) - 30);
+      speed = 4;
     } else if (k < land) {
-      // 날아올라 림에
-      const q = (k - take) / (land - take);
-      const x0 = ft ? 92 : 108;
-      x = x0 + q * (124 - x0);
-      lift = Math.sin(Math.min(1, q * 1.15) * Math.PI * 0.5) * (ft ? 34 : 30);
-      if (q > 0.85) lift = 30 - (q - 0.85) * 20;
+      // 날아올라 림에 (그 덩크 동작 그대로, 0.9에서 꽂는다)
+      const q = (k - runEnd) / (land - runEnd);
+      const x0 = ft ? 88 : 104;
+      x = x0 + q * (122 - x0);
+      lift = Math.sin(Math.min(1, q * 1.12) * Math.PI * 0.5) * need;
       act = DUNK_ACT[cur.style];
-      bx = q < 0.8 ? x + 2 : 134;
-      by = q < 0.8 ? 74 - lift - 22 : 34;
+      prog = q;
+      if (q > 0.92) {
+        carry = false;
+        bx = 133;
+        by = 30 + (q - 0.92) * 60;
+      }
     } else if (k < 0.84) {
       // 림에 매달림
-      x = 124;
-      lift = 22 - ((k - land) / 0.12) * 4;
-      act = cur.style === 'elbow' ? ACT.ELBOW : ACT.HANG;
+      x = 122;
+      lift = need - 1 - ((k - land) / 0.12) * 3;
+      act = ACT.HANG;
+      carry = false;
       bx = 134;
       by = 40 + ((k - land) / 0.12) * 30;
     } else {
-      x = 120;
-      act = ACT.CELEBRATE;
+      x = 118;
+      act = ACT.FLEX;
+      carry = false;
       bx = 136;
       by = 72;
     }
-    fig(ctx, cur.pl, cur.kit, x, 74, act, t, { lift, flip: false });
-    ballAt(ctx, bx, by);
+    fig(ctx, cur.pl, cur.kit, x, 74, act, t, { lift, flip: false, prog, carry, speed, facing: act === ACT.FLEX ? 'front' : 'side' });
+    if (!carry) ballAt(ctx, bx, by);
   });
   return {
     show(s: DunkShow) {

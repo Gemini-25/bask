@@ -224,6 +224,6 @@ export class TownMap {
     const flip = st.tx < st.x;
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(Math.round(st.x) - 5, Math.round(st.y), 10, 2);
-    drawFigure(ctx, st.x, st.y + 1, { pl, kit, facing, flip, act: ACT.IDLE, speed: moving ? (injured ? 1.5 : 3.5) : 0, lift: 0, time: t, seed: 9, tired: injured });
+    drawFigure(ctx, st.x, st.y + 1, { pl, kit, facing, flip, act: ACT.IDLE, speed: moving ? (injured ? 1.5 : 3.5) : 0, lift: 0, time: t, seed: 9, tired: injured, scale: 0.75 });
   }
 }

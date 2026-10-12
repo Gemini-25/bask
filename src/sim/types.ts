@@ -160,6 +160,24 @@ export const ACT = {
   SUPERMAN: 59,
   SCORPION: 60,
   SELFOOP: 61,
+  // M21: 마무리 동작 따로 (플로터·훅슛·딥쓰리, 풋백·앨리웁·컨택트 덩크)
+  FLOAT: 62,
+  HOOK: 63,
+  DEEP: 64,
+  PUTBACK: 65,
+  ALLEY: 66,
+  CDUNK: 67,
+  // M21: 세리머니
+  GOGGLES: 68,
+  FLEX: 69,
+  SHIMMY: 70,
+  SHH: 71,
+  ROAR: 72,
+  TURNAWAY: 73,
+  // M21: 화려한 패스, 체이스다운 블록
+  BEHINDPASS: 74,
+  NOLOOK: 75,
+  CHASE: 76,
 } as const;
 
 /** 드리블 기술 이름 */
@@ -223,7 +241,7 @@ export const DUNK_ACT: Record<DunkStyle, number> = {
   between: ACT.BETWEEN,
   ftline: ACT.FTLINE,
   cradle: ACT.CRADLE,
-  putback: ACT.DUNK2,
+  putback: ACT.PUTBACK,
   hammer: ACT.HAMMER,
   superman: ACT.SUPERMAN,
   scorpion: ACT.SCORPION,
@@ -257,6 +275,8 @@ export interface Recording {
   act: Uint8Array;
   /** n × 10: 점프 높이 (cm ÷ 2) */
   pz: Uint8Array;
+  /** 공이 손에 붙어 있는 코트 자리 (들고 있거나, 슛 준비 중이거나, 덩크로 꽂는 중), 없으면 -1 (M21) */
+  carry: Int8Array;
 }
 
 /** 코트 자리 0~4는 팀0, 5~9는 팀1. 교체되면 그 자리에 들어간 선수가 바뀐다. */
