@@ -3,8 +3,10 @@ import { grade, RATING_GROUPS } from '../data/ratings';
 import { SCHEME_LABEL } from '../sim/engine';
 import { boxScore, minutesText, type BoxScore } from '../sim/stats';
 import type { DefScheme, GameEvent, GameResult, Side } from '../sim/types';
+import { winProbSeries } from '../sim/winprob';
+import { ShotChart, WinChart } from './charts';
 import type { TeamLook } from './CourtScene';
-import type { Playback } from './playback';
+import type { Playback, PlayMode } from './playback';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -33,6 +35,7 @@ export interface UiActions {
   restart(): void;
   newGame(): void;
   focus(pid: number): void;
+  setMode(mode: PlayMode): void;
 }
 
 export class Ui {
@@ -45,8 +48,18 @@ export class Ui {
   private cache = new Map<string, string>();
   private focus = -1;
   private lastLineup = '';
+  private tab = 'log';
+  private shots: ShotChart;
+  private flow: WinChart;
+  private lastChart = 0;
 
   constructor(act: UiActions) {
+    this.shots = new ShotChart($('tab-shots'));
+    this.flow = new WinChart($('tab-flow'));
+    $('modes').onclick = (e) => {
+      const b = (e.target as HTMLElement).closest('button');
+      if (b) act.setMode(b.dataset.mode as PlayMode);
+    };
     $('btnPlay').onclick = () => act.togglePause();
     $('btnSkip').onclick = () => act.skipQuarter();
     $('btnEnd').onclick = () => act.toEnd();
@@ -76,13 +89,24 @@ export class Ui {
         act.togglePause();
       } else if (e.key >= '1' && e.key <= '5') act.setSpeed(SPEEDS[Number(e.key) - 1]);
       else if (e.key === 'q' || e.key === 'Q') act.skipQuarter();
+      else if (e.key === 'h' || e.key === 'H') act.setMode(this.mode === 'highlights' ? 'all' : 'highlights');
       else if (e.key === 'n' || e.key === 'N') act.newGame();
     });
   }
 
+  private mode: PlayMode = 'all';
+
   private showTab(tab: string) {
+    this.tab = tab;
+    this.lastChart = 0;
     for (const b of $('tabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === tab);
-    for (const t of ['log', 'box', 'player']) $(`tab-${t}`).hidden = t !== tab;
+    for (const t of ['log', 'box', 'player', 'shots', 'flow']) $(`tab-${t}`).hidden = t !== tab;
+  }
+
+  setMode(mode: PlayMode, hint = '') {
+    this.mode = mode;
+    for (const b of $('modes').querySelectorAll('button')) b.classList.toggle('on', b.dataset.mode === mode);
+    this.set('modehint', hint);
   }
 
   private set(id: string, text: string, html = false) {
@@ -110,6 +134,8 @@ export class Ui {
     $('seed').textContent = String(game.seed);
     $('log').innerHTML = '';
     this.renderRoster();
+    this.shots.setGame(game, looks);
+    this.flow.setGame(game, looks, winProbSeries(game));
     this.setFocus(-1);
   }
 
@@ -118,7 +144,8 @@ export class Ui {
     this.boxDirty = true;
     for (const el of document.querySelectorAll('[data-p]')) el.classList.toggle('focus', Number((el as HTMLElement).dataset.p) === pid);
     this.cache.delete('card');
-    if (pid >= 0) this.showTab('player');
+    this.lastChart = 0;
+    if (pid >= 0 && this.tab !== 'shots') this.showTab('player');
   }
 
   setControls(paused: boolean, speed: number) {
@@ -190,6 +217,12 @@ export class Ui {
       this.lastBox = now;
     }
     this.renderPlayerCard(lineup.pids, fr.energy);
+
+    if ((this.tab === 'shots' || this.tab === 'flow') && now - this.lastChart > 400) {
+      this.lastChart = now;
+      if (this.tab === 'shots') this.shots.update(pb.cur, this.focus);
+      else this.flow.update(pb.cur);
+    }
   }
 
   private renderTeamInfo(tick: number, quarter: number) {

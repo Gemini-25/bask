@@ -5,9 +5,9 @@ import { Rng, randomSeed } from './core/rng';
 import { generateTeam, TEAM_INFOS, type Team } from './data/teams';
 import { simulateGame } from './sim/engine';
 import { CourtScene, type SceneHost, type TeamLook } from './view/CourtScene';
-import { colorDistance, shade } from './view/pixel';
-import { Playback } from './view/playback';
-import { numberColorFor, VIEW_H, VIEW_W } from './view/textures';
+import { VIEW_H, VIEW_W } from './view/iso';
+import { colorDistance, numberColorFor, shade } from './view/pixel';
+import { Playback, type PlayMode } from './view/playback';
 import { Ui } from './view/ui';
 import './view/style.css';
 
@@ -77,8 +77,29 @@ const ui = new Ui({
   focus(i) {
     host.focus = host.focus === i ? -1 : i;
     ui.setFocus(host.focus);
+    if (host.pb) {
+      host.pb.focusPid = host.focus;
+      if (mode === 'focus' && host.focus < 0) setMode('all');
+      else host.pb.applyMode();
+    }
+  },
+  setMode(m) {
+    setMode(m);
   },
 });
+
+let mode: PlayMode = 'all';
+function setMode(m: PlayMode) {
+  if (m === 'focus' && host.focus < 0) {
+    ui.setMode(mode, '선수 탭에서 선수를 먼저 골라줘');
+    return;
+  }
+  mode = m;
+  const pb = host.pb;
+  if (pb) pb.setMode(m);
+  const hint = m === 'highlights' && pb ? `${pb.highlights.length}개 장면` : m === 'focus' && pb ? `#${pb.game.players[host.focus].number} ${pb.game.players[host.focus].name} 따라가기` : '';
+  ui.setMode(m, hint);
+}
 
 function startGame(seed: number) {
   const rng = new Rng(seed);
@@ -97,6 +118,8 @@ function startGame(seed: number) {
   host.gameId++;
   ui.setGame(game, host.looks);
   ui.setControls(paused, speed);
+  // 고른 선수는 경기마다 초기화되니 '고른 선수만'은 전체로 돌린다
+  setMode(mode === 'focus' ? 'all' : mode);
 }
 
 async function boot() {

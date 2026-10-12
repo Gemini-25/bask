@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>BASK · 경기 엔진 테스트</title>
+    <title>BASK · 경기 관람</title>
   </head>
   <body>
     <div id="app">
       <header class="top">
-        <div class="brand">BASK <span>M2 경기 엔진 테스트</span></div>
+        <div class="brand">BASK <span>M3 경기 관람 테스트</span></div>
         <div class="seed">경기 번호 <b id="seed">-</b></div>
       </header>
 
@@ -35,12 +35,21 @@
             <button type="button" id="btnRestart">처음부터</button>
             <button type="button" id="btnNew" class="primary" title="단축키 N">새 경기</button>
           </div>
+          <div class="controls modes" id="modes">
+            <span class="lbl">보는 방법</span>
+            <button type="button" data-mode="all" class="on">전체</button>
+            <button type="button" data-mode="focus" title="선수 탭에서 고른 선수가 코트에 있을 때만">고른 선수만</button>
+            <button type="button" data-mode="highlights" title="덩크·3점·블록·스틸·막판 접전만">하이라이트</button>
+            <span class="modehint" id="modehint"></span>
+          </div>
         </div>
         <aside class="panel">
           <nav class="tabs" id="tabs">
             <button type="button" data-tab="log" class="on">문자 중계</button>
             <button type="button" data-tab="box">박스스코어</button>
             <button type="button" data-tab="player">선수</button>
+            <button type="button" data-tab="shots">샷차트</button>
+            <button type="button" data-tab="flow">흐름</button>
           </nav>
           <div class="tab" id="tab-log"><ul class="log" id="log"></ul></div>
           <div class="tab" id="tab-box" hidden></div>
@@ -48,9 +57,11 @@
             <div class="roster" id="roster"></div>
             <div class="card" id="card"></div>
           </div>
+          <div class="tab" id="tab-shots" hidden></div>
+          <div class="tab" id="tab-flow" hidden><h3 class="ctitle">승리 확률</h3></div>
         </aside>
       </div>
-      <footer class="foot">원 = 선수 (숫자는 등번호), 주황 점 = 공, 노란 화살표 = 고른 선수, 발밑 막대 = 지친 선수의 체력. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · N 새 경기</footer>
+      <footer class="foot">노란 화살표 = 고른 선수, 발밑 막대 = 지친 선수의 체력, 머리 위 별 = 앵클 브레이크·스크린에 걸린 선수. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · H 하이라이트 · N 새 경기</footer>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

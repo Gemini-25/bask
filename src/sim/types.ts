@@ -72,6 +72,27 @@ export interface GameEvent {
   text: string;
 }
 
+/** 화면에서 그릴 선수 동작 (Recording.act) */
+export const ACT = {
+  IDLE: 0,
+  DRIBBLE: 1,
+  HOLD: 2,
+  SHOOT: 3,
+  LAYUP: 4,
+  DUNK: 5,
+  PASS: 6,
+  REBOUND: 7,
+  BLOCK: 8,
+  CONTEST: 9,
+  STANCE: 10,
+  SCREEN: 11,
+  STUN: 12,
+  CELEBRATE: 13,
+  FT: 14,
+  POST: 15,
+  HANG: 16,
+} as const;
+
 export const FLAG_STUN = 1;
 export const FLAG_SHOOT = 2;
 export const FLAG_CUT = 4;
@@ -95,6 +116,10 @@ export interface Recording {
   flags: Uint8Array;
   /** n × 10: 체력 0~100 */
   energy: Uint8Array;
+  /** n × 10: ACT 동작 코드 */
+  act: Uint8Array;
+  /** n × 10: 점프 높이 (cm ÷ 2) */
+  pz: Uint8Array;
 }
 
 /** 코트 자리 0~4는 팀0, 5~9는 팀1. 교체되면 그 자리에 들어간 선수가 바뀐다. */

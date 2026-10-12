@@ -16,6 +16,7 @@ import {
   FLAG_SCREEN,
   FLAG_SHOOT,
   FLAG_STUN,
+  ACT,
   type Counters,
   type DefScheme,
   type FoulKind,
@@ -79,10 +80,17 @@ interface SP {
   /** 지역방어에서 맡은 구역 */
   zone: number;
   screenFlag: number;
+  /** 화면용: 점프 시작 시각, 길이, 높이(m) */
+  jt: number;
+  jd: number;
+  jh: number;
+  /** 화면용: 잠깐 보여줄 동작과 끝나는 시각 */
+  fx: number;
+  fxUntil: number;
 }
 
 type Phase =
-  | { k: 'tip'; t: number }
+  | { k: 'tip'; t: number; jumped?: boolean }
   | { k: 'live' }
   | { k: 'gather'; shooter: number; t: number; dur: number; post: boolean; alley: boolean }
   | {
@@ -116,7 +124,7 @@ type Phase =
       inbound: boolean;
       lob: boolean;
     }
-  | { k: 'reb'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; z0: number; peak: number; shotTeam: Side; ft: boolean }
+  | { k: 'reb'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; z0: number; peak: number; shotTeam: Side; ft: boolean; jumped?: boolean }
   | { k: 'loose'; t: number; vx: number; vy: number; shotTeam: Side }
   | { k: 'inbound'; inb: number; recv: number; sx: number; sy: number; t: number; ready: number; made: boolean }
   | { k: 'dead'; t: number; dur: number; sx: number; sy: number }
@@ -311,6 +319,8 @@ class GameSim {
   private rHolder: number[] = [];
   private rFlags: number[] = [];
   private rEnergy: number[] = [];
+  private rAct: number[] = [];
+  private rPz: number[] = [];
 
   constructor(
     a: Team,
@@ -372,6 +382,11 @@ class GameSim {
       man: (team === 0 ? 5 : 0) + (i % 5),
       zone: i % 5,
       screenFlag: 0,
+      jt: 0,
+      jd: 0,
+      jh: 0,
+      fx: 0,
+      fxUntil: 0,
     };
     this.applyPlayer(sp, pid);
     return sp;
@@ -409,6 +424,8 @@ class GameSim {
         holder: Int8Array.from(this.rHolder),
         flags: Uint8Array.from(this.rFlags),
         energy: Uint8Array.from(this.rEnergy),
+        act: Uint8Array.from(this.rAct),
+        pz: Uint8Array.from(this.rPz),
       },
       events: this.events,
       final: [this.score[0], this.score[1]],
@@ -526,6 +543,10 @@ class GameSim {
       if (p.screenFlag > 0) f |= FLAG_SCREEN;
       this.rFlags.push(f);
       this.rEnergy.push(Math.round(this.energy[p.pid]));
+      let z = 0;
+      if (this.t < p.jt + p.jd && p.jd > 0) z = p.jh * Math.sin(Math.PI * clamp((this.t - p.jt) / p.jd, 0, 1));
+      this.rPz.push(Math.round(clamp(z, 0, 5) * 50));
+      this.rAct.push(this.actOf(p));
     }
     this.rBall.push(this.ball.x, this.ball.y, this.ball.z);
     this.rClock.push(Math.max(0, this.clock));
@@ -535,11 +556,54 @@ class GameSim {
     this.rHolder.push(this.ball.holder);
   }
 
+  /** 화면에 보여줄 동작 */
+  private actOf(p: SP): number {
+    const ph = this.ph;
+    if (this.t < p.fxUntil) return p.fx;
+    if (p.stun > 0) return ACT.STUN;
+    if (this.ball.holder === p.i) {
+      if (ph.k === 'ft') return ACT.FT;
+      if (ph.k === 'live') {
+        if (this.act.k === 'post') return ACT.POST;
+        const still = Math.hypot(p.vx, p.vy) < 0.4;
+        return still && (this.act.k === 'hold' || this.act.k === 'wait') ? ACT.HOLD : ACT.DRIBBLE;
+      }
+      return ACT.HOLD;
+    }
+    if (ph.k === 'live' || ph.k === 'pass') {
+      const play = this.play;
+      if (play?.k === 'pnr' && play.scr === p.i && (play.stage === 'set' || play.stage === 'use')) return ACT.SCREEN;
+      if (play?.k === 'pindown' && play.scr === p.i && play.stage === 'run') return ACT.SCREEN;
+      if (play?.k === 'dho' && play.big === p.i && play.stage === 'run') return ACT.HOLD;
+      const h = this.holder();
+      if (h && p.team !== h.team && dist(p.x, p.y, h.x, h.y) < 2.2) return ACT.STANCE;
+    }
+    return ACT.IDLE;
+  }
+
+  /** 화면용 점프 */
+  private jumpFx(p: SP, h: number, dur: number, act: number) {
+    p.jt = this.t;
+    p.jd = dur;
+    p.jh = h;
+    p.fx = act;
+    p.fxUntil = this.t + dur;
+  }
+
+  private poseFx(p: SP, act: number, dur: number) {
+    p.fx = act;
+    p.fxUntil = this.t + dur;
+  }
+
   private updatePhase() {
     const ph = this.ph;
     const t = this.t;
     switch (ph.k) {
       case 'tip':
+        if (!ph.jumped && t - ph.t >= 0.75) {
+          ph.jumped = true;
+          for (const c of [this.P[4], this.P[9]]) this.jumpFx(c, 0.6 + c.pl.r.jump / 300, 0.6, ACT.REBOUND);
+        }
         if (t - ph.t >= 1.2) this.resolveTip();
         break;
       case 'live':
@@ -555,6 +619,12 @@ class GameSim {
         if (t - ph.t >= ph.dur) this.passArrive(ph);
         break;
       case 'reb':
+        if (!ph.jumped && t - ph.t >= ph.dur - 0.3) {
+          ph.jumped = true;
+          for (const p of this.P) {
+            if (dist(p.x, p.y, ph.ex, ph.ey) < 2.8) this.jumpFx(p, 0.35 + p.pl.r.jump / 250, 0.55, ACT.REBOUND);
+          }
+        }
         if (t - ph.t >= ph.dur) this.rebArrive(ph);
         break;
       case 'loose':
@@ -985,6 +1055,7 @@ class GameSim {
         if (clutch) p += (r.composure - 50) * 0.002;
         p *= 0.94 + 0.06 * this.fit(s);
         ph.made = this.rng.chance(clamp(p, 0.3, 0.97));
+        this.jumpFx(s, 0.08, 0.5, ACT.SHOOT);
         ph.stage = 'flight';
         ph.t = this.t;
         this.ball.holder = -1;
@@ -1699,8 +1770,13 @@ class GameSim {
   private startGather(h: SP, post: boolean, alley = false) {
     this.lastDrive = this.act.k === 'drive';
     const L = this.loc(this.off, h.x, h.y);
-    const si = shotInfo(h.pl, L.u, L.v, post);
+    const si = shotInfo(h.pl, L.u, L.v, post, this.contest(h).c);
     const dur = alley ? 0.12 : si.kind === 'three' ? 0.32 : si.kind === 'dunk' || si.kind === 'layup' ? 0.18 : 0.28;
+    const j = h.pl.r.jump;
+    if (alley || si.kind === 'dunk') this.jumpFx(h, 0.75 + j / 250, dur + 0.45, ACT.DUNK);
+    else if (si.kind === 'layup') this.jumpFx(h, 0.5 + j / 300, dur + 0.4, ACT.LAYUP);
+    else if (si.kind === 'hook') this.jumpFx(h, 0.3 + j / 400, dur + 0.35, ACT.SHOOT);
+    else this.jumpFx(h, 0.3 + j / 400, dur + 0.32, ACT.SHOOT);
     this.act = { k: 'hold', u: L.u, v: L.v, t: this.t };
     this.ph = { k: 'gather', shooter: h.i, t: this.t, dur, post, alley };
   }
@@ -1723,6 +1799,7 @@ class GameSim {
     this.misc = null;
     const near = si.kind === 'dunk' || si.kind === 'layup' || si.kind === 'hook' || si.kind === 'floater';
     const d = blocker >= 0 ? this.P[blocker] : this.defenderOf(h.i);
+    if (c1 > 0.3 && dist(d.x, d.y, h.x, h.y) < 2.5) this.jumpFx(d, 0.25 + d.pl.r.jump / 400, 0.45, ACT.CONTEST);
 
     // 차징: 돌파하다 자리 잡은 도움 수비와 부딪힌다
     if (wasDrive && near && blocker >= 0 && blocker === this.helper && c1 > 0.5) {
@@ -1748,6 +1825,7 @@ class GameSim {
       if (!near) pb *= 0.25;
       if (si.kind === 'dunk') pb *= 0.6;
       if (this.rng.chance(clamp(pb, 0, 0.3))) {
+        this.jumpFx(b, 0.55 + b.pl.r.jump / 250, 0.5, ACT.BLOCK);
         this.emit({
           type: 'miss',
           team: h.team,
@@ -1800,6 +1878,8 @@ class GameSim {
       const fb = ph.fast ? '속공 ' : '';
       const ao = ph.alley ? '앨리웁 ' : '';
       if (ph.alley) this.cnt.alleyOops++;
+      if (si.kind === 'dunk') this.jumpFx(h, 0.8, 0.45, ACT.HANG);
+      else this.poseFx(h, ACT.CELEBRATE, si.pts === 3 ? 1.4 : 0.8);
       this.emit({
         type: 'made',
         team: h.team,
@@ -2010,6 +2090,7 @@ class GameSim {
     }
     if (!inbound) this.cnt.passes++;
     if (intercept >= 0) this.cnt.intercepts++;
+    if (!from) this.poseFx(h, ACT.PASS, 0.3);
     this.ball.holder = -1;
     this.act = { k: 'hold', u: 0, v: 0, t: this.t };
     this.ph = { k: 'pass', from: h.i, to: m.i, t: this.t, dur, sx, sy, ex, ey, intercept, oob, inbound, lob };

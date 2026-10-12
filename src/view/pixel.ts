@@ -71,3 +71,7 @@ export function colorDistance(a: string, b: string): number {
   const y = hexToRgb(b);
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
 }
+
+export function numberColorFor(fill: string): string {
+  return luminance(fill) > 0.6 ? '#1b1f2a' : '#ffffff';
+}

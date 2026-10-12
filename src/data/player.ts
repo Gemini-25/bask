@@ -7,6 +7,16 @@ export type Position = 'PG' | 'SG' | 'SF' | 'PF' | 'C';
 export const POSITIONS: Position[] = ['PG', 'SG', 'SF', 'PF', 'C'];
 export const POSITION_LABEL: Record<Position, string> = { PG: '포인트가드', SG: '슈팅가드', SF: '스몰포워드', PF: '파워포워드', C: '센터' };
 
+/** 겉모습 (도트 캐릭터용). 경기 결과에는 영향 없다. */
+export interface Look {
+  skin: number;
+  hair: number;
+  hairColor: number;
+  shoe: number;
+  headband: boolean;
+  sleeve: boolean;
+}
+
 export interface Player {
   id: string;
   name: string;
@@ -14,6 +24,27 @@ export interface Player {
   pos: Position;
   body: Body;
   r: Ratings;
+  look: Look;
+}
+
+/** 이름에서 겉모습을 정한다 (같은 선수는 항상 같은 모습) */
+export function lookFor(seedText: string): Look {
+  let h = 2166136261;
+  for (let i = 0; i < seedText.length; i++) h = Math.imul(h ^ seedText.charCodeAt(i), 16777619);
+  const r = () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+  return {
+    skin: Math.floor(r() * r() * 5),
+    hair: Math.floor(r() * 7),
+    hairColor: r() < 0.8 ? 0 : Math.floor(r() * 5),
+    shoe: Math.floor(r() * 6),
+    headband: r() < 0.15,
+    sleeve: r() < 0.2,
+  };
 }
 
 // 포지션별 평균 능력치 (프로 평균 선수 = 50 전후). 적지 않은 항목은 50.
@@ -39,14 +70,9 @@ export function generatePlayer(rng: Rng, pos: Position, quality: number, number:
   const heightCm = Math.round(rng.normal(hm, hs));
   const wingspanCm = Math.round(heightCm + rng.normal(4, 4));
   const weightKg = Math.round(clamp((heightCm - 100) * 0.95 + rng.normal(0, 6), 70, 135));
-  return {
-    id: `p${Math.floor(rng.next() * 1e9).toString(36)}`,
-    name: koreanName(rng),
-    number,
-    pos,
-    body: { heightCm, wingspanCm, weightKg },
-    r,
-  };
+  const id = `p${Math.floor(rng.next() * 1e9).toString(36)}`;
+  const name = koreanName(rng);
+  return { id, name, number, pos, body: { heightCm, wingspanCm, weightKg }, r, look: lookFor(id + name) };
 }
 
 // 포지션별 종합 능력치 (S12). 감독이 출전 선수를 고를 때도 쓴다.
