@@ -12,14 +12,15 @@ import { checkAbilities } from './abilities';
 import { allStarTeam, DREAM, KOREA, koreaTeam, MAGIC, NATIONS, nationTeam, recordNational } from './allstar';
 import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
+import { traitGameBoost, traitSocial } from './personality';
 import { afterGameFans, gainPopularity, interviewFor, type SnsPost } from './fans';
 import { leagueTeam } from './league';
 import { cheerBoost, gearBoost, has } from './money';
 import { leagueTeamName, recordProGame } from './pro';
 import { withRival } from './people';
-import { recordMyMatch, TOURS } from './season';
+import { recordMyMatch, tourDef } from './season';
 
-const TOUR_PRESTIGE = (id: string) => TOURS.find((t) => t.id === id)?.prestige ?? 1;
+const TOUR_PRESTIGE = (id: string) => tourDef(id)?.prestige ?? 1;
 
 /** 포지션 거리: 같은 자리 0, 옆자리 1 ... */
 const posDist = (a: Position, b: Position) => Math.abs(POSITIONS.indexOf(a) - POSITIONS.indexOf(b));
@@ -128,17 +129,18 @@ export function trustBonus(c: Career) {
 }
 
 /** 경기에 나서는 내 선수 (컨디션과 장비가 경기력에 바로 반영된다) */
-export function gameMe(c: Career): Player {
+export function gameMe(c: Career, official = c.pendingGame?.kind === 'official'): Player {
   const me: Player = { ...c.me, r: { ...c.me.r } };
   const d = CONDITION_GAME[c.condition];
   const gear = gearBoost(c);
-  for (const k of RATING_KEYS) me.r[k] = Math.max(1, Math.min(MAX_RATING, me.r[k] + d + (gear[k] ?? 0)));
+  const trait = traitGameBoost(c, official);
+  for (const k of RATING_KEYS) me.r[k] = Math.max(1, Math.min(MAX_RATING, me.r[k] + d + (gear[k] ?? 0) + (trait[k] ?? 0)));
   return me;
 }
 
 /** 내 학교 출전 명단. 연습경기에선 1학년에게도 기회를 준다 (최소 식스맨) */
 export function myTeam(c: Career, official = c.pendingGame?.kind === 'official', special = c.pendingGame?.special): { team: Team; meIndex: number } {
-  const me = gameMe(c);
+  const me = gameMe(c, official);
   if (special === 'allstar' || special === 'national') {
     const t = special === 'allstar' ? allStarTeam(c, c.allStar!.mySide === 0 ? DREAM.id : MAGIC.id, me) : koreaTeam(c, me);
     // 다쳤으면 벤치에서 응원만 한다
@@ -352,7 +354,8 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
   // 감독 신뢰도: 잘하면 오르고, 공식전일수록 크게 움직인다
   const trustBefore = c.trust;
   const dt = ({ S: 4, A: 3, B: 1.5, C: 0.5, D: -1, '-': 0 }[grade] ?? 0) + (won ? 0.5 : 0);
-  if (!m.special) c.trust = Math.max(0, Math.min(100, c.trust + trustStep(c.trust, dt * (m.kind === 'official' ? 0.8 : 0.5))));
+  const tMul = dt > 0 ? traitSocial(c).trust : 1;
+  if (!m.special) c.trust = Math.max(0, Math.min(100, c.trust + trustStep(c.trust, dt * tMul * (m.kind === 'official' ? 0.8 : 0.5))));
 
   // 공식전이면 대진표에 기록하고, 대회가 끝났으면 성적 보상
   let tourNote: string | undefined;
@@ -371,7 +374,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
       const r = Math.round((FINISH_REWARD[t.myFinish] ?? 0) * TOUR_PRESTIGE(t.id));
       for (const k of ['P', 'T', 'M'] as const) gained[k] += r;
       tourNote = `${t.name} ${t.myFinish}! 보너스 포인트 +${r}씩`;
-      if (t.myFinish === '우승') (c.trophies ??= []).push(`고교 ${dateOf(c.week - 1).grade}학년 ${t.name} 우승`);
+      if (t.myFinish === '우승') (c.trophies ??= []).push(c.college ? `대학 ${c.college.year}학년 ${t.name} 우승` : `고교 ${dateOf(c.week - 1).grade}학년 ${t.name} 우승`);
       if (t.myFinish === '우승') c.trust = Math.min(100, c.trust + 3);
     }
   }
@@ -400,7 +403,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     if (d > 0.001) xpGain[k] = Math.round(d * 100) / 100;
   }
   const comment = c.injury && m.myPid < 0 ? '부상으로 결장했다. 몸부터 만들자.' : rng.pick(COMMENTS[grade]);
-  return { line, grade, gameScore: Math.round(gs * 10) / 10, gained, ups, xpGain, won, score, fatigueBefore, fatigueAfter: c.fatigue, injured, comment, trustBefore, trustAfter: c.trust, tourNote, rival, abilityNotes: checkAbilities(c), dPop: fans.dPop, sns: fans.posts, interview: interviewFor(grade, m.kind === 'official') };
+  return { line, grade, gameScore: Math.round(gs * 10) / 10, gained, ups, xpGain, won, score, fatigueBefore, fatigueAfter: c.fatigue, injured, comment, trustBefore, trustAfter: c.trust, tourNote, rival, abilityNotes: checkAbilities(c), dPop: fans.dPop, sns: fans.posts, interview: interviewFor(grade, m.kind === 'official', c.traits) };
 }
 
 /** 올스타전: 이긴 팀에서 가장 잘한 선수가 MVP */

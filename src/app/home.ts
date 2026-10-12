@@ -9,6 +9,7 @@ import {
   CONDITION_LABEL,
   costOf,
   dateText,
+  setCalendar,
   expectedPoints,
   fatigueGain,
   FOCUS,
@@ -38,6 +39,8 @@ import { leagueTeam, PRO_WEEKS, standings } from '../career/league';
 import { buy, has, itemDef, ITEMS, moneyText } from '../career/money';
 import { leagueTeamName, nextProGame, teamName } from '../career/pro';
 import { canRetire, hofScore, HOF_SCORE, RETIRE_FORCE_AGE, RETIRE_MIN_AGE } from '../career/legacy';
+import { yearLabel } from '../career/college';
+import { traitDef } from '../career/personality';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, toast } from './dom';
@@ -94,6 +97,7 @@ export class Home {
   render(c: Career) {
     if (this.c !== c) this.pending = {};
     this.c = c;
+    setCalendar(c);
     const root = $('scr-home');
     const school = schoolById(c.school);
     const where = c.pro && c.league ? `${esc(leagueTeamName(c))} · 연봉 ${moneyText(c.pro.salary)}` : `${esc(school.city)} ${esc(school.name)} 농구부`;
@@ -122,7 +126,7 @@ export class Home {
       this.tab = 'week';
       this.syncTabs();
       this.renderTab();
-    }, c.pro ? { school: '구단 훈련장', snack: '시내 (촬영장·카페)' } : {});
+    }, c.pro ? { school: '구단 훈련장', snack: '시내 (촬영장·카페)' } : c.college ? { school: '대학 체육관', snack: '분식집 (아르바이트)' } : { snack: '분식집 (아르바이트)' });
     this.busy = false;
   }
 
@@ -174,8 +178,9 @@ export class Home {
   private abilityChips() {
     const ab = this.c!.me.abilities ?? {};
     const list = (Object.entries(ab) as [AbilityId, number][]).filter(([, n]) => n);
-    if (!list.length) return '';
-    return `<div class="abs">${list.map(([id, n]) => `<span class="ab ${abilityDef(id).bad ? 'bad' : ''}" title="${esc(abilityDef(id).desc)}">${abilityDef(id).label}${abilityDef(id).bad ? '' : ` <b>${stars(n)}</b>`}</span>`).join('')}</div>`;
+    const traits = (this.c!.traits ?? []).map((t) => `<span class="ab trait" title="${esc(traitDef(t).desc)}">성격 · ${traitDef(t).label}</span>`).join('');
+    if (!list.length) return traits ? `<div class="abs">${traits}</div>` : '';
+    return `<div class="abs">${traits}${list.map(([id, n]) => `<span class="ab ${abilityDef(id).bad ? 'bad' : ''}" title="${esc(abilityDef(id).desc)}">${abilityDef(id).label}${abilityDef(id).bad ? '' : ` <b>${stars(n)}</b>`}</span>`).join('')}</div>`;
   }
 
   private rivalHtml() {
@@ -239,7 +244,8 @@ export class Home {
       ITEMS.filter((i) => i.kind === kind)
         .map((i) => {
           const own = has(c, i.id);
-          const can = !!c.pro && !own && c.money >= i.price;
+          // 고교·대학 때도 장비는 살 수 있다 (아르바이트로)
+          const can = (!!c.pro || i.kind === 'gear') && !own && c.money >= i.price;
           return `<div class="item ${own ? 'own' : ''}"><b>${esc(i.label)}</b><small>${esc(i.desc)}</small><div class="ib"><span>${moneyText(i.price)}</span><button type="button" data-buy="${i.id}" ${can ? '' : 'disabled'}>${own ? '가지고 있음' : '사기'}</button></div></div>`;
         })
         .join('');
@@ -334,7 +340,7 @@ export class Home {
       const opp = teamInfoOf(c, c.pendingGame.opponent);
       return `<div class="act gamecard"><div class="ah"><b>${esc(c.pendingGame.label)}</b></div><p>vs ${esc(opp.full)}</p><button type="button" class="primary big" data-a="game">경기장으로 ▶</button></div>`;
     }
-    const cards = ACTIONS.filter((a) => (!a.injuredOnly || c.injury) && (a.id !== 'mentor' || c.mentor.met) && (!a.proOnly || c.pro))
+    const cards = ACTIONS.filter((a) => (!a.injuredOnly || c.injury) && (a.id !== 'mentor' || c.mentor.met) && (!a.proOnly || c.pro) && (!a.amateurOnly || !c.pro))
       .map((a) => {
         const ok = canDo(c, a);
         const ex = expectedPoints(c, a);
@@ -474,7 +480,7 @@ export class Home {
     const yrows = [...years.entries()]
       .map(([y, gs]) => {
         const s = (f: (l: NonNullable<(typeof gs)[number]['line']>) => number) => gs.reduce((a, g) => a + f(g.line!), 0) / gs.length;
-        const label = y < 3 ? `고교 ${y + 1}학년` : `프로 ${y - 2}시즌`;
+        const label = yearLabel(c, y);
         return `<tr><td class="nm">${label}</td><td>${gs.length}</td><td>${minutesText(s((l) => l.sec))}</td><td>${s((l) => l.pts).toFixed(1)}</td><td>${s((l) => l.reb).toFixed(1)}</td><td>${s((l) => l.ast).toFixed(1)}</td><td>${s((l) => l.stl).toFixed(1)}</td><td>${s((l) => l.blk).toFixed(1)}</td></tr>`;
       })
       .join('');

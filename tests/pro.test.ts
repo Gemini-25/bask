@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createCareer, SAVE_VERSION, type CreateSpec } from '../src/career/career';
 
 import { resolveEvent } from '../src/career/events';
+import { declareDraft } from '../src/career/college';
 import { createLeague, PRO_WEEKS, standings, offseason, draftClass, scheduleSeason } from '../src/career/league';
 import { applyMatch, playMatch } from '../src/career/match';
 import { buy, gearBoost } from '../src/career/money';
@@ -36,6 +37,8 @@ function toDraft(seed: number) {
       applyMatch(c, playMatch(c));
       afterGame(c);
     }
+    // 고3이 끝나면 고졸 드래프트로
+    if (c.pathPending) declareDraft(c);
   }
   return c;
 }

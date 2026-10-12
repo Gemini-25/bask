@@ -5,6 +5,7 @@ import { Rng } from '../core/rng';
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
 import { addXp, dateOf, teammates, type Career } from './career';
 import { gainPopularity } from './fans';
+import { addTrait, traitDef, type TraitId } from './personality';
 import { avgFriendship } from './people';
 import { signContract } from './pro';
 import { schoolById } from './schools';
@@ -32,6 +33,8 @@ export interface Effect {
   money?: number;
   item?: string;
   trade?: boolean;
+  /** 성격이 하나 생긴다 (두 개까지) */
+  trait?: TraitId;
 }
 
 export interface Choice {
@@ -200,6 +203,33 @@ export const EVENTS: EventDef[] = [
     choices: [
       { label: '가르쳐 준다', effect: { xp: { leadership: 0.5, teamwork: 0.3 }, condition: 1 } },
       { label: '오늘은 바빠', effect: { xp: { hustle: 0.2 } } },
+    ],
+  },
+  // 성격 (M12): 두 번째 성격이 생긴다
+  {
+    id: 'awaken',
+    title: '달라진 나',
+    text: '요즘 코트에서 내가 조금 달라진 것 같다. 어떤 선수가 되고 싶지?',
+    once: true,
+    weight: 30,
+    when: (c) => (c.traits ?? []).length < 2 && c.week >= 60,
+    choices: [
+      { label: '아무도 안 볼 때 한 번 더 던진다', effect: { trait: 'diligent', T: 2 } },
+      { label: '앞에서 팀을 이끈다', effect: { trait: 'leader', friendsAll: 3 } },
+      { label: '무대를 즐긴다', effect: { trait: 'showman', pop: 2 } },
+    ],
+  },
+  {
+    id: 'bigStage',
+    title: '큰 경기의 무게',
+    text: '중요한 경기에서 손이 떨렸다. 이 떨림을 어떻게 할까?',
+    once: true,
+    weight: 30,
+    when: (c) => (c.traits ?? []).length < 2 && c.games.filter((g) => g.kind === 'official').length >= 12,
+    choices: [
+      { label: '이를 악물고 이겨 낸다', effect: { trait: 'competitor', M: 2 } },
+      { label: '마음을 비운다', effect: { trait: 'cool', M: 2 } },
+      { label: '웃어넘긴다', effect: { trait: 'optimist', condition: 1 } },
     ],
   },
   {
@@ -439,6 +469,7 @@ export function resolveEvent(c: Career, ev: PendingEvent, choice: number): strin
       for (const [k, v] of Object.entries(e.xp)) addXp(c, k as RatingKey, v!, ups);
       for (const [k, n] of Object.entries(ups)) out.push(`${RATING_LABEL[k as RatingKey]} +${n}`);
     }
+    if (e.trait && addTrait(c, e.trait)) out.push(`성격이 생겼다: ${traitDef(e.trait).label} (${traitDef(e.trait).desc})`);
     if (e.text) out.unshift(fill(c, e.text, ev.mate));
   };
   apply(ch.effect);
@@ -459,6 +490,7 @@ export function effectHint(e: Effect): string {
   if (e.pop) parts.push(`인기 +${e.pop}`);
   if (e.money) parts.push(`돈 ${e.money > 0 ? '+' : ''}${e.money}만`);
   if (e.trade) parts.push('다른 팀으로');
+  if (e.trait) parts.push(`성격: ${traitDef(e.trait).label}`);
   if (e.xp) parts.push(Object.keys(e.xp).map((k) => `${RATING_LABEL[k as RatingKey]} 경험치`).join(', '));
   return parts.join(' · ');
 }

@@ -5,6 +5,7 @@ import { overall, POSITION_LABEL, POSITIONS, type Look, type Player, type Positi
 import { grade, RATING_GROUPS, RATING_KEYS, type RatingKey } from '../data/ratings';
 import { BACKGROUNDS, backgroundById, GROWTH_TYPES } from '../career/backgrounds';
 import type { LegacyBonus } from '../career/legacy';
+import { traitDef, TRAITS, type TraitId } from '../career/personality';
 import { moneyText } from '../career/money';
 import { applyAlloc, baseHeight, BUILD_LABEL, CREATE_CAP, creationBase, HEIGHT_RANGE, type Build, type CreateSpec } from '../career/career';
 import { SCHOOLS, schoolById } from '../career/schools';
@@ -44,6 +45,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
     alloc: {},
     school: 'HANB',
     legacy,
+    trait: 'diligent',
   };
   const free = (b: { bg: { freePoints: number } }): number => b.bg.freePoints + (legacy?.points ?? 0);
 
@@ -63,8 +65,10 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
       <section class="csec"><h2>2. 출신 배경</h2>
         <div class="cards">${BACKGROUNDS.map((b) => `<button type="button" class="card opt" data-g="bg" data-v="${b.id}"><b>${b.label}</b><span>${b.desc}</span><small>잠재력 ${b.potential} · 자유 포인트 ${b.freePoints}${b.height ? ` · 키 +${b.height}cm` : ''}</small></button>`).join('')}</div>
       </section>
-      <section class="csec"><h2>3. 성장 타입</h2>
+      <section class="csec"><h2>3. 성장 타입과 성격</h2>
         <div class="row">${GROWTH_TYPES.map((g) => opt('growth', g.id, g.label, g.desc)).join('')}</div>
+        <div class="row traits"><span class="lab">성격</span>${TRAITS.map((t) => opt('trait', t.id, t.label, t.desc)).join('')}</div>
+        <p class="hint">성격은 커리어 중 이벤트로 하나 더 생길 수 있다 (두 개까지).</p>
       </section>
       <section class="csec"><h2>4. 몸</h2>
         <div class="row"><label for="cHeight">키</label><input id="cHeight" type="range" min="${-HEIGHT_RANGE}" max="${HEIGHT_RANGE}" step="1" value="0" /><b id="cHeightVal"></b></div>
@@ -129,6 +133,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
         (g === 'pos' && st.prefPos === v) ||
         (g === 'bg' && st.background === v) ||
         (g === 'growth' && st.growth === v) ||
+        (g === 'trait' && st.trait === v) ||
         (g === 'build' && st.build === v) ||
         (g === 'school' && st.school === v) ||
         (g === 'headband' && st.look.headband) ||
@@ -153,7 +158,8 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
       <div class="kv"><span>체중</span><b>${p.body.weightKg}kg</b></div>
       <div class="kv"><span>고교 동안 클 키</span><b>+${b.bg.growth}cm 안팎</b></div>
       <div class="kv"><span>잠재력</span><b>${Math.min(99, b.bg.potential + (legacy?.potential ?? 0))}</b><small>넘으면 비싸진다</small></div>
-      <div class="kv"><span>성장 타입</span><b>${gt.label}</b></div>`;
+      <div class="kv"><span>성장 타입</span><b>${gt.label}</b></div>
+      <div class="kv"><span>성격</span><b>${st.trait ? traitDef(st.trait).label : '-'}</b></div>`;
     const left = free(b) - used();
     $('cLeft').textContent = genius ? '천재: 전부 99' : `남은 포인트 ${left} / ${free(b)}`;
     $('cAlloc').innerHTML = genius
@@ -194,6 +200,9 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
           break;
         case 'growth':
           st.growth = v as CreateSpec['growth'];
+          break;
+        case 'trait':
+          st.trait = v as TraitId;
           break;
         case 'build':
           st.build = v as Build;

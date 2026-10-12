@@ -1,7 +1,7 @@
 // 저장 (K4, K5): 브라우저 저장 슬롯 3개 + 세이브 파일 내보내기·불러오기.
 // 버전 번호를 넣어서 나중 버전에서도 예전 세이브를 읽을 수 있게 한다.
 import { Rng } from '../core/rng';
-import { dateText, SAVE_VERSION, type Career } from './career';
+import { dateText, SAVE_VERSION, setCalendar, type Career } from './career';
 import { dunkList } from '../data/dunks';
 import { emptyStats, startAbilities } from './abilities';
 import { coachName, createMentor, createRival } from './people';
@@ -77,7 +77,10 @@ export function lastSlot(): number | null {
 export function slotInfo(slot: number): SlotInfo | null {
   const c = loadCareer(slot);
   if (!c) return null;
-  return { slot, name: c.me.name, school: schoolById(c.school).name, date: dateText(c.week), savedAt: c.savedAt };
+  setCalendar(c);
+  const date = dateText(c.week);
+  setCalendar(null);
+  return { slot, name: c.me.name, school: schoolById(c.school).name, date, savedAt: c.savedAt };
 }
 
 /** 세이브 파일 내용 (JSON 텍스트) */
@@ -155,6 +158,14 @@ export function migrate(raw: unknown): Career {
     c.retirePending ??= null;
     c.retired ??= null;
     c.legacy ??= null;
+  }
+  if (c.v < 5) {
+    // v4 → v5: 대학, 성격
+    c.college ??= null;
+    c.hsSchool ??= c.school;
+    c.proFromYear ??= 3;
+    c.pathPending ??= null;
+    c.traits ??= [];
   }
   c.v = SAVE_VERSION;
   return c;

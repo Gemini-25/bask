@@ -3,7 +3,7 @@ import { Rng } from '../core/rng';
 import { expectedMargin, MARGIN_SD } from '../sim/winprob';
 import type { Career, PendingGame } from './career';
 import { myTeam, opponentTeam } from './match';
-import { SCHOOLS, schoolById } from './schools';
+import { COLLEGES, SCHOOLS, schoolById, type SchoolInfo } from './schools';
 
 export type TourKind = 'knockout' | 'groups' | 'finals';
 
@@ -27,6 +27,23 @@ export const TOURS: TourDef[] = [
   { id: 'national', name: '전국체전', kind: 'knockout', weeks: [29, 30, 31], size: 8, prestige: 1.5, blurb: '시도 대표가 모이는 큰 무대' },
   { id: 'kings', name: '왕중왕전', kind: 'finals', weeks: [38, 39], size: 4, prestige: 1.8, blurb: '시즌 성적 상위 4팀만 나가는 마지막 대회' },
 ];
+
+/** 대학 대회 (M12): 대학리그 조별, 여름 대회, 가을 농구대잔치, 왕중왕전 */
+export const COLLEGE_TOURS: TourDef[] = [
+  { id: 'ucup', name: '대학 춘계대회', kind: 'knockout', weeks: [5, 6, 7], size: 8, prestige: 1.1, blurb: '대학 시즌 첫 대회' },
+  { id: 'uleague', name: '대학리그', kind: 'groups', weeks: [16, 17, 18, 19, 20, 21, 22], size: 10, prestige: 1.4, blurb: '10개 대학 조별리그, 조 2위까지 4강' },
+  { id: 'ufest', name: '농구대잔치', kind: 'knockout', weeks: [29, 30, 31], size: 8, prestige: 1.6, blurb: '대학 최고 인기 대회' },
+  { id: 'uking', name: '대학 왕중왕전', kind: 'finals', weeks: [38, 39], size: 4, prestige: 2, blurb: '시즌 성적 상위 4개 대학' },
+];
+
+/** 고교인지 대학인지에 따라 팀과 대회 */
+export function circuit(c: Career): { teams: SchoolInfo[]; tours: TourDef[] } {
+  return c.college && !c.pro ? { teams: COLLEGES, tours: COLLEGE_TOURS } : { teams: SCHOOLS, tours: TOURS };
+}
+
+export function tourDef(id: string): TourDef | undefined {
+  return TOURS.find((t) => t.id === id) ?? COLLEGE_TOURS.find((t) => t.id === id);
+}
 
 /** 대회가 없는 달의 연습경기 주 */
 export const PRACTICE_WEEKS = [3, 11, 15, 27, 35, 43, 47];
@@ -84,14 +101,15 @@ function strengthOrder(c: Career, ids: string[]): string[] {
   return [...ids].sort((a, b) => s.get(b)! - s.get(a)!);
 }
 
-/** 고교 3년 동안만 시즌이 있다 */
+/** 고교 3년, 대학에 가면 대학 4년 동안 시즌이 있다 */
 export function createSeason(c: Career, year: number): Season | null {
-  if (year >= 3) return null;
+  if (c.pro || (year >= 3 && !c.college)) return null;
   const base = year * 48;
   const rng = new Rng(c.seed ^ (year * 2654435761));
-  const all = SCHOOLS.map((s) => s.id);
+  const { teams: list, tours: defs } = circuit(c);
+  const all = list.map((s) => s.id);
   const tours: Tour[] = [];
-  for (const def of TOURS) {
+  for (const def of defs) {
     if (def.kind === 'finals') {
       // 왕중왕전 출전팀은 12월에 정해진다
       tours.push({ id: def.id, name: def.name, kind: def.kind, year, teams: [], matches: [], weeks: def.weeks.map((w) => base + w), done: false });
@@ -258,8 +276,8 @@ function advanceTour(c: Career, t: Tour, week: number) {
     add(winners[0], 10);
     if (winners[0] === c.school) t.myFinish = '우승';
     t.done = true;
-    // 전국체전이 끝나면 왕중왕전 4팀이 정해진다
-    if (t.id === 'national') setupFinals(c);
+    // 왕중왕전 앞 대회 (고교 전국체전, 대학 농구대잔치)가 끝나면 4팀이 정해진다
+    if (t.id === 'national' || t.id === 'ufest') setupFinals(c);
     return;
   }
   for (let i = 0; i < winners.length; i += 2) t.matches.push({ round: r + 1, week: t.weeks[r + 1], a: winners[i], b: winners[i + 1] });
@@ -269,7 +287,9 @@ function setupFinals(c: Career) {
   const s = c.season!;
   const t = s.tours.find((x) => x.kind === 'finals');
   if (!t || t.teams.length) return;
-  const ranked = SCHOOLS.map((x) => x.id).sort((a, b) => (s.points[b] ?? 0) - (s.points[a] ?? 0) || schoolById(b).strength - schoolById(a).strength);
+  const ranked = circuit(c)
+    .teams.map((x) => x.id)
+    .sort((a, b) => (s.points[b] ?? 0) - (s.points[a] ?? 0) || schoolById(b).strength - schoolById(a).strength);
   t.teams = ranked.slice(0, 4);
   if (!t.teams.includes(c.school)) t.myFinish = '출전 못 함';
   t.matches.push({ round: 0, week: t.weeks[0], a: t.teams[0], b: t.teams[3] }, { round: 0, week: t.weeks[0], a: t.teams[1], b: t.teams[2] });
@@ -285,7 +305,7 @@ export function gameFor(c: Career, week: number, rng: Rng): PendingGame | null {
   }
   const w = week % 48;
   if (PRACTICE_WEEKS.includes(w)) {
-    const others = SCHOOLS.filter((s) => s.id !== c.school);
+    const others = circuit(c).teams.filter((s) => s.id !== c.school);
     const recent = new Set(c.games.slice(-3).map((g) => g.opponent));
     const pool = others.filter((s) => !recent.has(s.id));
     return { kind: 'practice', opponent: rng.pick(pool.length ? pool : others).id, label: '연습경기', home: c.games.length % 2 === 0 };

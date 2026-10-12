@@ -6,7 +6,7 @@ import { dateOf, doWeek, WEEKS_PER_YEAR, type ActionId, type Career, type FocusI
 import { hsHeightAdj, schoolById } from './schools';
 import { checkAbilities } from './abilities';
 import { rollEvent } from './events';
-import { runDraft } from './draft';
+import { declareDraft } from './college';
 import { popularityDecay } from './fans';
 import { rivalGrow } from './people';
 import { proNewYear, proWeek, seasonBase } from './pro';
@@ -17,7 +17,7 @@ import { catchUp, createSeason, gameFor, playOthers } from './season';
 export function ensureSeason(c: Career) {
   const year = dateOf(c.week).year;
   if (c.season && c.season.year === year) return;
-  if (c.season === null && year >= 3) return;
+  if (c.season === null && year >= 3 && !c.college) return;
   c.season = createSeason(c, year);
   if (c.week % WEEKS_PER_YEAR !== 0) {
     const rng = Rng.fromState(c.rng);
@@ -93,10 +93,23 @@ export function rollover(c: Career): string[] {
   if (c.week % WEEKS_PER_YEAR !== 0 || y <= (c.yearOf ?? 0)) return [];
   c.yearOf = y;
   if (c.pro) return proNewYear(c);
+  if (c.college) {
+    // 대학 학년이 끝났다: 4학년이면 드래프트, 아니면 얼리 엔트리를 고른다
+    c.me.age = (c.me.age ?? 19) + 1;
+    c.college.year++;
+    if (c.college.year > 4) {
+      c.college.year = 4;
+      declareDraft(c);
+      return ['대학 4년을 마쳤다! 드래프트 날이다.'];
+    }
+    const notes = newYear(c);
+    c.pathPending = 'college';
+    return [`대학 ${c.college.year - 1}학년이 끝났다. 드래프트에 나갈까, 1년 더 다닐까?`, ...notes];
+  }
   if (y === 3) {
-    c.draft = runDraft(c);
     c.me.age = (c.me.age ?? 18) + 1;
-    return ['고교 3년이 끝났다! 드래프트 날이다.'];
+    c.pathPending = 'hs';
+    return ['고교 3년이 끝났다! 진로를 정할 때다.'];
   }
   c.me.age = (c.me.age ?? 16) + 1;
   return newYear(c);
@@ -119,11 +132,12 @@ export function newYear(c: Career): string[] {
   const year = dateOf(c.week).year;
   const rng = Rng.fromState(c.rng);
   const school = schoolById(c.school);
-  const grads = c.roster.filter((e) => e.grade >= 3);
-  c.roster = c.roster.filter((e) => e.grade < 3);
+  const top = c.college ? 4 : 3;
+  const grads = c.roster.filter((e) => e.grade >= top);
+  c.roster = c.roster.filter((e) => e.grade < top);
   for (const e of c.roster) e.grade++;
   for (const g of grads) delete c.friends[g.player.id];
-  if (year < 3) {
+  if (year < 3 || c.college) {
     // 신입생: 빠진 포지션부터 채운다
     const count = Math.max(3, 13 - c.roster.length);
     const taken = [c.me.number, ...c.roster.map((e) => e.player.number)];
@@ -134,11 +148,11 @@ export function newYear(c: Career): string[] {
       let n = rng.int(0, 99);
       while (used.has(n)) n = rng.int(0, 99);
       used.add(n);
-      const p = generatePlayer(rng, pos, school.strength - 5 + rng.normal(0, 2.5), n, { heightAdj: hsHeightAdj(c.gender) - 3, gender: c.gender });
+      const p = generatePlayer(rng, pos, school.strength - (c.college ? 4 : 5) + rng.normal(0, 2.5), n, { heightAdj: hsHeightAdj(c.gender) + (c.college ? 0 : -3), gender: c.gender });
       c.roster.push({ player: p, grade: 1 });
       c.friends[p.id] = 30;
     }
-    notes.push(`${year + 1}학년이 됐다! 3학년 선배 ${grads.length}명 졸업, 신입생 ${count}명 입학.`);
+    notes.push(c.college ? `대학 ${c.college.year}학년이 됐다! 4학년 선배 ${grads.length}명 졸업, 신입생 ${count}명 입학.` : `${year + 1}학년이 됐다! 3학년 선배 ${grads.length}명 졸업, 신입생 ${count}명 입학.`);
   }
   c.rng = rng.state;
   c.season = createSeason(c, year);

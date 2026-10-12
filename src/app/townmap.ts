@@ -26,7 +26,7 @@ export const PLACES: Place[] = [
   { id: 'school', label: '학교 체육관', x: 14, y: 18, w: 108, h: 62, door: [68, 92], actions: ['team', 'solo', 'trainer', 'weight', 'video'] },
   { id: 'park', label: '공원 코트', x: 208, y: 84, w: 100, h: 56, door: [222, 112], actions: ['street', 'mentor'] },
   { id: 'home', label: '집', x: 238, y: 14, w: 52, h: 40, door: [264, 62], actions: ['rest'] },
-  { id: 'snack', label: '분식집', x: 128, y: 104, w: 52, h: 34, door: [154, 100], actions: ['friends', 'ad'] },
+  { id: 'snack', label: '분식집', x: 128, y: 104, w: 52, h: 34, door: [154, 100], actions: ['friends', 'ad', 'parttime'] },
   { id: 'hospital', label: '병원', x: 150, y: 14, w: 52, h: 40, door: [176, 62], actions: ['rehab'] },
 ];
 

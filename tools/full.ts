@@ -1,6 +1,7 @@
 // 자동 플레이: 고교 3년 → 드래프트 → 프로 (인자: 시드, 몇 년, abroad면 해외 진출 제안을 받는다)
 import { createCareer, dateText, myOverall } from '../src/career/career';
 import { resolveEvent } from '../src/career/events';
+import { declareDraft } from '../src/career/college';
 import { standings } from '../src/career/league';
 import { applyMatch, playMatch, teamInfoOf } from '../src/career/match';
 import { hofScore, retire } from '../src/career/legacy';
@@ -28,6 +29,7 @@ for (let w = 0; w < 48 * YEARS && !c.retired; w++) {
     const notes = afterGame(c);
     if (notes.length) console.log(dateText(c.week), notes.join(' | '));
   }
+  if (c.pathPending) declareDraft(c);
   if (c.draft) {
     console.log('DRAFT', c.draft.myNo, '순위', teamName(c.league!, c.draft.team), c.draft.salary, '만원');
     c.draft = null;

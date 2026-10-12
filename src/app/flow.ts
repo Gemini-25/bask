@@ -1,6 +1,7 @@
 // 한 주가 끝난 뒤 결과, 연습경기 전 안내, 경기 뒤 성장 결과 화면
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
-import { addXp, CONDITION_LABEL, dateText, FOCUS, myOverall, type Career, type WeekResult } from '../career/career';
+import { addXp, CONDITION_LABEL, dateText, FOCUS, myOverall, setCalendar, type Career, type WeekResult } from '../career/career';
+import { collegeOffers, declareDraft, enterCollege, stayInCollege } from '../career/college';
 import { gainPopularity, type InterviewChoice } from '../career/fans';
 import { effectHint, eventById, fill, resolveEvent } from '../career/events';
 import { leagueTeam } from '../career/league';
@@ -224,7 +225,7 @@ export function draftModal(c: Career, onDone: () => void) {
   sound.play('pop');
   const box = modal(
     `<h2>BASK 리그 신인 드래프트</h2>
-    <p class="muted">고교 3년을 마친 ${esc(c.me.name)}. 오늘 프로 팀이 정해진다.</p>
+    <p class="muted">${c.college ? `대학 ${c.college.year}학년` : '고교 3년'}을 마친 ${esc(c.me.name)}. 오늘 프로 팀이 정해진다.</p>
     <ol class="picks" id="picks"></ol>
     <div class="mbtn"><button type="button" id="dSkip">바로 보기</button></div>`,
     { wide: true },
@@ -542,4 +543,74 @@ export function seasonCardModal(c: Career, onDone: () => void) {
     { onClose: onDone },
   );
   figureCanvas(box.querySelector('#scFig') as HTMLCanvasElement, () => ({ pl: c.me, kit: { jersey: col, trim: numberColorFor(col) }, act: ACT.CELEBRATE }));
+}
+
+// ───────────── 진로: 드래프트 or 대학 (W2, M12) ─────────────
+
+function stars5(strength: number) {
+  const n = Math.max(1, Math.min(5, Math.round((strength + 13) / 1.4)));
+  return '★'.repeat(n) + '☆'.repeat(5 - n);
+}
+
+/** 고3이 끝났거나 대학 학년이 끝났을 때 */
+export function pathModal(c: Career, onDone: () => void) {
+  sound.play('pop');
+  const ovr = myOverall(c);
+  const wins = c.games.filter((g) => g.kind === 'official' && g.won).length;
+  const titles = c.trophies.filter((t) => /(고교|대학) .*우승/.test(t)).length;
+  const forecast = ovr >= 58 ? '1라운드 상위' : ovr >= 52 ? '1라운드' : ovr >= 46 ? '1라운드 후반~2라운드' : '2라운드';
+  const head = `<div class="chgs">
+      <div class="chg"><span>종합</span><b>${ovr.toFixed(1)}</b><small>예상 지명: ${forecast}</small></div>
+      <div class="chg"><span>공식전 승리</span><b>${wins}</b><small>우승 ${titles}번</small></div>
+      <div class="chg"><span>나이</span><b>${c.me.age}살</b></div>
+    </div>`;
+  const done = (notes: string[]) => {
+    modal(`<h2>진로 결정</h2>${notes.map((n) => `<p class="note">${esc(n)}</p>`).join('')}<div class="mbtn"><button type="button" class="primary" data-close>확인</button></div>`, { onClose: onDone });
+  };
+  if (c.pathPending === 'hs') {
+    const offers = collegeOffers(c);
+    const box = modal(
+      `<h2>고교 3년이 끝났다. 진로를 정하자</h2>${head}
+      <div class="choices">
+        <button type="button" class="choice" data-path="draft"><b>🏀 드래프트 신청 (고졸 프로)</b><small>바로 프로 리그로. 연봉을 일찍 받고 프로에서 큰다</small></button>
+        ${offers.map((u) => `<button type="button" class="choice" data-path="${u.id}"><b><i class="sw" style="background:${u.color}"></i>🎓 ${esc(u.name)} 진학 <span class="muted">${stars5(u.strength)}</span></b><small>${esc(u.blurb)} · 대학 4년 동안 크고, 해마다 드래프트에 나갈 수 있다</small></button>`).join('')}
+      </div>
+      <p class="hint">대학에 가면 고교처럼 대회를 뛰면서 더 클 시간이 생긴다. 대신 프로 데뷔가 늦어지고 그동안 연봉이 없다.</p>`,
+    );
+    box.querySelectorAll<HTMLElement>('[data-path]').forEach(
+      (b) =>
+        (b.onclick = () => {
+          const id = b.dataset.path!;
+          if (id === 'draft') {
+            declareDraft(c);
+            setCalendar(c);
+            closeModal();
+            onDone();
+            return;
+          }
+          const notes = enterCollege(c, id);
+          setCalendar(c);
+          done(notes);
+        }),
+    );
+    return;
+  }
+  const y = c.college!.year;
+  const box = modal(
+    `<h2>대학 ${y - 1}학년이 끝났다</h2>${head}
+    <div class="choices">
+      <button type="button" class="choice" data-path="draft"><b>🏀 드래프트 신청 (얼리 엔트리)</b><small>${y - 1}학년을 마치고 프로로</small></button>
+      <button type="button" class="choice" data-path="stay"><b>🎓 ${y}학년도 다닌다</b><small>${y === 4 ? '마지막 학년. 졸업하면 드래프트' : '1년 더 크고 나간다'}</small></button>
+    </div>`,
+  );
+  box.querySelectorAll<HTMLElement>('[data-path]').forEach(
+    (b) =>
+      (b.onclick = () => {
+        if (b.dataset.path === 'draft') declareDraft(c);
+        else stayInCollege(c);
+        setCalendar(c);
+        closeModal();
+        onDone();
+      }),
+  );
 }

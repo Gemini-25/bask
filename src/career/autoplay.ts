@@ -4,6 +4,7 @@ import { overall } from '../data/player';
 import { RATING_KEYS, type RatingKey } from '../data/ratings';
 import { costOf, dateOf, FOCUS, invest, mentorReady, POINT_OF, type ActionId, type Career, type FocusId } from './career';
 import { buy, has, itemDef } from './money';
+import { collegeOffers, declareDraft, enterCollege, stayInCollege } from './college';
 import { resolveEvent } from './events';
 import { applyMatch, playMatch } from './match';
 import { contractOffers, signContract } from './pro';
@@ -127,7 +128,7 @@ export interface AutoWeekResult {
  * 한 주 자동 진행. stop에 걸리는 일이 생기면 그 화면은 남겨 두고 멈춘다
  * (경기면 경기를 치르기 전에, 드래프트면 결과를 안 지운 채로).
  */
-export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean; spread?: boolean; stop?: StopAt } = {}): AutoWeekResult {
+export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean; spread?: boolean; stop?: StopAt; path?: 'draft' | 'college' } = {}): AutoWeekResult {
   const stop = opts.stop ?? 'none';
   const yearBefore = dateOf(c.week).year;
   const a = autoAction(c, policy);
@@ -145,6 +146,13 @@ export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean
     notes.push(...afterGame(c));
   }
   if (c.allStar?.unseen) c.allStar.unseen = false;
+  // 진로: 기본은 드래프트, path가 college면 대학 4년
+  if (c.pathPending) {
+    if (stop === 'draft') return { stopped: 'draft', notes, games };
+    if (c.pathPending === 'hs' && opts.path === 'college') notes.push(...enterCollege(c, collegeOffers(c)[0].id));
+    else if (c.pathPending === 'college' && opts.path === 'college') stayInCollege(c);
+    else declareDraft(c);
+  }
   if (c.draft) {
     if (stop === 'draft') return { stopped: 'draft', notes, games };
     c.draft = null;

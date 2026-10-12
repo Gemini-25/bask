@@ -245,6 +245,29 @@ export function trainingScene(canvas: HTMLCanvasElement, o: SceneOpts) {
         meTop = fig(ctx, o.pl, o.kit, meX, 70, Math.sin(t * 2) > 0 ? ACT.CELEBRATE : ACT.HOLD, t, { facing: 'front' });
         break;
       }
+      case 'parttime': {
+        // 분식집 카운터에서 일한다
+        ctx.fillStyle = '#e8c08a';
+        ctx.fillRect(0, 0, SCENE_W, SCENE_H);
+        ctx.fillStyle = '#b33b2e';
+        ctx.fillRect(0, 0, SCENE_W, 10);
+        ctx.fillStyle = '#3a2a1e';
+        ctx.fillRect(104, 16, 40, 22);
+        ctx.fillStyle = '#f7f2e8';
+        for (let i = 0; i < 4; i++) ctx.fillRect(108, 20 + i * 4, 24, 1);
+        meX = 60;
+        meTop = fig(ctx, o.pl, { jersey: '#f7f2e8', trim: '#b33b2e' }, meX, 64, Math.sin(t * 3) > 0.4 ? ACT.PASS : ACT.HOLD, t, { facing: 'front' });
+        // 앞치마
+        ctx.fillStyle = '#b33b2e';
+        ctx.fillRect(meX - 3, meTop + 12, 7, 6);
+        // 카운터
+        ctx.fillStyle = '#8a5a3a';
+        ctx.fillRect(30, 62, 70, 10);
+        ctx.fillStyle = '#e0473d';
+        ctx.fillRect(40 + Math.round(((t * 20) % 40)), 59, 8, 3);
+        drawBenchFigure(ctx, 120, 72, extras.mates[2], mateKit, Math.sin(t * 2) > 0.6, t);
+        break;
+      }
       case 'friends': {
         ctx.fillStyle = '#e8c08a';
         ctx.fillRect(0, 0, SCENE_W, SCENE_H);

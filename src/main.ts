@@ -6,13 +6,13 @@ import { $, closeModal, download, modal, modalOpen, onScreen, pickFile, screen, 
 import { DevPanel } from './app/dev';
 import { sound } from './view/sound';
 import type { SongId } from './view/music';
-import { allStarModal, awardsModal, contractModal, draftModal, eventModal, preGameModal, renderResult, retireModal, retireSummaryModal, seasonCardModal, weekModal } from './app/flow';
+import { allStarModal, awardsModal, contractModal, draftModal, eventModal, pathModal, preGameModal, renderResult, retireModal, retireSummaryModal, seasonCardModal, weekModal } from './app/flow';
 import { checkAchievements, enshrine, hallOfFame, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
 import { teamInfoOf } from './career/match';
 import { itemDef, moneyText } from './career/money';
 import { Home } from './app/home';
 import { renderTitle } from './app/title';
-import { createCareer, dateOf, dateText, myOverall, type Career } from './career/career';
+import { createCareer, dateOf, dateText, myOverall, setCalendar, type Career } from './career/career';
 import { afterGame, ensureSeason, playWeek } from './career/turn';
 import { leagueTeamName } from './career/pro';
 import { applyMatch, playMatch, type GameReport, type MatchSetup } from './career/match';
@@ -196,6 +196,8 @@ function save() {
 const home = new Home({
   doWeek(id, focus) {
     const c = career!;
+    // 진로를 먼저 정해야 한다
+    if (c.pathPending) return afterWeek();
     const r = playWeek(c, id, focus);
     save();
     home.render(c);
@@ -285,6 +287,13 @@ function afterWeek() {
     );
     return;
   }
+  if (c.pathPending) {
+    pathModal(c, () => {
+      save();
+      toHome();
+    });
+    return;
+  }
   if (c.draft) {
     sound.music(true, 'ceremony');
     draftModal(c, () => {
@@ -326,6 +335,7 @@ function afterWeek() {
 
 function toHome() {
   const c = career!;
+  setCalendar(c);
   if (!c.pro) ensureSeason(c);
   show('home', `${c.dev ? '🔧 ' : ''}${c.me.name} · ${c.pro ? leagueTeamName(c) : schoolById(c.school).name}`);
   home.render(c);

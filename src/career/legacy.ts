@@ -40,11 +40,11 @@ export interface RetireSummary {
   dev?: boolean;
 }
 
-const PRO_FROM = 3 * WEEKS_PER_YEAR;
 
 /** 프로 공식 기록 (정규시즌 + 플레이오프, 국가대표 제외) */
 export function proGames(c: Career): GameRecord[] {
-  return c.games.filter((g) => g.week >= PRO_FROM && g.kind === 'official' && !g.label.startsWith('아시아컵'));
+  const from = (c.proFromYear ?? 3) * WEEKS_PER_YEAR;
+  return c.games.filter((g) => g.week >= from && g.kind === 'official' && !g.label.startsWith('아시아컵'));
 }
 
 const TROPHY_POINTS: [RegExp, number][] = [
@@ -59,6 +59,7 @@ const TROPHY_POINTS: [RegExp, number][] = [
   [/아시아컵 준우승/, 1],
   [/콘테스트 우승/, 1],
   [/고교 .*우승/, 0.5],
+  [/대학 .*우승/, 1],
 ];
 
 export function trophyPoints(t: string) {
@@ -103,7 +104,7 @@ export function retire(c: Career, teamName: (id: string) => string, teamColor: (
     ast: sum('ast'),
     stl: sum('stl'),
     blk: sum('blk'),
-    hsGames: c.games.filter((x) => x.week < PRO_FROM && x.line).length,
+    hsGames: c.games.filter((x) => x.week < (c.proFromYear ?? 3) * WEEKS_PER_YEAR && x.line).length,
     trophies: [...c.trophies],
     hofScore: score,
     hof,
@@ -196,6 +197,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'firstWin', label: '첫 승리', desc: '경기에서 처음 이겼다', test: (c) => c.games.some((g) => g.won && g.line) },
   { id: 'firstStart', label: '주전 데뷔', desc: '처음으로 선발 출전했다', test: (c) => c.games.some((g) => g.started) },
   { id: 'hsTitle', label: '고교 정상', desc: '고교 대회에서 우승했다', test: (c) => has(c, /고교 .*우승/) },
+  { id: 'college', label: '대학 정상', desc: '대학 대회에서 우승했다', test: (c) => has(c, /대학 .*우승/) },
   { id: 'pts30', label: '30점 경기', desc: '한 경기 30점 이상', test: (c) => best(c, (g) => g.line!.pts >= 30) },
   { id: 'pts40', label: '40점 폭발', desc: '한 경기 40점 이상', test: (c) => best(c, (g) => g.line!.pts >= 40) },
   { id: 'triple', label: '트리플 더블', desc: '세 부문 두 자릿수', test: (c) => best(c, (g) => doubles(g) >= 3) },

@@ -1805,3 +1805,10 @@ canvas.stage {
 .scfin {
   margin: 4px 0;
 }
+.ab.trait {
+  background: #23314a;
+  box-shadow: 0 0 0 1px #5fb4ff;
+}
+.row.traits .opt small {
+  max-width: 11em;
+}

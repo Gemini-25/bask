@@ -3,6 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { costOf, createCareer, invest, POINT_OF } from '../src/career/career';
 import { resolveEvent } from '../src/career/events';
+import { declareDraft } from '../src/career/college';
 import { applyMatch, playMatch } from '../src/career/match';
 import { contractOffers, signContract } from '../src/career/pro';
 import { exportCareer } from '../src/career/save';
@@ -20,6 +21,7 @@ for (let w = 0; w < weeks; w++) {
     applyMatch(c, playMatch(c));
     afterGame(c);
   }
+  if (c.pathPending) declareDraft(c);
   if (c.draft && w < weeks - 1) c.draft = null;
   if (c.contractPending) {
     const o = contractOffers(c);
