@@ -1,0 +1,4541 @@
+{
+ "app": "bask",
+ "v": 3,
+ "career": {
+  "v": 3,
+  "seed": 3,
+  "rng": 2118865186,
+  "savedAt": 1791807587138,
+  "me": {
+   "id": "me",
+   "name": "자동선수",
+   "number": 7,
+   "pos": "SG",
+   "body": {
+    "heightCm": 188,
+    "wingspanCm": 192,
+    "weightKg": 79
+   },
+   "r": {
+    "speed": 72,
+    "accel": 51,
+    "jump": 42,
+    "strength": 40,
+    "stamina": 37,
+    "agility": 35,
+    "recovery": 34,
+    "layup": 53,
+    "dunk": 37,
+    "floater": 27,
+    "midRange": 66,
+    "three": 89,
+    "freeThrow": 45,
+    "postUp": 25,
+    "ballHandling": 57,
+    "passing": 34,
+    "offBall": 50,
+    "screen": 15,
+    "perimeterD": 63,
+    "postD": 15,
+    "steal": 44,
+    "block": 15,
+    "defReb": 17,
+    "offReb": 15,
+    "helpD": 26,
+    "boxOut": 16,
+    "iq": 69,
+    "vision": 56,
+    "composure": 45,
+    "focus": 36,
+    "competitive": 30,
+    "leadership": 30,
+    "consistency": 29,
+    "resilience": 26,
+    "hustle": 29,
+    "teamwork": 27
+   },
+   "look": {
+    "skin": 0,
+    "hair": 3,
+    "hairColor": 0,
+    "shoe": 2,
+    "headband": false,
+    "sleeve": false
+   },
+   "abilities": {
+    "quickRelease": 3,
+    "ankle": 1,
+    "lockdown": 2,
+    "foulProne": 1,
+    "glass": 1,
+    "noLook": 1,
+    "clutch": 1
+   },
+   "age": 18
+  },
+  "gender": "M",
+  "background": "ordinary",
+  "growth": "normal",
+  "potential": 88,
+  "prefPos": "SG",
+  "finalHeight": 188,
+  "week": 143,
+  "fatigue": 53.867745768864836,
+  "condition": 2,
+  "injury": null,
+  "points": {
+   "P": 0,
+   "T": 0,
+   "M": 1
+  },
+  "xp": {
+   "three": 0.178,
+   "midRange": 0.225,
+   "freeThrow": 0.773,
+   "competitive": 0.6,
+   "jump": 0,
+   "layup": 0.209,
+   "passing": 0.13,
+   "vision": 0.02,
+   "offReb": 0.98,
+   "defReb": 0.875,
+   "boxOut": 0.41,
+   "steal": 0.6,
+   "block": 0.55,
+   "perimeterD": 0.817,
+   "helpD": 0.413,
+   "stamina": 0.576,
+   "hustle": 0.217,
+   "iq": 0.621,
+   "composure": 0.611,
+   "ballHandling": 0.197,
+   "floater": 0.354,
+   "consistency": 0.5,
+   "leadership": 0,
+   "strength": 0.25,
+   "teamwork": 0
+  },
+  "school": "HANB",
+  "roster": [
+   {
+    "player": {
+     "id": "paidrx0",
+     "name": "오준환",
+     "number": 95,
+     "pos": "PG",
+     "body": {
+      "heightCm": 172,
+      "wingspanCm": 169,
+      "weightKg": 66
+     },
+     "r": {
+      "speed": 61,
+      "accel": 56,
+      "jump": 46,
+      "strength": 31,
+      "stamina": 40,
+      "agility": 62,
+      "recovery": 38,
+      "layup": 45,
+      "dunk": 30,
+      "floater": 44,
+      "midRange": 39,
+      "three": 44,
+      "freeThrow": 37,
+      "postUp": 24,
+      "ballHandling": 66,
+      "passing": 61,
+      "offBall": 35,
+      "screen": 24,
+      "perimeterD": 38,
+      "postD": 31,
+      "steal": 57,
+      "block": 25,
+      "defReb": 33,
+      "offReb": 29,
+      "helpD": 35,
+      "boxOut": 21,
+      "iq": 40,
+      "vision": 63,
+      "composure": 48,
+      "focus": 36,
+      "competitive": 52,
+      "leadership": 43,
+      "consistency": 35,
+      "resilience": 49,
+      "hustle": 34,
+      "teamwork": 32
+     },
+     "look": {
+      "skin": 3,
+      "hair": 0,
+      "hairColor": 0,
+      "shoe": 0,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 3
+   },
+   {
+    "player": {
+     "id": "pbhg5t6",
+     "name": "배원재",
+     "number": 39,
+     "pos": "SF",
+     "body": {
+      "heightCm": 180,
+      "wingspanCm": 181,
+      "weightKg": 72
+     },
+     "r": {
+      "speed": 52,
+      "accel": 41,
+      "jump": 47,
+      "strength": 52,
+      "stamina": 35,
+      "agility": 41,
+      "recovery": 45,
+      "layup": 56,
+      "dunk": 33,
+      "floater": 33,
+      "midRange": 40,
+      "three": 32,
+      "freeThrow": 44,
+      "postUp": 45,
+      "ballHandling": 39,
+      "passing": 36,
+      "offBall": 42,
+      "screen": 34,
+      "perimeterD": 41,
+      "postD": 32,
+      "steal": 41,
+      "block": 34,
+      "defReb": 54,
+      "offReb": 40,
+      "helpD": 39,
+      "boxOut": 35,
+      "iq": 62,
+      "vision": 40,
+      "composure": 52,
+      "focus": 42,
+      "competitive": 33,
+      "leadership": 50,
+      "consistency": 59,
+      "resilience": 40,
+      "hustle": 41,
+      "teamwork": 28
+     },
+     "look": {
+      "skin": 0,
+      "hair": 1,
+      "hairColor": 0,
+      "shoe": 2,
+      "headband": false,
+      "sleeve": false
+     }
+    },
+    "grade": 3
+   },
+   {
+    "player": {
+     "id": "p57x2wq",
+     "name": "황정균",
+     "number": 83,
+     "pos": "PF",
+     "body": {
+      "heightCm": 197,
+      "wingspanCm": 202,
+      "weightKg": 94
+     },
+     "r": {
+      "speed": 38,
+      "accel": 42,
+      "jump": 43,
+      "strength": 54,
+      "stamina": 56,
+      "agility": 35,
+      "recovery": 39,
+      "layup": 53,
+      "dunk": 48,
+      "floater": 43,
+      "midRange": 48,
+      "three": 35,
+      "freeThrow": 50,
+      "postUp": 54,
+      "ballHandling": 39,
+      "passing": 30,
+      "offBall": 41,
+      "screen": 55,
+      "perimeterD": 44,
+      "postD": 60,
+      "steal": 30,
+      "block": 51,
+      "defReb": 54,
+      "offReb": 40,
+      "helpD": 59,
+      "boxOut": 45,
+      "iq": 41,
+      "vision": 37,
+      "composure": 50,
+      "focus": 37,
+      "competitive": 43,
+      "leadership": 46,
+      "consistency": 33,
+      "resilience": 40,
+      "hustle": 49,
+      "teamwork": 55
+     },
+     "look": {
+      "skin": 1,
+      "hair": 5,
+      "hairColor": 0,
+      "shoe": 0,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 3
+   },
+   {
+    "player": {
+     "id": "p2c7shp",
+     "name": "홍상호",
+     "number": 66,
+     "pos": "SG",
+     "body": {
+      "heightCm": 182,
+      "wingspanCm": 189,
+      "weightKg": 83
+     },
+     "r": {
+      "speed": 55,
+      "accel": 47,
+      "jump": 48,
+      "strength": 28,
+      "stamina": 53,
+      "agility": 38,
+      "recovery": 48,
+      "layup": 44,
+      "dunk": 27,
+      "floater": 40,
+      "midRange": 50,
+      "three": 55,
+      "freeThrow": 42,
+      "postUp": 21,
+      "ballHandling": 50,
+      "passing": 41,
+      "offBall": 44,
+      "screen": 28,
+      "perimeterD": 54,
+      "postD": 25,
+      "steal": 42,
+      "block": 20,
+      "defReb": 25,
+      "offReb": 25,
+      "helpD": 28,
+      "boxOut": 21,
+      "iq": 29,
+      "vision": 39,
+      "composure": 52,
+      "focus": 53,
+      "competitive": 34,
+      "leadership": 42,
+      "consistency": 33,
+      "resilience": 47,
+      "hustle": 44,
+      "teamwork": 39
+     },
+     "look": {
+      "skin": 0,
+      "hair": 0,
+      "hairColor": 0,
+      "shoe": 0,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 3
+   },
+   {
+    "player": {
+     "id": "pbwgn0s",
+     "name": "권규오",
+     "number": 59,
+     "pos": "PF",
+     "body": {
+      "heightCm": 195,
+      "wingspanCm": 202,
+      "weightKg": 102
+     },
+     "r": {
+      "speed": 33,
+      "accel": 46,
+      "jump": 61,
+      "strength": 63,
+      "stamina": 58,
+      "agility": 38,
+      "recovery": 48,
+      "layup": 48,
+      "dunk": 42,
+      "floater": 33,
+      "midRange": 40,
+      "three": 31,
+      "freeThrow": 30,
+      "postUp": 45,
+      "ballHandling": 30,
+      "passing": 33,
+      "offBall": 51,
+      "screen": 60,
+      "perimeterD": 25,
+      "postD": 54,
+      "steal": 27,
+      "block": 52,
+      "defReb": 56,
+      "offReb": 44,
+      "helpD": 41,
+      "boxOut": 51,
+      "iq": 41,
+      "vision": 40,
+      "composure": 53,
+      "focus": 37,
+      "competitive": 46,
+      "leadership": 50,
+      "consistency": 40,
+      "resilience": 37,
+      "hustle": 52,
+      "teamwork": 60
+     },
+     "look": {
+      "skin": 0,
+      "hair": 5,
+      "hairColor": 0,
+      "shoe": 1,
+      "headband": false,
+      "sleeve": false
+     }
+    },
+    "grade": 2
+   },
+   {
+    "player": {
+     "id": "p72mafz",
+     "name": "오수완",
+     "number": 41,
+     "pos": "C",
+     "body": {
+      "heightCm": 193,
+      "wingspanCm": 192,
+      "weightKg": 99
+     },
+     "r": {
+      "speed": 39,
+      "accel": 24,
+      "jump": 53,
+      "strength": 50,
+      "stamina": 33,
+      "agility": 25,
+      "recovery": 41,
+      "layup": 49,
+      "dunk": 57,
+      "floater": 39,
+      "midRange": 42,
+      "three": 20,
+      "freeThrow": 33,
+      "postUp": 55,
+      "ballHandling": 30,
+      "passing": 29,
+      "offBall": 40,
+      "screen": 67,
+      "perimeterD": 27,
+      "postD": 52,
+      "steal": 25,
+      "block": 59,
+      "defReb": 56,
+      "offReb": 50,
+      "helpD": 37,
+      "boxOut": 61,
+      "iq": 40,
+      "vision": 31,
+      "composure": 34,
+      "focus": 39,
+      "competitive": 44,
+      "leadership": 41,
+      "consistency": 52,
+      "resilience": 34,
+      "hustle": 31,
+      "teamwork": 35
+     },
+     "look": {
+      "skin": 0,
+      "hair": 5,
+      "hairColor": 0,
+      "shoe": 2,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 2
+   },
+   {
+    "player": {
+     "id": "pqa0zc",
+     "name": "손서한",
+     "number": 76,
+     "pos": "PG",
+     "body": {
+      "heightCm": 178,
+      "wingspanCm": 182,
+      "weightKg": 78
+     },
+     "r": {
+      "speed": 45,
+      "accel": 53,
+      "jump": 33,
+      "strength": 23,
+      "stamina": 29,
+      "agility": 56,
+      "recovery": 24,
+      "layup": 32,
+      "dunk": 24,
+      "floater": 53,
+      "midRange": 39,
+      "three": 34,
+      "freeThrow": 39,
+      "postUp": 19,
+      "ballHandling": 59,
+      "passing": 61,
+      "offBall": 39,
+      "screen": 27,
+      "perimeterD": 43,
+      "postD": 27,
+      "steal": 50,
+      "block": 21,
+      "defReb": 28,
+      "offReb": 21,
+      "helpD": 33,
+      "boxOut": 22,
+      "iq": 42,
+      "vision": 55,
+      "composure": 46,
+      "focus": 36,
+      "competitive": 37,
+      "leadership": 47,
+      "consistency": 40,
+      "resilience": 40,
+      "hustle": 36,
+      "teamwork": 37
+     },
+     "look": {
+      "skin": 3,
+      "hair": 4,
+      "hairColor": 0,
+      "shoe": 2,
+      "headband": true,
+      "sleeve": false
+     }
+    },
+    "grade": 2
+   },
+   {
+    "player": {
+     "id": "pdjuv6x",
+     "name": "김민석",
+     "number": 44,
+     "pos": "SG",
+     "body": {
+      "heightCm": 188,
+      "wingspanCm": 195,
+      "weightKg": 79
+     },
+     "r": {
+      "speed": 61,
+      "accel": 42,
+      "jump": 49,
+      "strength": 25,
+      "stamina": 50,
+      "agility": 51,
+      "recovery": 42,
+      "layup": 50,
+      "dunk": 32,
+      "floater": 47,
+      "midRange": 41,
+      "three": 41,
+      "freeThrow": 45,
+      "postUp": 24,
+      "ballHandling": 41,
+      "passing": 40,
+      "offBall": 35,
+      "screen": 25,
+      "perimeterD": 40,
+      "postD": 20,
+      "steal": 44,
+      "block": 25,
+      "defReb": 36,
+      "offReb": 23,
+      "helpD": 35,
+      "boxOut": 23,
+      "iq": 47,
+      "vision": 41,
+      "composure": 36,
+      "focus": 28,
+      "competitive": 43,
+      "leadership": 45,
+      "consistency": 43,
+      "resilience": 39,
+      "hustle": 44,
+      "teamwork": 45
+     },
+     "look": {
+      "skin": 0,
+      "hair": 1,
+      "hairColor": 0,
+      "shoe": 2,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 2
+   },
+   {
+    "player": {
+     "id": "pczly67",
+     "name": "고경석",
+     "number": 63,
+     "pos": "SF",
+     "body": {
+      "heightCm": 185,
+      "wingspanCm": 189,
+      "weightKg": 81
+     },
+     "r": {
+      "speed": 28,
+      "accel": 55,
+      "jump": 34,
+      "strength": 49,
+      "stamina": 32,
+      "agility": 41,
+      "recovery": 30,
+      "layup": 64,
+      "dunk": 43,
+      "floater": 39,
+      "midRange": 46,
+      "three": 43,
+      "freeThrow": 29,
+      "postUp": 31,
+      "ballHandling": 35,
+      "passing": 19,
+      "offBall": 49,
+      "screen": 36,
+      "perimeterD": 49,
+      "postD": 34,
+      "steal": 43,
+      "block": 32,
+      "defReb": 52,
+      "offReb": 29,
+      "helpD": 44,
+      "boxOut": 28,
+      "iq": 48,
+      "vision": 43,
+      "composure": 40,
+      "focus": 34,
+      "competitive": 30,
+      "leadership": 45,
+      "consistency": 54,
+      "resilience": 45,
+      "hustle": 32,
+      "teamwork": 41
+     },
+     "look": {
+      "skin": 3,
+      "hair": 6,
+      "hairColor": 0,
+      "shoe": 0,
+      "headband": false,
+      "sleeve": false
+     }
+    },
+    "grade": 2
+   },
+   {
+    "player": {
+     "id": "p1f6euo",
+     "name": "안수현",
+     "number": 78,
+     "pos": "C",
+     "body": {
+      "heightCm": 197,
+      "wingspanCm": 206,
+      "weightKg": 96
+     },
+     "r": {
+      "speed": 24,
+      "accel": 27,
+      "jump": 60,
+      "strength": 48,
+      "stamina": 41,
+      "agility": 24,
+      "recovery": 41,
+      "layup": 34,
+      "dunk": 32,
+      "floater": 23,
+      "midRange": 26,
+      "three": 22,
+      "freeThrow": 35,
+      "postUp": 45,
+      "ballHandling": 18,
+      "passing": 30,
+      "offBall": 28,
+      "screen": 56,
+      "perimeterD": 27,
+      "postD": 58,
+      "steal": 24,
+      "block": 48,
+      "defReb": 39,
+      "offReb": 46,
+      "helpD": 46,
+      "boxOut": 50,
+      "iq": 26,
+      "vision": 39,
+      "composure": 30,
+      "focus": 42,
+      "competitive": 32,
+      "leadership": 46,
+      "consistency": 35,
+      "resilience": 34,
+      "hustle": 32,
+      "teamwork": 37
+     },
+     "look": {
+      "skin": 1,
+      "hair": 0,
+      "hairColor": 0,
+      "shoe": 0,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 1
+   },
+   {
+    "player": {
+     "id": "p5ti2m4",
+     "name": "양건기",
+     "number": 93,
+     "pos": "PG",
+     "body": {
+      "heightCm": 179,
+      "wingspanCm": 185,
+      "weightKg": 77
+     },
+     "r": {
+      "speed": 59,
+      "accel": 65,
+      "jump": 38,
+      "strength": 21,
+      "stamina": 37,
+      "agility": 47,
+      "recovery": 37,
+      "layup": 49,
+      "dunk": 32,
+      "floater": 47,
+      "midRange": 58,
+      "three": 60,
+      "freeThrow": 20,
+      "postUp": 22,
+      "ballHandling": 46,
+      "passing": 55,
+      "offBall": 33,
+      "screen": 17,
+      "perimeterD": 39,
+      "postD": 18,
+      "steal": 43,
+      "block": 21,
+      "defReb": 31,
+      "offReb": 17,
+      "helpD": 45,
+      "boxOut": 16,
+      "iq": 48,
+      "vision": 50,
+      "composure": 36,
+      "focus": 46,
+      "competitive": 34,
+      "leadership": 31,
+      "consistency": 40,
+      "resilience": 30,
+      "hustle": 32,
+      "teamwork": 45
+     },
+     "look": {
+      "skin": 0,
+      "hair": 2,
+      "hairColor": 0,
+      "shoe": 0,
+      "headband": false,
+      "sleeve": false
+     }
+    },
+    "grade": 1
+   },
+   {
+    "player": {
+     "id": "p4azyqz",
+     "name": "최상결",
+     "number": 43,
+     "pos": "SG",
+     "body": {
+      "heightCm": 178,
+      "wingspanCm": 182,
+      "weightKg": 72
+     },
+     "r": {
+      "speed": 39,
+      "accel": 50,
+      "jump": 52,
+      "strength": 39,
+      "stamina": 34,
+      "agility": 40,
+      "recovery": 48,
+      "layup": 52,
+      "dunk": 28,
+      "floater": 24,
+      "midRange": 51,
+      "three": 45,
+      "freeThrow": 36,
+      "postUp": 21,
+      "ballHandling": 39,
+      "passing": 38,
+      "offBall": 43,
+      "screen": 30,
+      "perimeterD": 40,
+      "postD": 26,
+      "steal": 49,
+      "block": 24,
+      "defReb": 18,
+      "offReb": 22,
+      "helpD": 32,
+      "boxOut": 16,
+      "iq": 37,
+      "vision": 48,
+      "composure": 38,
+      "focus": 37,
+      "competitive": 44,
+      "leadership": 29,
+      "consistency": 29,
+      "resilience": 33,
+      "hustle": 41,
+      "teamwork": 38
+     },
+     "look": {
+      "skin": 0,
+      "hair": 2,
+      "hairColor": 0,
+      "shoe": 4,
+      "headband": true,
+      "sleeve": false
+     }
+    },
+    "grade": 1
+   },
+   {
+    "player": {
+     "id": "p2dm0ao",
+     "name": "문지결",
+     "number": 25,
+     "pos": "SF",
+     "body": {
+      "heightCm": 183,
+      "wingspanCm": 188,
+      "weightKg": 82
+     },
+     "r": {
+      "speed": 33,
+      "accel": 43,
+      "jump": 48,
+      "strength": 35,
+      "stamina": 20,
+      "agility": 39,
+      "recovery": 24,
+      "layup": 32,
+      "dunk": 32,
+      "floater": 28,
+      "midRange": 37,
+      "three": 41,
+      "freeThrow": 32,
+      "postUp": 21,
+      "ballHandling": 29,
+      "passing": 45,
+      "offBall": 44,
+      "screen": 32,
+      "perimeterD": 41,
+      "postD": 40,
+      "steal": 47,
+      "block": 23,
+      "defReb": 18,
+      "offReb": 17,
+      "helpD": 31,
+      "boxOut": 25,
+      "iq": 47,
+      "vision": 17,
+      "composure": 19,
+      "focus": 28,
+      "competitive": 28,
+      "leadership": 43,
+      "consistency": 43,
+      "resilience": 32,
+      "hustle": 37,
+      "teamwork": 24
+     },
+     "look": {
+      "skin": 0,
+      "hair": 3,
+      "hairColor": 0,
+      "shoe": 2,
+      "headband": false,
+      "sleeve": true
+     }
+    },
+    "grade": 1
+   }
+  ],
+  "log": [
+   {
+    "week": 63,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 6,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 64,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 65,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 7,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 66,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 67,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 9,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "근력 +1"
+    ]
+   },
+   {
+    "week": 68,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 69,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 70,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 7,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 71,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 72,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 12,
+     "T": 0,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 73,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 6,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 74,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 7
+    },
+    "notes": []
+   },
+   {
+    "week": 75,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 5,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 76,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 77,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 9,
+     "T": 0,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 78,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "무릎 타박상에서 회복했다."
+    ]
+   },
+   {
+    "week": 79,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 80,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 6,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 81,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 9,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 82,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 83,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 6,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 84,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 6
+    },
+    "notes": [
+     "침착성 +1"
+    ]
+   },
+   {
+    "week": 85,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 6,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 86,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 8,
+     "M": 1
+    },
+    "notes": [
+     "3점슛 +1"
+    ]
+   },
+   {
+    "week": 87,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 88,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 89,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 2,
+     "M": 9
+    },
+    "notes": []
+   },
+   {
+    "week": 90,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 6,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 91,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 8,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 92,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 11,
+     "T": 0,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 93,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 94,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 7
+    },
+    "notes": []
+   },
+   {
+    "week": 95,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 6,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 96,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 97,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 10,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 98,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 7,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 99,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 2,
+     "M": 7
+    },
+    "notes": []
+   },
+   {
+    "week": 100,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 101,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "손목 염좌에서 회복했다."
+    ]
+   },
+   {
+    "week": 102,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 12,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 103,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 104,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 8
+    },
+    "notes": []
+   },
+   {
+    "week": 105,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 7,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 106,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 107,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 10,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 108,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 109,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 6
+    },
+    "notes": []
+   },
+   {
+    "week": 110,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 6,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 111,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 9,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 112,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 113,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 7,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 114,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 115,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "발목 염좌에서 회복했다."
+    ]
+   },
+   {
+    "week": 116,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 8,
+     "M": 1
+    },
+    "notes": [
+     "미드레인지 +1"
+    ]
+   },
+   {
+    "week": 117,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 10,
+     "T": 0,
+     "M": 2
+    },
+    "notes": [
+     "훈련 중 허벅지 근육 뭉침! 2주 동안 쉬어야 한다.",
+     "근력 +1"
+    ]
+   },
+   {
+    "week": 118,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 0,
+     "M": 2
+    },
+    "notes": [
+     "허벅지 근육 뭉침에서 회복했다."
+    ]
+   },
+   {
+    "week": 119,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 120,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 7,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 121,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 8,
+     "M": 1
+    },
+    "notes": [
+     "자유투 +1"
+    ]
+   },
+   {
+    "week": 122,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 10,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 123,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 124,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 7
+    },
+    "notes": []
+   },
+   {
+    "week": 125,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 6,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 126,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 127,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 0,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 128,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "발목 염좌에서 회복했다."
+    ]
+   },
+   {
+    "week": 129,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 8
+    },
+    "notes": []
+   },
+   {
+    "week": 130,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 6,
+     "M": 3
+    },
+    "notes": []
+   },
+   {
+    "week": 131,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 10,
+     "M": 1
+    },
+    "notes": [
+     "3점슛 +1"
+    ]
+   },
+   {
+    "week": 132,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 10,
+     "T": 0,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 133,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 3,
+     "T": 7,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 134,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 2,
+     "M": 8
+    },
+    "notes": [
+     "농구 IQ +1"
+    ]
+   },
+   {
+    "week": 135,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 136,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 9,
+     "M": 2
+    },
+    "notes": [
+     "훈련 중 발목 염좌! 2주 동안 쉬어야 한다.",
+     "3점슛 +1",
+     "미드레인지 +1"
+    ]
+   },
+   {
+    "week": 137,
+    "action": "rehab",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "발목 염좌에서 회복했다."
+    ]
+   },
+   {
+    "week": 138,
+    "action": "team",
+    "focus": "shoot",
+    "gained": {
+     "P": 2,
+     "T": 5,
+     "M": 2
+    },
+    "notes": []
+   },
+   {
+    "week": 139,
+    "action": "video",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 1,
+     "M": 8
+    },
+    "notes": []
+   },
+   {
+    "week": 140,
+    "action": "rest",
+    "focus": "shoot",
+    "gained": {
+     "P": 0,
+     "T": 0,
+     "M": 0
+    },
+    "notes": []
+   },
+   {
+    "week": 141,
+    "action": "solo",
+    "focus": "shoot",
+    "gained": {
+     "P": 1,
+     "T": 6,
+     "M": 1
+    },
+    "notes": []
+   },
+   {
+    "week": 142,
+    "action": "weight",
+    "focus": "shoot",
+    "gained": {
+     "P": 7,
+     "T": 0,
+     "M": 1
+    },
+    "notes": [
+     "점프력 +1"
+    ]
+   }
+  ],
+  "games": [
+   {
+    "week": 3,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "DALG",
+    "home": true,
+    "score": [
+     68,
+     64
+    ],
+    "won": true,
+    "seed": 1674431758,
+    "line": {
+     "sec": 1882.4999504089355,
+     "pts": 18,
+     "reb": 5,
+     "ast": 7,
+     "stl": 0,
+     "blk": 2,
+     "tov": 6,
+     "pf": 2,
+     "fgm": 8,
+     "fga": 21,
+     "tpm": 1,
+     "tpa": 4,
+     "ftm": 1,
+     "fta": 1
+    },
+    "grade": "C",
+    "started": false
+   },
+   {
+    "week": 5,
+    "kind": "official",
+    "label": "춘계 연맹전 8강",
+    "opponent": "TAML",
+    "home": true,
+    "score": [
+     77,
+     67
+    ],
+    "won": true,
+    "seed": 1453552412,
+    "line": {
+     "sec": 1819.2000732421875,
+     "pts": 15,
+     "reb": 5,
+     "ast": 2,
+     "stl": 0,
+     "blk": 0,
+     "tov": 1,
+     "pf": 1,
+     "fgm": 7,
+     "fga": 14,
+     "tpm": 0,
+     "tpa": 1,
+     "ftm": 1,
+     "fta": 3
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 6,
+    "kind": "official",
+    "label": "춘계 연맹전 4강",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     68,
+     79
+    ],
+    "won": false,
+    "seed": 1669733810,
+    "line": {
+     "sec": 1780.3999633789062,
+     "pts": 14,
+     "reb": 2,
+     "ast": 3,
+     "stl": 0,
+     "blk": 0,
+     "tov": 1,
+     "pf": 3,
+     "fgm": 6,
+     "fga": 20,
+     "tpm": 1,
+     "tpa": 7,
+     "ftm": 1,
+     "fta": 2
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 11,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "TAEH",
+    "home": false,
+    "score": [
+     80,
+     72
+    ],
+    "won": true,
+    "seed": 498649934,
+    "line": {
+     "sec": 1917.400047302246,
+     "pts": 22,
+     "reb": 4,
+     "ast": 5,
+     "stl": 1,
+     "blk": 0,
+     "tov": 4,
+     "pf": 3,
+     "fgm": 8,
+     "fga": 27,
+     "tpm": 2,
+     "tpa": 17,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "C",
+    "started": false
+   },
+   {
+    "week": 15,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "HANBT",
+    "home": true,
+    "score": [
+     90,
+     64
+    ],
+    "won": true,
+    "seed": 165273029,
+    "line": {
+     "sec": 1873.1000366210938,
+     "pts": 25,
+     "reb": 6,
+     "ast": 7,
+     "stl": 0,
+     "blk": 1,
+     "tov": 1,
+     "pf": 2,
+     "fgm": 9,
+     "fga": 20,
+     "tpm": 6,
+     "tpa": 12,
+     "ftm": 1,
+     "fta": 2
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 17,
+    "kind": "official",
+    "label": "협회장기 조별 2차전",
+    "opponent": "TAEH",
+    "home": false,
+    "score": [
+     66,
+     70
+    ],
+    "won": false,
+    "seed": 855472818,
+    "line": {
+     "sec": 1680.7000732421875,
+     "pts": 18,
+     "reb": 2,
+     "ast": 2,
+     "stl": 1,
+     "blk": 1,
+     "tov": 1,
+     "pf": 5,
+     "fgm": 7,
+     "fga": 18,
+     "tpm": 3,
+     "tpa": 11,
+     "ftm": 1,
+     "fta": 2
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 18,
+    "kind": "official",
+    "label": "협회장기 조별 3차전",
+    "opponent": "HANBT",
+    "home": true,
+    "score": [
+     88,
+     72
+    ],
+    "won": true,
+    "seed": 1791270140,
+    "line": {
+     "sec": 1695.2999877929688,
+     "pts": 29,
+     "reb": 1,
+     "ast": 4,
+     "stl": 2,
+     "blk": 0,
+     "tov": 4,
+     "pf": 4,
+     "fgm": 11,
+     "fga": 21,
+     "tpm": 7,
+     "tpa": 13,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 19,
+    "kind": "official",
+    "label": "협회장기 조별 4차전",
+    "opponent": "SONG",
+    "home": false,
+    "score": [
+     68,
+     72
+    ],
+    "won": false,
+    "seed": 555041105,
+    "line": {
+     "sec": 2160.5999755859375,
+     "pts": 19,
+     "reb": 5,
+     "ast": 4,
+     "stl": 0,
+     "blk": 1,
+     "tov": 7,
+     "pf": 4,
+     "fgm": 6,
+     "fga": 20,
+     "tpm": 2,
+     "tpa": 7,
+     "ftm": 5,
+     "fta": 9
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 20,
+    "kind": "official",
+    "label": "협회장기 조별 5차전",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     64,
+     75
+    ],
+    "won": false,
+    "seed": 1598780425,
+    "line": {
+     "sec": 2005.7999877929688,
+     "pts": 28,
+     "reb": 3,
+     "ast": 3,
+     "stl": 2,
+     "blk": 0,
+     "tov": 1,
+     "pf": 2,
+     "fgm": 10,
+     "fga": 23,
+     "tpm": 6,
+     "tpa": 16,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 27,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "HAES",
+    "home": false,
+    "score": [
+     67,
+     80
+    ],
+    "won": false,
+    "seed": 1950849988,
+    "line": {
+     "sec": 1744.9001922607422,
+     "pts": 20,
+     "reb": 2,
+     "ast": 4,
+     "stl": 1,
+     "blk": 0,
+     "tov": 4,
+     "pf": 3,
+     "fgm": 7,
+     "fga": 21,
+     "tpm": 3,
+     "tpa": 13,
+     "ftm": 3,
+     "fta": 4
+    },
+    "grade": "C",
+    "started": true
+   },
+   {
+    "week": 29,
+    "kind": "official",
+    "label": "전국체전 8강",
+    "opponent": "TAML",
+    "home": true,
+    "score": [
+     67,
+     43
+    ],
+    "won": true,
+    "seed": 2112980922,
+    "line": {
+     "sec": 1978.800048828125,
+     "pts": 17,
+     "reb": 3,
+     "ast": 1,
+     "stl": 0,
+     "blk": 0,
+     "tov": 2,
+     "pf": 4,
+     "fgm": 6,
+     "fga": 21,
+     "tpm": 2,
+     "tpa": 4,
+     "ftm": 3,
+     "fta": 4
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 30,
+    "kind": "official",
+    "label": "전국체전 4강",
+    "opponent": "SONG",
+    "home": true,
+    "score": [
+     75,
+     67
+    ],
+    "won": true,
+    "seed": 138532075,
+    "line": {
+     "sec": 2153.7000732421875,
+     "pts": 18,
+     "reb": 2,
+     "ast": 3,
+     "stl": 0,
+     "blk": 0,
+     "tov": 4,
+     "pf": 3,
+     "fgm": 7,
+     "fga": 22,
+     "tpm": 4,
+     "tpa": 18,
+     "ftm": 0,
+     "fta": 1
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 31,
+    "kind": "official",
+    "label": "전국체전 결승",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     74,
+     65
+    ],
+    "won": true,
+    "seed": 927540563,
+    "line": {
+     "sec": 2007.5001220703125,
+     "pts": 21,
+     "reb": 2,
+     "ast": 3,
+     "stl": 0,
+     "blk": 0,
+     "tov": 3,
+     "pf": 3,
+     "fgm": 6,
+     "fga": 19,
+     "tpm": 5,
+     "tpa": 11,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "C",
+    "started": true
+   },
+   {
+    "week": 35,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "DALG",
+    "home": false,
+    "score": [
+     65,
+     61
+    ],
+    "won": true,
+    "seed": 1819880820,
+    "line": {
+     "sec": 2138.7999267578125,
+     "pts": 13,
+     "reb": 4,
+     "ast": 2,
+     "stl": 1,
+     "blk": 1,
+     "tov": 3,
+     "pf": 4,
+     "fgm": 5,
+     "fga": 20,
+     "tpm": 1,
+     "tpa": 13,
+     "ftm": 2,
+     "fta": 3
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 38,
+    "kind": "official",
+    "label": "왕중왕전 4강",
+    "opponent": "SONG",
+    "home": true,
+    "score": [
+     57,
+     75
+    ],
+    "won": false,
+    "seed": 18809512,
+    "line": {
+     "sec": 2026.9000244140625,
+     "pts": 17,
+     "reb": 3,
+     "ast": 3,
+     "stl": 1,
+     "blk": 1,
+     "tov": 10,
+     "pf": 3,
+     "fgm": 5,
+     "fga": 19,
+     "tpm": 4,
+     "tpa": 11,
+     "ftm": 3,
+     "fta": 5
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 43,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "TAML",
+    "home": false,
+    "score": [
+     59,
+     62
+    ],
+    "won": false,
+    "seed": 1017333091,
+    "line": {
+     "sec": 2066.2999267578125,
+     "pts": 22,
+     "reb": 3,
+     "ast": 2,
+     "stl": 1,
+     "blk": 0,
+     "tov": 7,
+     "pf": 4,
+     "fgm": 8,
+     "fga": 24,
+     "tpm": 6,
+     "tpa": 19,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 47,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "JINH",
+    "home": true,
+    "score": [
+     83,
+     72
+    ],
+    "won": true,
+    "seed": 1686261071,
+    "line": {
+     "sec": 2137.4998779296875,
+     "pts": 25,
+     "reb": 3,
+     "ast": 1,
+     "stl": 3,
+     "blk": 0,
+     "tov": 2,
+     "pf": 3,
+     "fgm": 9,
+     "fga": 18,
+     "tpm": 4,
+     "tpa": 9,
+     "ftm": 3,
+     "fta": 3
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 51,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "HWAS",
+    "home": false,
+    "score": [
+     63,
+     77
+    ],
+    "won": false,
+    "seed": 1870412517,
+    "line": {
+     "sec": 1438.300048828125,
+     "pts": 27,
+     "reb": 2,
+     "ast": 2,
+     "stl": 0,
+     "blk": 0,
+     "tov": 1,
+     "pf": 4,
+     "fgm": 10,
+     "fga": 23,
+     "tpm": 5,
+     "tpa": 15,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 53,
+    "kind": "official",
+    "label": "춘계 연맹전 8강",
+    "opponent": "TAEH",
+    "home": true,
+    "score": [
+     78,
+     75
+    ],
+    "won": true,
+    "seed": 642338866,
+    "line": {
+     "sec": 719.7000503540039,
+     "pts": 34,
+     "reb": 1,
+     "ast": 0,
+     "stl": 0,
+     "blk": 0,
+     "tov": 1,
+     "pf": 4,
+     "fgm": 11,
+     "fga": 20,
+     "tpm": 8,
+     "tpa": 12,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 54,
+    "kind": "official",
+    "label": "춘계 연맹전 4강",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     74,
+     71
+    ],
+    "won": true,
+    "seed": 1063275246,
+    "line": {
+     "sec": 1992,
+     "pts": 28,
+     "reb": 3,
+     "ast": 6,
+     "stl": 0,
+     "blk": 0,
+     "tov": 3,
+     "pf": 4,
+     "fgm": 10,
+     "fga": 21,
+     "tpm": 8,
+     "tpa": 19,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 55,
+    "kind": "official",
+    "label": "춘계 연맹전 결승",
+    "opponent": "DALG",
+    "home": true,
+    "score": [
+     68,
+     52
+    ],
+    "won": true,
+    "seed": 51302023,
+    "line": {
+     "sec": 1224.8999328613281,
+     "pts": 25,
+     "reb": 2,
+     "ast": 0,
+     "stl": 1,
+     "blk": 0,
+     "tov": 5,
+     "pf": 4,
+     "fgm": 9,
+     "fga": 23,
+     "tpm": 3,
+     "tpa": 12,
+     "ftm": 4,
+     "fta": 6
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 59,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "JINH",
+    "home": false,
+    "score": [
+     80,
+     66
+    ],
+    "won": true,
+    "seed": 1103662921,
+    "line": {
+     "sec": 1610.2998046875,
+     "pts": 23,
+     "reb": 3,
+     "ast": 0,
+     "stl": 0,
+     "blk": 1,
+     "tov": 4,
+     "pf": 4,
+     "fgm": 9,
+     "fga": 22,
+     "tpm": 3,
+     "tpa": 13,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "C",
+    "started": true
+   },
+   {
+    "week": 63,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "MUDE",
+    "home": true,
+    "score": [
+     73,
+     69
+    ],
+    "won": true,
+    "seed": 1143225831,
+    "line": {
+     "sec": 1559.7999877929688,
+     "pts": 30,
+     "reb": 4,
+     "ast": 1,
+     "stl": 1,
+     "blk": 0,
+     "tov": 4,
+     "pf": 4,
+     "fgm": 10,
+     "fga": 23,
+     "tpm": 7,
+     "tpa": 18,
+     "ftm": 3,
+     "fta": 4
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 65,
+    "kind": "official",
+    "label": "협회장기 조별 2차전",
+    "opponent": "TAEH",
+    "home": false,
+    "score": [
+     74,
+     54
+    ],
+    "won": true,
+    "seed": 1040031047,
+    "line": {
+     "sec": 1497.5000305175781,
+     "pts": 36,
+     "reb": 0,
+     "ast": 3,
+     "stl": 0,
+     "blk": 0,
+     "tov": 2,
+     "pf": 4,
+     "fgm": 13,
+     "fga": 18,
+     "tpm": 8,
+     "tpa": 13,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 66,
+    "kind": "official",
+    "label": "협회장기 조별 3차전",
+    "opponent": "HANBT",
+    "home": true,
+    "score": [
+     55,
+     66
+    ],
+    "won": false,
+    "seed": 834456319,
+    "line": {
+     "sec": 2028.7999267578125,
+     "pts": 23,
+     "reb": 5,
+     "ast": 6,
+     "stl": 0,
+     "blk": 0,
+     "tov": 2,
+     "pf": 3,
+     "fgm": 8,
+     "fga": 23,
+     "tpm": 7,
+     "tpa": 18,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 67,
+    "kind": "official",
+    "label": "협회장기 조별 4차전",
+    "opponent": "SONG",
+    "home": false,
+    "score": [
+     73,
+     65
+    ],
+    "won": true,
+    "seed": 2083900632,
+    "line": {
+     "sec": 2114.5999755859375,
+     "pts": 34,
+     "reb": 5,
+     "ast": 4,
+     "stl": 2,
+     "blk": 0,
+     "tov": 1,
+     "pf": 2,
+     "fgm": 13,
+     "fga": 21,
+     "tpm": 4,
+     "tpa": 10,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 68,
+    "kind": "official",
+    "label": "협회장기 조별 5차전",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     70,
+     62
+    ],
+    "won": true,
+    "seed": 798946328,
+    "line": {
+     "sec": 1867.1000671386719,
+     "pts": 30,
+     "reb": 2,
+     "ast": 3,
+     "stl": 1,
+     "blk": 0,
+     "tov": 4,
+     "pf": 4,
+     "fgm": 10,
+     "fga": 18,
+     "tpm": 9,
+     "tpa": 15,
+     "ftm": 1,
+     "fta": 2
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 69,
+    "kind": "official",
+    "label": "협회장기 4강",
+    "opponent": "TAML",
+    "home": true,
+    "score": [
+     68,
+     72
+    ],
+    "won": false,
+    "seed": 1708739758,
+    "line": {
+     "sec": 2153.5999755859375,
+     "pts": 29,
+     "reb": 2,
+     "ast": 2,
+     "stl": 2,
+     "blk": 0,
+     "tov": 0,
+     "pf": 2,
+     "fgm": 11,
+     "fga": 23,
+     "tpm": 7,
+     "tpa": 16,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 75,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "HANBT",
+    "home": true,
+    "score": [
+     85,
+     57
+    ],
+    "won": true,
+    "seed": 66850237,
+    "line": {
+     "sec": 1070.8000183105469,
+     "pts": 33,
+     "reb": 1,
+     "ast": 1,
+     "stl": 0,
+     "blk": 0,
+     "tov": 0,
+     "pf": 4,
+     "fgm": 11,
+     "fga": 18,
+     "tpm": 8,
+     "tpa": 14,
+     "ftm": 3,
+     "fta": 3
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 77,
+    "kind": "official",
+    "label": "전국체전 8강",
+    "opponent": "TAEH",
+    "home": true,
+    "score": [
+     105,
+     100
+    ],
+    "won": true,
+    "seed": 408352710,
+    "line": {
+     "sec": 1112.6998291015625,
+     "pts": 28,
+     "reb": 0,
+     "ast": 0,
+     "stl": 1,
+     "blk": 0,
+     "tov": 0,
+     "pf": 5,
+     "fgm": 10,
+     "fga": 18,
+     "tpm": 8,
+     "tpa": 14,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 78,
+    "kind": "official",
+    "label": "전국체전 4강",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     77,
+     67
+    ],
+    "won": true,
+    "seed": 746263183,
+    "line": {
+     "sec": 2176.4000244140625,
+     "pts": 26,
+     "reb": 1,
+     "ast": 8,
+     "stl": 0,
+     "blk": 1,
+     "tov": 4,
+     "pf": 3,
+     "fgm": 9,
+     "fga": 20,
+     "tpm": 6,
+     "tpa": 15,
+     "ftm": 2,
+     "fta": 3
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 79,
+    "kind": "official",
+    "label": "전국체전 결승",
+    "opponent": "DALG",
+    "home": true,
+    "score": [
+     66,
+     77
+    ],
+    "won": false,
+    "seed": 934197563,
+    "line": {
+     "sec": 1708.8999938964844,
+     "pts": 29,
+     "reb": 1,
+     "ast": 3,
+     "stl": 0,
+     "blk": 0,
+     "tov": 1,
+     "pf": 3,
+     "fgm": 11,
+     "fga": 31,
+     "tpm": 7,
+     "tpa": 23,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 83,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "HAES",
+    "home": true,
+    "score": [
+     76,
+     74
+    ],
+    "won": true,
+    "seed": 1579848214,
+    "line": {
+     "sec": 920.9999694824219,
+     "pts": 14,
+     "reb": 1,
+     "ast": 2,
+     "stl": 1,
+     "blk": 0,
+     "tov": 0,
+     "pf": 5,
+     "fgm": 6,
+     "fga": 15,
+     "tpm": 2,
+     "tpa": 9,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 86,
+    "kind": "official",
+    "label": "왕중왕전 4강",
+    "opponent": "HANBT",
+    "home": true,
+    "score": [
+     82,
+     58
+    ],
+    "won": true,
+    "seed": 404904114,
+    "line": {
+     "sec": 1939.2998962402344,
+     "pts": 34,
+     "reb": 1,
+     "ast": 3,
+     "stl": 2,
+     "blk": 0,
+     "tov": 2,
+     "pf": 2,
+     "fgm": 12,
+     "fga": 21,
+     "tpm": 6,
+     "tpa": 13,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 87,
+    "kind": "official",
+    "label": "왕중왕전 결승",
+    "opponent": "HAES",
+    "home": true,
+    "score": [
+     59,
+     69
+    ],
+    "won": false,
+    "seed": 1115812617,
+    "line": {
+     "sec": 1721.9000244140625,
+     "pts": 29,
+     "reb": 1,
+     "ast": 6,
+     "stl": 3,
+     "blk": 0,
+     "tov": 5,
+     "pf": 4,
+     "fgm": 10,
+     "fga": 26,
+     "tpm": 9,
+     "tpa": 18,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 91,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "JINH",
+    "home": false,
+    "score": [
+     74,
+     64
+    ],
+    "won": true,
+    "seed": 2729141,
+    "line": {
+     "sec": 1416.199951171875,
+     "pts": 24,
+     "reb": 2,
+     "ast": 4,
+     "stl": 1,
+     "blk": 0,
+     "tov": 1,
+     "pf": 4,
+     "fgm": 8,
+     "fga": 20,
+     "tpm": 6,
+     "tpa": 15,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 95,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "MUDE",
+    "home": true,
+    "score": [
+     68,
+     87
+    ],
+    "won": false,
+    "seed": 250043137,
+    "line": {
+     "sec": 1923.7999267578125,
+     "pts": 36,
+     "reb": 2,
+     "ast": 7,
+     "stl": 0,
+     "blk": 0,
+     "tov": 8,
+     "pf": 0,
+     "fgm": 11,
+     "fga": 24,
+     "tpm": 11,
+     "tpa": 23,
+     "ftm": 3,
+     "fta": 5
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 99,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "DALG",
+    "home": false,
+    "score": [
+     62,
+     54
+    ],
+    "won": true,
+    "seed": 692253801,
+    "line": {
+     "sec": 2053.0999755859375,
+     "pts": 24,
+     "reb": 3,
+     "ast": 7,
+     "stl": 1,
+     "blk": 0,
+     "tov": 5,
+     "pf": 4,
+     "fgm": 8,
+     "fga": 27,
+     "tpm": 6,
+     "tpa": 23,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "C",
+    "started": true
+   },
+   {
+    "week": 101,
+    "kind": "official",
+    "label": "춘계 연맹전 8강",
+    "opponent": "TAML",
+    "home": true,
+    "score": [
+     110,
+     48
+    ],
+    "won": true,
+    "seed": 64987076,
+    "line": {
+     "sec": 2106.10009765625,
+     "pts": 46,
+     "reb": 4,
+     "ast": 5,
+     "stl": 1,
+     "blk": 1,
+     "tov": 3,
+     "pf": 2,
+     "fgm": 17,
+     "fga": 25,
+     "tpm": 9,
+     "tpa": 14,
+     "ftm": 3,
+     "fta": 3
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 102,
+    "kind": "official",
+    "label": "춘계 연맹전 4강",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     66,
+     57
+    ],
+    "won": true,
+    "seed": 2022916558,
+    "line": {
+     "sec": 2115.39990234375,
+     "pts": 33,
+     "reb": 4,
+     "ast": 8,
+     "stl": 0,
+     "blk": 1,
+     "tov": 7,
+     "pf": 2,
+     "fgm": 12,
+     "fga": 22,
+     "tpm": 9,
+     "tpa": 19,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 103,
+    "kind": "official",
+    "label": "춘계 연맹전 결승",
+    "opponent": "HAES",
+    "home": true,
+    "score": [
+     91,
+     86
+    ],
+    "won": true,
+    "seed": 951073350,
+    "line": {
+     "sec": 1180.9000854492188,
+     "pts": 30,
+     "reb": 2,
+     "ast": 2,
+     "stl": 0,
+     "blk": 0,
+     "tov": 1,
+     "pf": 4,
+     "fgm": 9,
+     "fga": 16,
+     "tpm": 8,
+     "tpa": 13,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 107,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "MUDE",
+    "home": false,
+    "score": [
+     70,
+     81
+    ],
+    "won": false,
+    "seed": 621489940,
+    "line": {
+     "sec": 1967.8999633789062,
+     "pts": 19,
+     "reb": 3,
+     "ast": 3,
+     "stl": 1,
+     "blk": 0,
+     "tov": 4,
+     "pf": 4,
+     "fgm": 7,
+     "fga": 26,
+     "tpm": 5,
+     "tpa": 22,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "D",
+    "started": true
+   },
+   {
+    "week": 111,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "TAEH",
+    "home": true,
+    "score": [
+     78,
+     43
+    ],
+    "won": true,
+    "seed": 1831931808,
+    "line": {
+     "sec": 1780.8001098632812,
+     "pts": 36,
+     "reb": 3,
+     "ast": 4,
+     "stl": 1,
+     "blk": 0,
+     "tov": 3,
+     "pf": 4,
+     "fgm": 12,
+     "fga": 21,
+     "tpm": 10,
+     "tpa": 16,
+     "ftm": 2,
+     "fta": 2
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 113,
+    "kind": "official",
+    "label": "협회장기 조별 2차전",
+    "opponent": "TAEH",
+    "home": false,
+    "score": [
+     68,
+     48
+    ],
+    "won": true,
+    "seed": 1797275665,
+    "line": {
+     "sec": 1572.2999267578125,
+     "pts": 26,
+     "reb": 5,
+     "ast": 3,
+     "stl": 2,
+     "blk": 0,
+     "tov": 4,
+     "pf": 4,
+     "fgm": 10,
+     "fga": 25,
+     "tpm": 6,
+     "tpa": 20,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 114,
+    "kind": "official",
+    "label": "협회장기 조별 3차전",
+    "opponent": "HANBT",
+    "home": true,
+    "score": [
+     83,
+     72
+    ],
+    "won": true,
+    "seed": 896679900,
+    "line": null,
+    "grade": "-",
+    "started": false
+   },
+   {
+    "week": 115,
+    "kind": "official",
+    "label": "협회장기 조별 4차전",
+    "opponent": "SONG",
+    "home": false,
+    "score": [
+     74,
+     76
+    ],
+    "won": false,
+    "seed": 674557927,
+    "line": {
+     "sec": 1714,
+     "pts": 31,
+     "reb": 5,
+     "ast": 2,
+     "stl": 0,
+     "blk": 0,
+     "tov": 7,
+     "pf": 4,
+     "fgm": 9,
+     "fga": 22,
+     "tpm": 6,
+     "tpa": 16,
+     "ftm": 7,
+     "fta": 7
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 116,
+    "kind": "official",
+    "label": "협회장기 조별 5차전",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     82,
+     63
+    ],
+    "won": true,
+    "seed": 1364077556,
+    "line": {
+     "sec": 2166.3999633789062,
+     "pts": 49,
+     "reb": 2,
+     "ast": 6,
+     "stl": 5,
+     "blk": 0,
+     "tov": 5,
+     "pf": 3,
+     "fgm": 17,
+     "fga": 28,
+     "tpm": 15,
+     "tpa": 24,
+     "ftm": 0,
+     "fta": 1
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 117,
+    "kind": "official",
+    "label": "협회장기 4강",
+    "opponent": "HAES",
+    "home": true,
+    "score": [
+     70,
+     56
+    ],
+    "won": true,
+    "seed": 748679726,
+    "line": null,
+    "grade": "-",
+    "started": false
+   },
+   {
+    "week": 118,
+    "kind": "official",
+    "label": "협회장기 결승",
+    "opponent": "MUDE",
+    "home": true,
+    "score": [
+     79,
+     86
+    ],
+    "won": false,
+    "seed": 798497562,
+    "line": {
+     "sec": 2053.9000854492188,
+     "pts": 37,
+     "reb": 3,
+     "ast": 9,
+     "stl": 1,
+     "blk": 0,
+     "tov": 6,
+     "pf": 3,
+     "fgm": 11,
+     "fga": 30,
+     "tpm": 11,
+     "tpa": 30,
+     "ftm": 4,
+     "fta": 8
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 123,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "TAEH",
+    "home": false,
+    "score": [
+     69,
+     60
+    ],
+    "won": true,
+    "seed": 955576512,
+    "line": {
+     "sec": 1872.7000732421875,
+     "pts": 27,
+     "reb": 3,
+     "ast": 3,
+     "stl": 2,
+     "blk": 0,
+     "tov": 5,
+     "pf": 4,
+     "fgm": 8,
+     "fga": 25,
+     "tpm": 6,
+     "tpa": 18,
+     "ftm": 5,
+     "fta": 5
+    },
+    "grade": "B",
+    "started": true
+   },
+   {
+    "week": 125,
+    "kind": "official",
+    "label": "전국체전 8강",
+    "opponent": "TAML",
+    "home": true,
+    "score": [
+     78,
+     68
+    ],
+    "won": true,
+    "seed": 742130016,
+    "line": {
+     "sec": 2037.89990234375,
+     "pts": 46,
+     "reb": 2,
+     "ast": 5,
+     "stl": 0,
+     "blk": 0,
+     "tov": 3,
+     "pf": 4,
+     "fgm": 16,
+     "fga": 26,
+     "tpm": 14,
+     "tpa": 23,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 126,
+    "kind": "official",
+    "label": "전국체전 4강",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     85,
+     79
+    ],
+    "won": true,
+    "seed": 387219055,
+    "line": {
+     "sec": 1786.6998901367188,
+     "pts": 48,
+     "reb": 2,
+     "ast": 1,
+     "stl": 2,
+     "blk": 0,
+     "tov": 3,
+     "pf": 4,
+     "fgm": 16,
+     "fga": 24,
+     "tpm": 12,
+     "tpa": 16,
+     "ftm": 4,
+     "fta": 4
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 127,
+    "kind": "official",
+    "label": "전국체전 결승",
+    "opponent": "HAES",
+    "home": true,
+    "score": [
+     74,
+     65
+    ],
+    "won": true,
+    "seed": 93463308,
+    "line": null,
+    "grade": "-",
+    "started": false
+   },
+   {
+    "week": 131,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "JINH",
+    "home": false,
+    "score": [
+     76,
+     81
+    ],
+    "won": false,
+    "seed": 1768084855,
+    "line": {
+     "sec": 891.3997802734375,
+     "pts": 34,
+     "reb": 1,
+     "ast": 0,
+     "stl": 2,
+     "blk": 0,
+     "tov": 1,
+     "pf": 5,
+     "fgm": 12,
+     "fga": 21,
+     "tpm": 10,
+     "tpa": 17,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "S",
+    "started": true
+   },
+   {
+    "week": 134,
+    "kind": "official",
+    "label": "왕중왕전 4강",
+    "opponent": "HWAS",
+    "home": true,
+    "score": [
+     65,
+     64
+    ],
+    "won": true,
+    "seed": 208520577,
+    "line": {
+     "sec": 2184.7999877929688,
+     "pts": 36,
+     "reb": 2,
+     "ast": 6,
+     "stl": 1,
+     "blk": 0,
+     "tov": 7,
+     "pf": 4,
+     "fgm": 12,
+     "fga": 27,
+     "tpm": 12,
+     "tpa": 25,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 135,
+    "kind": "official",
+    "label": "왕중왕전 결승",
+    "opponent": "MUDE",
+    "home": true,
+    "score": [
+     61,
+     64
+    ],
+    "won": false,
+    "seed": 275355821,
+    "line": {
+     "sec": 1949.5,
+     "pts": 30,
+     "reb": 2,
+     "ast": 5,
+     "stl": 1,
+     "blk": 0,
+     "tov": 8,
+     "pf": 3,
+     "fgm": 10,
+     "fga": 20,
+     "tpm": 10,
+     "tpa": 19,
+     "ftm": 0,
+     "fta": 0
+    },
+    "grade": "A",
+    "started": true
+   },
+   {
+    "week": 139,
+    "kind": "practice",
+    "label": "연습경기",
+    "opponent": "TAML",
+    "home": true,
+    "score": [
+     87,
+     65
+    ],
+    "won": true,
+    "seed": 860361283,
+    "line": {
+     "sec": 1804.7000732421875,
+     "pts": 25,
+     "reb": 1,
+     "ast": 5,
+     "stl": 4,
+     "blk": 0,
+     "tov": 3,
+     "pf": 3,
+     "fgm": 10,
+     "fga": 25,
+     "tpm": 4,
+     "tpa": 12,
+     "ftm": 1,
+     "fta": 2
+    },
+    "grade": "B",
+    "started": true
+   }
+  ],
+  "pendingGame": null,
+  "season": {
+   "year": 2,
+   "tours": [
+    {
+     "id": "spring",
+     "name": "춘계 연맹전",
+     "kind": "knockout",
+     "year": 2,
+     "teams": [
+      "HANB",
+      "TAEH",
+      "TAML",
+      "SONG",
+      "HAES",
+      "JINH",
+      "MUDE",
+      "HWAS"
+     ],
+     "matches": [
+      {
+       "round": 0,
+       "week": 101,
+       "a": "HANB",
+       "b": "TAML",
+       "score": [
+        110,
+        48
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 0,
+       "week": 101,
+       "a": "HWAS",
+       "b": "SONG",
+       "score": [
+        86,
+        79
+       ],
+       "winner": "HWAS"
+      },
+      {
+       "round": 0,
+       "week": 101,
+       "a": "HAES",
+       "b": "TAEH",
+       "score": [
+        75,
+        56
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 0,
+       "week": 101,
+       "a": "MUDE",
+       "b": "JINH",
+       "score": [
+        90,
+        69
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 1,
+       "week": 102,
+       "a": "HANB",
+       "b": "HWAS",
+       "score": [
+        66,
+        57
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 1,
+       "week": 102,
+       "a": "HAES",
+       "b": "MUDE",
+       "score": [
+        79,
+        72
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 2,
+       "week": 103,
+       "a": "HANB",
+       "b": "HAES",
+       "score": [
+        91,
+        86
+       ],
+       "winner": "HANB"
+      }
+     ],
+     "weeks": [
+      101,
+      102,
+      103
+     ],
+     "done": true,
+     "champion": "HANB",
+     "runnerUp": "HAES",
+     "myFinish": "우승"
+    },
+    {
+     "id": "summer",
+     "name": "협회장기",
+     "kind": "groups",
+     "year": 2,
+     "teams": [
+      "HANB",
+      "HAES",
+      "SONG",
+      "DALG",
+      "MUDE",
+      "HANBT",
+      "TAEH",
+      "HWAS",
+      "JINH",
+      "TAML"
+     ],
+     "matches": [
+      {
+       "round": 0,
+       "week": 112,
+       "a": "HWAS",
+       "b": "TAEH",
+       "group": 0,
+       "score": [
+        87,
+        66
+       ],
+       "winner": "HWAS"
+      },
+      {
+       "round": 0,
+       "week": 112,
+       "a": "SONG",
+       "b": "HANBT",
+       "group": 0,
+       "score": [
+        91,
+        67
+       ],
+       "winner": "SONG"
+      },
+      {
+       "round": 1,
+       "week": 113,
+       "a": "TAEH",
+       "b": "HANB",
+       "group": 0,
+       "score": [
+        48,
+        68
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 1,
+       "week": 113,
+       "a": "SONG",
+       "b": "HWAS",
+       "group": 0,
+       "score": [
+        66,
+        67
+       ],
+       "winner": "HWAS"
+      },
+      {
+       "round": 2,
+       "week": 114,
+       "a": "HANB",
+       "b": "HANBT",
+       "group": 0,
+       "score": [
+        83,
+        72
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 2,
+       "week": 114,
+       "a": "TAEH",
+       "b": "SONG",
+       "group": 0,
+       "score": [
+        71,
+        69
+       ],
+       "winner": "TAEH"
+      },
+      {
+       "round": 3,
+       "week": 115,
+       "a": "SONG",
+       "b": "HANB",
+       "group": 0,
+       "score": [
+        76,
+        74
+       ],
+       "winner": "SONG"
+      },
+      {
+       "round": 3,
+       "week": 115,
+       "a": "HWAS",
+       "b": "HANBT",
+       "group": 0,
+       "score": [
+        70,
+        74
+       ],
+       "winner": "HANBT"
+      },
+      {
+       "round": 4,
+       "week": 116,
+       "a": "HANB",
+       "b": "HWAS",
+       "group": 0,
+       "score": [
+        82,
+        63
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 4,
+       "week": 116,
+       "a": "HANBT",
+       "b": "TAEH",
+       "group": 0,
+       "score": [
+        64,
+        86
+       ],
+       "winner": "TAEH"
+      },
+      {
+       "round": 0,
+       "week": 112,
+       "a": "MUDE",
+       "b": "TAML",
+       "group": 1,
+       "score": [
+        75,
+        60
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 0,
+       "week": 112,
+       "a": "DALG",
+       "b": "JINH",
+       "group": 1,
+       "score": [
+        72,
+        76
+       ],
+       "winner": "JINH"
+      },
+      {
+       "round": 1,
+       "week": 113,
+       "a": "TAML",
+       "b": "HAES",
+       "group": 1,
+       "score": [
+        69,
+        78
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 1,
+       "week": 113,
+       "a": "DALG",
+       "b": "MUDE",
+       "group": 1,
+       "score": [
+        61,
+        87
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 2,
+       "week": 114,
+       "a": "HAES",
+       "b": "JINH",
+       "group": 1,
+       "score": [
+        68,
+        64
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 2,
+       "week": 114,
+       "a": "TAML",
+       "b": "DALG",
+       "group": 1,
+       "score": [
+        75,
+        64
+       ],
+       "winner": "TAML"
+      },
+      {
+       "round": 3,
+       "week": 115,
+       "a": "DALG",
+       "b": "HAES",
+       "group": 1,
+       "score": [
+        62,
+        87
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 3,
+       "week": 115,
+       "a": "MUDE",
+       "b": "JINH",
+       "group": 1,
+       "score": [
+        68,
+        72
+       ],
+       "winner": "JINH"
+      },
+      {
+       "round": 4,
+       "week": 116,
+       "a": "HAES",
+       "b": "MUDE",
+       "group": 1,
+       "score": [
+        72,
+        75
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 4,
+       "week": 116,
+       "a": "JINH",
+       "b": "TAML",
+       "group": 1,
+       "score": [
+        78,
+        81
+       ],
+       "winner": "TAML"
+      },
+      {
+       "round": 5,
+       "week": 117,
+       "a": "HANB",
+       "b": "HAES",
+       "score": [
+        70,
+        56
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 5,
+       "week": 117,
+       "a": "MUDE",
+       "b": "SONG",
+       "score": [
+        64,
+        63
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 6,
+       "week": 118,
+       "a": "HANB",
+       "b": "MUDE",
+       "score": [
+        79,
+        86
+       ],
+       "winner": "MUDE"
+      }
+     ],
+     "weeks": [
+      112,
+      113,
+      114,
+      115,
+      116,
+      117,
+      118
+     ],
+     "done": true,
+     "groups": [
+      [
+       "HANB",
+       "HWAS",
+       "SONG",
+       "HANBT",
+       "TAEH"
+      ],
+      [
+       "HAES",
+       "MUDE",
+       "DALG",
+       "JINH",
+       "TAML"
+      ]
+     ],
+     "myFinish": "준우승",
+     "champion": "MUDE",
+     "runnerUp": "HANB"
+    },
+    {
+     "id": "national",
+     "name": "전국체전",
+     "kind": "knockout",
+     "year": 2,
+     "teams": [
+      "HANB",
+      "TAEH",
+      "TAML",
+      "HWAS",
+      "HAES",
+      "MUDE",
+      "SONG",
+      "HANBT"
+     ],
+     "matches": [
+      {
+       "round": 0,
+       "week": 125,
+       "a": "HANB",
+       "b": "TAML",
+       "score": [
+        78,
+        68
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 0,
+       "week": 125,
+       "a": "HWAS",
+       "b": "SONG",
+       "score": [
+        74,
+        73
+       ],
+       "winner": "HWAS"
+      },
+      {
+       "round": 0,
+       "week": 125,
+       "a": "HAES",
+       "b": "TAEH",
+       "score": [
+        86,
+        60
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 0,
+       "week": 125,
+       "a": "MUDE",
+       "b": "HANBT",
+       "score": [
+        81,
+        66
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 1,
+       "week": 126,
+       "a": "HANB",
+       "b": "HWAS",
+       "score": [
+        85,
+        79
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 1,
+       "week": 126,
+       "a": "HAES",
+       "b": "MUDE",
+       "score": [
+        77,
+        71
+       ],
+       "winner": "HAES"
+      },
+      {
+       "round": 2,
+       "week": 127,
+       "a": "HANB",
+       "b": "HAES",
+       "score": [
+        74,
+        65
+       ],
+       "winner": "HANB"
+      }
+     ],
+     "weeks": [
+      125,
+      126,
+      127
+     ],
+     "done": true,
+     "champion": "HANB",
+     "runnerUp": "HAES",
+     "myFinish": "우승"
+    },
+    {
+     "id": "kings",
+     "name": "왕중왕전",
+     "kind": "finals",
+     "year": 2,
+     "teams": [
+      "HANB",
+      "MUDE",
+      "HAES",
+      "HWAS"
+     ],
+     "matches": [
+      {
+       "round": 0,
+       "week": 134,
+       "a": "HANB",
+       "b": "HWAS",
+       "score": [
+        65,
+        64
+       ],
+       "winner": "HANB"
+      },
+      {
+       "round": 0,
+       "week": 134,
+       "a": "MUDE",
+       "b": "HAES",
+       "score": [
+        89,
+        79
+       ],
+       "winner": "MUDE"
+      },
+      {
+       "round": 1,
+       "week": 135,
+       "a": "HANB",
+       "b": "MUDE",
+       "score": [
+        61,
+        64
+       ],
+       "winner": "MUDE"
+      }
+     ],
+     "weeks": [
+      134,
+      135
+     ],
+     "done": true,
+     "myFinish": "준우승",
+     "champion": "MUDE",
+     "runnerUp": "HANB"
+    }
+   ],
+   "points": {
+    "TAML": 4,
+    "SONG": 7,
+    "TAEH": 4,
+    "JINH": 3,
+    "HWAS": 11,
+    "MUDE": 29,
+    "HAES": 21,
+    "HANB": 35,
+    "HANBT": 2
+   }
+  },
+  "trust": 100,
+  "friends": {
+   "paidrx0": 100,
+   "pbhg5t6": 94.69999999999993,
+   "p57x2wq": 94.69999999999996,
+   "p2c7shp": 100,
+   "pbwgn0s": 72.60000000000001,
+   "p72mafz": 66.60000000000002,
+   "pqa0zc": 74.1,
+   "pdjuv6x": 69.60000000000001,
+   "pczly67": 80.09999999999998,
+   "p1f6euo": 54.90000000000001,
+   "p5ti2m4": 50.40000000000001,
+   "p4azyqz": 48.90000000000001,
+   "p2dm0ao": 47.40000000000001
+  },
+  "coach": "배지결",
+  "rival": {
+   "player": {
+    "id": "rival",
+    "name": "류우찬",
+    "number": 79,
+    "pos": "SG",
+    "body": {
+     "heightCm": 183,
+     "wingspanCm": 191,
+     "weightKg": 72
+    },
+    "r": {
+     "speed": 87,
+     "accel": 81,
+     "jump": 92,
+     "strength": 78,
+     "stamina": 79,
+     "agility": 90,
+     "recovery": 68,
+     "layup": 75,
+     "dunk": 75,
+     "floater": 86,
+     "midRange": 92,
+     "three": 71,
+     "freeThrow": 84,
+     "postUp": 57,
+     "ballHandling": 82,
+     "passing": 68,
+     "offBall": 82,
+     "screen": 66,
+     "perimeterD": 82,
+     "postD": 55,
+     "steal": 83,
+     "block": 56,
+     "defReb": 92,
+     "offReb": 75,
+     "helpD": 73,
+     "boxOut": 59,
+     "iq": 77,
+     "vision": 83,
+     "composure": 89,
+     "focus": 78,
+     "competitive": 60,
+     "leadership": 86,
+     "consistency": 73,
+     "resilience": 77,
+     "hustle": 92,
+     "teamwork": 78
+    },
+    "look": {
+     "skin": 1,
+     "hair": 0,
+     "hairColor": 0,
+     "shoe": 4,
+     "headband": true,
+     "sleeve": false
+    },
+    "abilities": {
+     "quickRelease": 1
+    }
+   },
+   "school": "MUDE",
+   "w": 1,
+   "l": 4
+  },
+  "mentor": {
+   "name": "김도진",
+   "met": false,
+   "last": -99
+  },
+  "seenEvents": {
+   "rivalMeet": 1,
+   "seniorShot": 131,
+   "newShoes": 8,
+   "slump": 13,
+   "teamDinner": 135,
+   "tired": 52,
+   "rivalSns": 104,
+   "kidFan": 120,
+   "coachTrust": 34,
+   "newYearGoal": 136,
+   "street3x3": 94,
+   "tacticsNote": 59,
+   "chemistry": 105,
+   "juniorAsk": 132,
+   "mateWorry": 124,
+   "fanLetter": 118
+  },
+  "pendingEvent": null,
+  "stats": {
+   "games": 54,
+   "clutchMade": 12,
+   "clutchMiss": 14,
+   "ankles": 36,
+   "threesMade": 342,
+   "ast": 191,
+   "reb": 141,
+   "stlblk": 63,
+   "ftm": 102,
+   "fta": 130,
+   "foulOuts": 4,
+   "big": 35,
+   "injuries": 7,
+   "lastInjury": 136,
+   "recentPf": [
+    4,
+    4,
+    5,
+    4,
+    3,
+    3
+   ],
+   "ftAfter": {
+    "m": 0,
+    "a": 0
+   }
+  },
+  "dunks": [
+   "one"
+  ],
+  "pro": null,
+  "league": null,
+  "gameQueue": [],
+  "draft": null,
+  "contractPending": false,
+  "money": 0,
+  "items": [],
+  "popularity": 40.24000000000001,
+  "sns": [
+   {
+    "week": 139,
+    "who": "3점요정",
+    "text": "자동선수 꾸준한 게 제일 무섭다",
+    "likes": 40
+   },
+   {
+    "week": 139,
+    "who": "골밑지킴이",
+    "text": "25점이면 밥값은 했다",
+    "likes": 38
+   },
+   {
+    "week": 135,
+    "who": "야간자습중",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 21
+   },
+   {
+    "week": 135,
+    "who": "코트위시인",
+    "text": "한빛고 경기는 자동선수 보러 간다",
+    "likes": 16
+   },
+   {
+    "week": 135,
+    "who": "코트위시인",
+    "text": "오늘 자동선수 미쳤다 ㄷㄷ",
+    "likes": 48
+   },
+   {
+    "week": 134,
+    "who": "야간자습중",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 33
+   },
+   {
+    "week": 134,
+    "who": "벤치워머",
+    "text": "36점 실화냐",
+    "likes": 42
+   },
+   {
+    "week": 131,
+    "who": "하이라이트봇",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 9
+   },
+   {
+    "week": 131,
+    "who": "코트위시인",
+    "text": "오늘 자동선수 미쳤다 ㄷㄷ",
+    "likes": 21
+   },
+   {
+    "week": 127,
+    "who": "골밑지킴이",
+    "text": "벤치에서 박수 치는 자동선수 귀엽다",
+    "likes": 24
+   },
+   {
+    "week": 127,
+    "who": "골밑지킴이",
+    "text": "자동선수 언제 뛰냐",
+    "likes": 12
+   },
+   {
+    "week": 127,
+    "who": "코트위시인",
+    "text": "벤치에서 박수 치는 자동선수 귀엽다",
+    "likes": 20
+   },
+   {
+    "week": 126,
+    "who": "농구는인생",
+    "text": "한빛고 경기는 자동선수 보러 간다",
+    "likes": 10
+   },
+   {
+    "week": 126,
+    "who": "골밑지킴이",
+    "text": "자동선수 하이라이트 무한 반복 중",
+    "likes": 28
+   },
+   {
+    "week": 125,
+    "who": "하이라이트봇",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 33
+   },
+   {
+    "week": 125,
+    "who": "bask_fan",
+    "text": "자동선수 하이라이트 무한 반복 중",
+    "likes": 16
+   },
+   {
+    "week": 123,
+    "who": "하이라이트봇",
+    "text": "자동선수 오늘 무난했음",
+    "likes": 33
+   },
+   {
+    "week": 123,
+    "who": "농구부매니저",
+    "text": "27점이면 밥값은 했다",
+    "likes": 20
+   },
+   {
+    "week": 118,
+    "who": "KBASK기자",
+    "text": "37점 실화냐",
+    "likes": 37
+   },
+   {
+    "week": 118,
+    "who": "직관러",
+    "text": "오늘 자동선수 미쳤다 ㄷㄷ",
+    "likes": 39
+   },
+   {
+    "week": 118,
+    "who": "직관러",
+    "text": "37점 실화냐",
+    "likes": 42
+   },
+   {
+    "week": 117,
+    "who": "농구는인생",
+    "text": "벤치에서 박수 치는 자동선수 귀엽다",
+    "likes": 10
+   },
+   {
+    "week": 117,
+    "who": "덩크장인",
+    "text": "자동선수 출전 시간 좀…",
+    "likes": 21
+   },
+   {
+    "week": 116,
+    "who": "코트위시인",
+    "text": "49점 실화냐",
+    "likes": 27
+   },
+   {
+    "week": 116,
+    "who": "3점요정",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 40
+   },
+   {
+    "week": 115,
+    "who": "직관러",
+    "text": "31점이면 밥값은 했다",
+    "likes": 10
+   },
+   {
+    "week": 115,
+    "who": "농구부매니저",
+    "text": "자동선수 오늘 무난했음",
+    "likes": 18
+   },
+   {
+    "week": 114,
+    "who": "벤치워머",
+    "text": "자동선수 언제 뛰냐",
+    "likes": 24
+   },
+   {
+    "week": 114,
+    "who": "하이라이트봇",
+    "text": "자동선수 출전 시간 좀…",
+    "likes": 14
+   },
+   {
+    "week": 113,
+    "who": "농구는인생",
+    "text": "다음 경기 기대한다 자동선수",
+    "likes": 10
+   },
+   {
+    "week": 113,
+    "who": "덩크장인",
+    "text": "다음 경기 기대한다 자동선수",
+    "likes": 6
+   },
+   {
+    "week": 111,
+    "who": "하이라이트봇",
+    "text": "오늘 자동선수 미쳤다 ㄷㄷ",
+    "likes": 15
+   },
+   {
+    "week": 111,
+    "who": "직관러",
+    "text": "한빛고 경기는 자동선수 보러 간다",
+    "likes": 12
+   },
+   {
+    "week": 107,
+    "who": "농구부매니저",
+    "text": "자동선수 슬럼프인가",
+    "likes": 24
+   },
+   {
+    "week": 107,
+    "who": "3점요정",
+    "text": "자동선수 힘내라 다음엔 잘하겠지",
+    "likes": 17
+   },
+   {
+    "week": 103,
+    "who": "코트위시인",
+    "text": "자동선수 하이라이트 무한 반복 중",
+    "likes": 12
+   },
+   {
+    "week": 103,
+    "who": "bask_fan",
+    "text": "역시 자동선수… 믿고 본다",
+    "likes": 15
+   },
+   {
+    "week": 103,
+    "who": "골밑지킴이",
+    "text": "역시 자동선수… 믿고 본다",
+    "likes": 26
+   },
+   {
+    "week": 102,
+    "who": "벤치워머",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 20
+   },
+   {
+    "week": 102,
+    "who": "골밑지킴이",
+    "text": "자동선수 이 정도면 국대감 아님?",
+    "likes": 33
+   }
+  ],
+  "yearOf": 2,
+  "counts": {
+   "team": 37,
+   "solo": 18,
+   "weight": 20,
+   "rest": 40,
+   "video": 18,
+   "rehab": 10
+  }
+ }
+}
