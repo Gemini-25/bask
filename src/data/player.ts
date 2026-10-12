@@ -71,6 +71,27 @@ export function baseRatings(pos: Position, quality: number): Ratings {
   return r;
 }
 
+/** 센스 (M16): 농구 IQ·시야·민첩성에서, 선수마다 ±8 (같은 선수는 항상 같다) */
+export function deriveSense(r: Pick<Ratings, 'iq' | 'vision' | 'agility'>, id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  const noise = (((h >>> 0) % 1000) / 1000 - 0.5) * 16;
+  return Math.round(clamp((r.iq + r.vision + r.agility) / 3 - 2 + noise, 15, 95));
+}
+
+/** 예전 세이브: 센스가 없는 선수에게 채운다 (객체 안을 다 돈다) */
+export function fillSense(o: unknown, depth = 0): void {
+  if (!o || typeof o !== 'object' || depth > 12) return;
+  if (Array.isArray(o)) {
+    for (const x of o) fillSense(x, depth + 1);
+    return;
+  }
+  const rec = o as Record<string, unknown>;
+  const r = rec.r as Partial<Ratings> | undefined;
+  if (r && typeof r === 'object' && typeof r.iq === 'number' && typeof r.sense !== 'number') r.sense = deriveSense(r as Ratings, String(rec.id ?? rec.name ?? ''));
+  for (const v of Object.values(rec)) if (v && typeof v === 'object') fillSense(v, depth + 1);
+}
+
 export interface GenOptions {
   /** 키 보정 (고교생은 작고, 여자 리그는 더 작다) */
   heightAdj?: number;
@@ -82,6 +103,8 @@ export function generatePlayer(rng: Rng, pos: Position, quality: number, number:
   const t = TEMPLATE[pos];
   const r = {} as Ratings;
   for (const k of RATING_KEYS) {
+    // 센스는 난수를 안 쓰고 다른 능력치에서 (M16에 생겨서 예전 선수 생성 순서를 그대로 둔다)
+    if (k === 'sense') continue;
     const base = t[k as RatingKey] ?? 50;
     r[k] = Math.round(clamp(base + quality + rng.normal(0, 7), 15, 95));
   }
@@ -91,14 +114,15 @@ export function generatePlayer(rng: Rng, pos: Position, quality: number, number:
   const weightKg = Math.round(clamp((heightCm - 100) * 0.95 + rng.normal(0, 6), opts.heightAdj ? 50 : 70, 135));
   const id = `p${Math.floor(rng.next() * 1e9).toString(36)}`;
   const name = koreanName(rng, opts.gender);
+  r.sense = deriveSense(r, id);
   return { id, name, number, pos, body: { heightCm, wingspanCm, weightKg }, r, look: lookFor(id + name) };
 }
 
 // 포지션별 종합 능력치 (S12). 감독이 출전 선수를 고를 때도 쓴다.
 const OVR_WEIGHTS: Record<Position, Partial<Record<RatingKey, number>>> = {
-  PG: { ballHandling: 3, passing: 3, vision: 2, three: 2, midRange: 1.5, layup: 1.5, speed: 2, accel: 1.5, perimeterD: 1.5, steal: 1, iq: 2 },
-  SG: { three: 3, midRange: 2, layup: 1.5, ballHandling: 1.5, offBall: 1.5, speed: 1.5, perimeterD: 2, steal: 1, iq: 1.5, freeThrow: 1 },
-  SF: { three: 2, midRange: 1.5, layup: 2, dunk: 1, offBall: 1.5, perimeterD: 2, defReb: 1, jump: 1.5, strength: 1, iq: 1.5, speed: 1 },
+  PG: { ballHandling: 3, passing: 3, vision: 2, three: 2, midRange: 1.5, layup: 1.5, speed: 2, accel: 1.5, perimeterD: 1.5, steal: 1, iq: 2, sense: 1 },
+  SG: { three: 3, midRange: 2, layup: 1.5, ballHandling: 1.5, offBall: 1.5, speed: 1.5, perimeterD: 2, steal: 1, iq: 1.5, freeThrow: 1, sense: 1 },
+  SF: { three: 2, midRange: 1.5, layup: 2, dunk: 1, offBall: 1.5, perimeterD: 2, defReb: 1, jump: 1.5, strength: 1, iq: 1.5, speed: 1, sense: 0.5 },
   PF: { layup: 1.5, dunk: 1.5, postUp: 1.5, midRange: 1, defReb: 2, offReb: 1.5, postD: 2, block: 1.5, strength: 2, jump: 1, boxOut: 1.5, screen: 1 },
   C: { postUp: 2, dunk: 2, layup: 1, defReb: 2.5, offReb: 2, postD: 2.5, block: 2.5, strength: 2, boxOut: 2, screen: 1.5, helpD: 1 },
 };

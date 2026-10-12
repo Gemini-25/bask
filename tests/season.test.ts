@@ -140,7 +140,7 @@ describe('특수능력 (S8)', () => {
   it('배경에 따라 시작 능력, 천재는 전부 ★3', () => {
     expect(createCareer(spec({ background: 'street' }), 8).me.abilities).toEqual({ ankle: 1 });
     const g = createCareer(spec({ background: 'genius' }), 8).me.abilities!;
-    expect(Object.values(g).length).toBe(8);
+    expect(Object.values(g).length).toBe(14);
     expect(Object.values(g).every((n) => n === 3)).toBe(true);
   });
 

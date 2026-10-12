@@ -246,7 +246,7 @@ export class DevPanel {
       <label class="dvf wide"><span>묶음</span><select id="dvEdGroup">${groups.map((g) => `<option value="${esc(g.id)}" ${g.id === this.edGroup ? 'selected' : ''}>${esc(g.label)} (${g.entries.length})</option>`).join('')}</select></label>
       <label class="dvf wide"><span>이름 찾기 (전체)</span><input type="text" id="dvEdQ" value="${esc(this.edQuery)}" placeholder="이름 일부" /></label>
       <table class="ttable dvt"><tr><th>#</th><th class="nm">이름</th><th>포</th><th>나이</th><th>종합</th><th></th></tr><tbody id="dvEdList">${this.editRows(c)}</tbody></table>
-      <p class="hint">능력치 39개, 특수능력, 키·체중·포지션·나이, 겉모습까지. 내 선수는 성격(개수 제한 없음)·잠재력·연애, 팀원은 친밀도·콤비도. 팀 탭에서도 선수 옆 ✏️로 연다 (패널을 연 동안). 이름·등번호·겉모습만 고치면 🔧 표시가 안 남는다.</p>`;
+      <p class="hint">능력치 40개, 특수능력, 키·체중·포지션·나이, 겉모습까지. 내 선수는 성격(개수 제한 없음)·잠재력·연애, 팀원은 친밀도·콤비도. 팀 탭에서도 선수 옆 ✏️로 연다 (패널을 연 동안). 이름·등번호·겉모습만 고치면 🔧 표시가 안 남는다.</p>`;
   }
 
   private editRows(c: Career) {

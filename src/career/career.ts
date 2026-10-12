@@ -26,7 +26,7 @@ import { romanceMood } from './romance';
 import type { Combo } from './combos';
 import type { Romance } from './romance';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const WEEKS_PER_YEAR = 48;
 export const MAX_RATING = 99;
 /** 선수 만들 때 자유 포인트로 올릴 수 있는 최대치 */
@@ -511,7 +511,7 @@ export const ACTIONS: ActionDef[] = [
   { id: 'trainer', label: '개인 트레이너', desc: '전문 트레이너와 고른 분야 집중 훈련. 경험치가 크게 오르고 덜 다친다 (200만 원)', pts: { P: 3, T: 8, M: 2 }, fatigue: 14, mood: 0, injuredOk: false, pose: ACT.SHOOT, trust: 0.3, proOnly: true, cost: 200 },
   { id: 'weight', label: '웨이트', desc: '근력·점프·지구력을 키운다. 많이 지친다', pts: { P: 8, T: 0, M: 1 }, fatigue: 17, mood: -0.1, injuredOk: false, pose: ACT.STANCE, trust: 0.3 },
   { id: 'video', label: '영상 분석', desc: '프로 경기와 내 경기를 돌려 본다. 정신 포인트, 덜 지친다', pts: { P: 0, T: 1, M: 6 }, fatigue: -2, mood: 0, injuredOk: true, pose: ACT.IDLE, trust: 0.5 },
-  { id: 'street', label: '길거리 3x3', desc: '공원 코트 내기 농구. 가끔 고수를 만난다. 감독님은 별로 안 좋아한다', pts: { P: 2, T: 4, M: 2 }, fatigue: 11, mood: 0.25, injuredOk: false, pose: ACT.DRIBBLE, trust: -0.4 },
+  { id: 'street', label: '길거리 3x3', desc: '공원 코트 내기 농구. 센스가 늘고 가끔 고수를 만난다. 감독님은 별로 안 좋아한다', pts: { P: 2, T: 4, M: 2 }, fatigue: 11, mood: 0.25, injuredOk: false, pose: ACT.DRIBBLE, trust: -0.4 },
   { id: 'ad', label: '광고 촬영', desc: '돈을 벌고 인기가 오른다. 감독님은 훈련을 더 했으면 한다', pts: { P: 0, T: 0, M: 1 }, fatigue: 6, mood: 0.2, injuredOk: true, pose: ACT.CELEBRATE, trust: -0.3, proOnly: true },
   { id: 'parttime', label: '아르바이트', desc: '분식집에서 일한다. 돈을 조금 벌지만 지치고, 감독님은 훈련을 더 했으면 한다', pts: { P: 0, T: 0, M: 1 }, fatigue: 9, mood: -0.05, injuredOk: true, pose: ACT.HOLD, trust: -0.4, amateurOnly: true },
   { id: 'friends', label: '친구와 놀기', desc: '팀원들과 논다. 피로가 풀리고 기분과 친밀도가 오른다', pts: { P: 0, T: 0, M: 2 }, fatigue: -12, mood: 0.7, injuredOk: true, pose: ACT.CELEBRATE, trust: 0 },
@@ -689,7 +689,8 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): Wee
     const names = picked.map((pid) => roster.find((e) => e.player.id === pid)!.player.name);
     notes.push(`${names.join(', ')}와(과) ${rng.pick(['PC방에 갔다', '떡볶이를 먹었다', '노래방에 갔다', '영화를 봤다', '한강에서 자전거를 탔다'])}.`);
   }
-  // 길거리: 가끔 고수에게 배운다
+  // 길거리: 자유롭게 하다 보면 센스가 는다 (M16). 가끔 고수에게 배운다
+  if (id === 'street') addXp(c, 'sense', 0.15, ups);
   if (id === 'street' && rng.chance(0.18)) {
     const k = rng.pick(['ballHandling', 'layup', 'floater', 'three', 'competitive'] as RatingKey[]);
     addXp(c, k, 1, ups);

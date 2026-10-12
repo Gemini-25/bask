@@ -350,6 +350,167 @@ function poseFor(f: Figure, leg: number): Pose {
       base.lean = 1;
       base.eyes = 'angry';
       break;
+    // 슛·레이업·덩크 동작 (M16)
+    case ACT.STEPBACK:
+      // 한 발 뒤로 뛰면서 공을 올린다
+      base.armF = { a: air ? 2.9 : 2.2, len: 5 };
+      base.armB = { a: air ? 2.6 : 2.0, len: 4 };
+      base.legF = { a: 0.55, len: leg };
+      base.legB = { a: -0.45, len: leg };
+      base.crouch = air ? 0 : 1;
+      base.lean = -1;
+      base.eyes = 'focus';
+      break;
+    case ACT.SIDESTEP:
+      base.armF = { a: air ? 3.0 : 2.4, len: 5 };
+      base.armB = { a: 2.2, len: 4 };
+      base.legF = { a: 0.65, len: leg };
+      base.legB = { a: -0.65, len: leg };
+      base.crouch = air ? 0 : 1;
+      base.eyes = 'focus';
+      break;
+    case ACT.FADE:
+    case ACT.TURNFADE:
+      // 뒤로 떨어지며 던진다
+      base.armF = { a: 3.05, len: 5 };
+      base.armB = { a: 2.8, len: 4 };
+      base.legF = { a: 0.6, len: leg };
+      base.legB = { a: -0.1, len: leg };
+      base.lean = -2;
+      base.eyes = 'focus';
+      break;
+    case ACT.ONELEG:
+      // 한쪽 무릎을 들고 페이더
+      base.armF = { a: 3.05, len: 5 };
+      base.armB = { a: 2.7, len: 4 };
+      base.legF = { a: 1.45, len: Math.max(2, leg - 2) };
+      base.legB = { a: 0, len: leg };
+      base.lean = -2;
+      base.eyes = 'focus';
+      break;
+    case ACT.EURO:
+      // 옆으로 크게 한 발, 공은 몸 쪽으로
+      base.armF = { a: 1.25, len: 4 };
+      base.armB = { a: 1.0, len: 4 };
+      base.legF = { a: 0.95, len: leg };
+      base.legB = { a: -0.75, len: leg };
+      base.crouch = 1;
+      base.lean = 1;
+      base.eyes = 'focus';
+      break;
+    case ACT.SCOOP:
+      // 아래에서 떠 올린다
+      base.armF = { a: 1.9, len: 6 };
+      base.armB = { a: 0.4, len: 4 };
+      base.legF = { a: 1.2, len: leg - 1 };
+      base.legB = { a: -0.2, len: leg };
+      base.lean = 1;
+      break;
+    case ACT.REVLAY:
+      base.armF = { a: 3.0, len: 5 };
+      base.armB = { a: 0.8, len: 4 };
+      base.legF = { a: 1.1, len: leg - 1 };
+      base.legB = { a: -0.3, len: leg };
+      break;
+    case ACT.FINGER:
+      // 팔을 쭉 뻗어 손끝으로 굴린다
+      base.armF = { a: 2.95, len: 7 };
+      base.armB = { a: 0.3, len: 4 };
+      base.legF = { a: 1.25, len: leg - 1 };
+      base.legB = { a: -0.25, len: leg };
+      break;
+    case ACT.POWERLAY:
+      // 두 발로 뛰어 두 손으로
+      base.armF = { a: 2.8, len: 5 };
+      base.armB = { a: 2.75, len: 5 };
+      base.legF = { a: 0.3, len: leg - 1 };
+      base.legB = { a: 0.2, len: leg - 1 };
+      base.eyes = 'angry';
+      break;
+    case ACT.CLUTCH:
+      // 공중에서 내렸다가 다시 올린다
+      base.armF = { a: 1.3 + 1.6 * Math.abs(Math.sin(t * 9)), len: 6 };
+      base.armB = { a: 0.9, len: 4 };
+      base.legF = { a: 1.1, len: leg - 1 };
+      base.legB = { a: -0.2, len: leg };
+      base.eyes = 'focus';
+      break;
+    case ACT.POSTER:
+      // 수비 머리 위로 크게
+      base.armF = { a: 3.15, len: 7 };
+      base.armB = { a: 1.6, len: 4 };
+      base.legF = { a: 1.25, len: leg - 1 };
+      base.legB = { a: -0.6, len: leg };
+      base.lean = 1;
+      base.eyes = 'angry';
+      break;
+    case ACT.CONTACT:
+      // 어깨로 밀고 들어가며
+      base.armF = { a: 2.6, len: 5 };
+      base.armB = { a: 1.0, len: 4 };
+      base.legF = { a: 0.45, len: leg };
+      base.legB = { a: -0.3, len: leg };
+      base.lean = 2;
+      base.eyes = 'angry';
+      break;
+    case ACT.SKYHOOK:
+      base.armF = { a: 3.25, len: 7 };
+      base.armB = { a: 1.1, len: 4 };
+      base.legF = { a: 0.9, len: leg - 1 };
+      base.legB = { a: -0.1, len: leg };
+      base.eyes = 'focus';
+      break;
+    case ACT.INOUT: {
+      const k = Math.sin(t * 12);
+      base.armF = { a: 0.6 + 0.3 * k, len: 5 };
+      base.armB = { a: 0.9, len: 4 };
+      base.legF = { a: 0.3, len: leg };
+      base.legB = { a: -0.3, len: leg };
+      base.crouch = 1;
+      base.lean = k > 0 ? 1 : 0;
+      base.eyes = 'focus';
+      break;
+    }
+    case ACT.SHAKE: {
+      // 어깨를 좌우로 흔든다
+      const k = Math.sin(t * 13);
+      base.armF = { a: 0.7 + 0.3 * k, len: 5 };
+      base.armB = { a: 0.9 - 0.3 * k, len: 4 };
+      base.legF = { a: 0.4, len: leg };
+      base.legB = { a: -0.4, len: leg };
+      base.crouch = 2;
+      base.lean = k > 0 ? 1 : -1;
+      base.eyes = 'focus';
+      break;
+    }
+    case ACT.SNAP:
+      base.armF = { a: 0.8, len: 4 };
+      base.armB = { a: 1.0, len: 4 };
+      base.legF = { a: -0.35, len: leg };
+      base.legB = { a: 0.5, len: leg };
+      base.crouch = 1;
+      base.lean = -1;
+      base.eyes = 'focus';
+      break;
+    case ACT.KILLER: {
+      const k = Math.sin(t * 20);
+      base.armF = { a: 0.5 + 0.5 * k, len: 5 };
+      base.armB = { a: 0.9 - 0.5 * k, len: 4 };
+      base.legF = { a: 0.55, len: leg };
+      base.legB = { a: -0.55, len: leg };
+      base.crouch = 2;
+      base.lean = 1;
+      base.eyes = 'focus';
+      break;
+    }
+    case ACT.CRADLE:
+      // 공을 팔에 감싸 크게 휘돌린다
+      base.armF = { a: 1.0 + 2.2 * Math.abs(Math.sin(t * 6)), len: 6 };
+      base.armB = { a: 0.6, len: 4 };
+      base.legF = { a: 0.9, len: leg - 1 };
+      base.legB = { a: 0.4, len: leg - 1 };
+      base.eyes = 'focus';
+      break;
     case ACT.SCREEN:
       base.armF = { a: 0.9, len: 3 };
       base.armB = { a: 0.9, len: 3 };
@@ -405,7 +566,12 @@ export function drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, 
   if (f.act === ACT.D360 || f.act === ACT.SPIN) {
     const k = Math.floor(f.time * (f.act === ACT.SPIN ? 14 : 10)) % 4;
     f = { ...f, facing: (['side', 'front', 'side', 'back'] as Facing[])[k], flip: k === 2 ? !f.flip : f.flip };
-  } else if (f.act === ACT.REVERSE) f = { ...f, facing: 'back' };
+  } else if (f.act === ACT.REVERSE || f.act === ACT.REVLAY) f = { ...f, facing: 'back' };
+  else if (f.act === ACT.TURNFADE) {
+    // 등지고 있다가 돌아서며 던진다
+    const k = Math.floor(f.time * 7) % 3;
+    if (k === 0) f = { ...f, facing: 'back' };
+  }
   const pl = f.pl;
   const { leg, torso, w } = sizes(pl);
   const pose = poseFor(f, leg);

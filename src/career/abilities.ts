@@ -27,10 +27,17 @@ export interface CareerStats {
   recentPf: number[];
   /** 자유투 공포증이 생긴 뒤 자유투 */
   ftAfter: { m: number; a: number };
+  /** M16 동작으로 넣은 슛: 화려한 동작, 인유어페이스·컨택트 덩크, 스텝백·사이드스텝, 페이드어웨이 계열, 유로스텝 계열, 앤드원 */
+  moves?: number;
+  posters?: number;
+  stepbacks?: number;
+  fades?: number;
+  euros?: number;
+  andOnes?: number;
 }
 
 export function emptyStats(): CareerStats {
-  return { games: 0, clutchMade: 0, clutchMiss: 0, ankles: 0, threesMade: 0, ast: 0, reb: 0, stlblk: 0, ftm: 0, fta: 0, foulOuts: 0, big: 0, injuries: 0, lastInjury: -99, recentPf: [], ftAfter: { m: 0, a: 0 } };
+  return { games: 0, clutchMade: 0, clutchMiss: 0, ankles: 0, threesMade: 0, ast: 0, reb: 0, stlblk: 0, ftm: 0, fta: 0, foulOuts: 0, big: 0, injuries: 0, lastInjury: -99, recentPf: [], ftAfter: { m: 0, a: 0 }, moves: 0, posters: 0, stepbacks: 0, fades: 0, euros: 0, andOnes: 0 };
 }
 
 /** 단계별 조건: [기록 하한, 능력치 하한] × 3단계 */
@@ -43,6 +50,13 @@ const GOOD: { id: AbilityId; stat: (c: Career) => number; key: RatingKey; need: 
   { id: 'noLook', stat: (c) => c.stats.ast, key: 'vision', need: [[40, 50], [130, 62], [320, 74]], how: '어시스트 + 시야' },
   { id: 'zone', stat: (c) => c.stats.big, key: 'focus', need: [[2, 45], [6, 58], [15, 70]], how: '25점 넘긴 경기 + 집중력' },
   { id: 'moodMaker', stat: (c) => Math.round(avgFriendship(c)), key: 'leadership', need: [[50, 40], [62, 52], [75, 64]], how: '팀원 친밀도 평균 + 리더십' },
+  // M16 동작 특수능력
+  { id: 'genius', stat: (c) => c.stats.moves ?? 0, key: 'sense', need: [[20, 62], [80, 74], [200, 86]], how: '화려한 동작으로 넣은 슛 + 센스' },
+  { id: 'poster', stat: (c) => c.stats.posters ?? 0, key: 'dunk', need: [[2, 65], [8, 75], [20, 85]], how: '인유어페이스·컨택트 덩크 + 덩크' },
+  { id: 'stepback', stat: (c) => c.stats.stepbacks ?? 0, key: 'ballHandling', need: [[8, 60], [30, 70], [80, 80]], how: '스텝백·사이드스텝 성공 + 볼핸들링' },
+  { id: 'fadeaway', stat: (c) => c.stats.fades ?? 0, key: 'midRange', need: [[8, 60], [30, 70], [80, 80]], how: '페이드어웨이 성공 + 미드레인지' },
+  { id: 'euro', stat: (c) => c.stats.euros ?? 0, key: 'agility', need: [[8, 55], [30, 65], [80, 75]], how: '유로스텝·스쿱·리버스·더블 클러치 성공 + 민첩성' },
+  { id: 'contact', stat: (c) => c.stats.andOnes ?? 0, key: 'strength', need: [[4, 55], [15, 65], [40, 75]], how: '앤드원 + 근력' },
 ];
 
 /** 다음 단계까지 남은 조건 (화면 안내용) */

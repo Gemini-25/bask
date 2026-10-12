@@ -76,6 +76,10 @@ export interface GameEvent {
   contest?: number;
   /** 콤비 플레이로 넣었다 */
   combo?: boolean;
+  /** 슛 동작 (M16) */
+  move?: ShotMove;
+  /** 블록하러 뜬 수비 위로 찍었다 (인유어페이스) */
+  poster?: boolean;
   quarter: number;
   clock: number;
   score: [number, number];
@@ -125,13 +129,57 @@ export const ACT = {
   ELBOW: 36,
   BETWEEN: 37,
   FTLINE: 38,
+  // 슛·레이업·덩크 동작 (M16)
+  STEPBACK: 39,
+  SIDESTEP: 40,
+  FADE: 41,
+  TURNFADE: 42,
+  ONELEG: 43,
+  EURO: 44,
+  SCOOP: 45,
+  REVLAY: 46,
+  FINGER: 47,
+  POWERLAY: 48,
+  CLUTCH: 49,
+  POSTER: 50,
+  CONTACT: 51,
+  SKYHOOK: 52,
+  // 드리블 기술 (M16)
+  INOUT: 53,
+  SHAKE: 54,
+  SNAP: 55,
+  KILLER: 56,
+  CRADLE: 57,
 } as const;
 
 /** 드리블 기술 이름 */
-export const MOVE_LABEL: Record<number, string> = { 30: '크로스오버', 31: '비하인드 백', 32: '레그 스루', 33: '스핀 무브', 34: '헤지테이션' };
-export const DRIBBLE_MOVES = [ACT.CROSSOVER, ACT.BEHIND, ACT.LEGS, ACT.SPIN, ACT.HESI] as number[];
+export const MOVE_LABEL: Record<number, string> = { 30: '크로스오버', 31: '비하인드 백', 32: '레그 스루', 33: '스핀 무브', 34: '헤지테이션', 53: '인앤아웃', 54: '셰이크 앤 베이크', 55: '스냅백', 56: '킬러 크로스오버' };
+export const DRIBBLE_MOVES = [ACT.CROSSOVER, ACT.BEHIND, ACT.LEGS, ACT.SPIN, ACT.HESI, ACT.INOUT, ACT.SHAKE, ACT.SNAP, ACT.KILLER] as number[];
 
-export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360' | 'double' | 'elbow' | 'between' | 'ftline';
+/** 슛 동작 (M16): 고른 동작마다 견제·성공률·블록·파울이 조금씩 달라진다 */
+export type ShotMove =
+  | 'stepback'
+  | 'sidestep'
+  | 'pullup'
+  | 'fadeaway'
+  | 'turnFade'
+  | 'oneLeg'
+  | 'catchShoot'
+  | 'contactShot'
+  | 'bank'
+  | 'skyhook'
+  | 'teardrop'
+  | 'euro'
+  | 'scoop'
+  | 'reverseLay'
+  | 'fingerRoll'
+  | 'powerLay'
+  | 'doubleClutch'
+  | 'poster'
+  | 'contactDunk'
+  | 'putback';
+
+export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360' | 'double' | 'elbow' | 'between' | 'ftline' | 'cradle' | 'putback';
 export const DUNK_LABEL: Record<DunkStyle, string> = {
   one: '원핸드 덩크',
   two: '투핸드 덩크',
@@ -143,6 +191,8 @@ export const DUNK_LABEL: Record<DunkStyle, string> = {
   elbow: '엘보우 행 덩크',
   between: '비트윈 더 레그 덩크',
   ftline: '자유투 라인 덩크',
+  cradle: '크레들 덩크',
+  putback: '풋백 덩크',
 };
 export const DUNK_ACT: Record<DunkStyle, number> = {
   one: ACT.DUNK,
@@ -155,6 +205,8 @@ export const DUNK_ACT: Record<DunkStyle, number> = {
   elbow: ACT.ELBOW,
   between: ACT.BETWEEN,
   ftline: ACT.FTLINE,
+  cradle: ACT.CRADLE,
+  putback: ACT.DUNK2,
 };
 
 export const FLAG_STUN = 1;

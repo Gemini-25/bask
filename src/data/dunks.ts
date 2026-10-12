@@ -10,6 +10,8 @@ export interface DunkDef {
   flash: number;
   /** 덩크 콘테스트에서만 (경기 중엔 안 한다) */
   contestOnly?: boolean;
+  /** 그 상황에서만 (풋백은 공격 리바운드 바로 뒤) */
+  situational?: boolean;
 }
 
 export const DUNKS: DunkDef[] = [
@@ -21,6 +23,8 @@ export const DUNKS: DunkDef[] = [
   { id: 'double', need: { dunk: 66, jump: 62, agility: 60 }, flash: 2.1 },
   { id: 'elbow', need: { dunk: 76, jump: 78 }, flash: 2.7 },
   { id: 'd360', need: { dunk: 80, jump: 75, agility: 68 }, flash: 3 },
+  { id: 'cradle', need: { dunk: 72, jump: 70, agility: 60 }, flash: 2.3 },
+  { id: 'putback', need: { dunk: 55, jump: 58 }, flash: 0, situational: true },
   { id: 'between', need: { dunk: 86, jump: 82, agility: 74 }, flash: 3.4, contestOnly: true },
   { id: 'ftline', need: { dunk: 88, jump: 90 }, flash: 3.8, contestOnly: true },
 ];

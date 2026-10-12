@@ -1,5 +1,5 @@
 // 은퇴, 명예의 전당, 영구결번, 2세 (L10~L12), 업적 (K6)
-import { overall, type Player } from '../data/player';
+import { fillSense, overall, type Player } from '../data/player';
 import { ITEMS } from './money';
 import { WEEKS_PER_YEAR, type Career, type GameRecord } from './career';
 
@@ -179,7 +179,10 @@ function writeJson(key: string, v: unknown) {
 
 /** 은퇴한 선수 전부 (명예의 전당은 hof) */
 export function hallOfFame(): RetireSummary[] {
-  return readJson<RetireSummary[]>(HALL_KEY, []);
+  const list = readJson<RetireSummary[]>(HALL_KEY, []);
+  // M16 전에 오른 선수는 센스가 없다
+  fillSense(list);
+  return list;
 }
 
 export function enshrine(s: RetireSummary) {

@@ -220,6 +220,7 @@ export function applyStreet(c: Career, r: StreetResult): string[] {
   const ups: Partial<Record<RatingKey, number>> = {};
   addXp(c, 'ballHandling', 0.3, ups);
   addXp(c, 'competitive', 0.2, ups);
+  addXp(c, 'sense', 0.3, ups);
   c.fatigue = clamp(c.fatigue + 8, 0, 100);
   const notes = [`3x3 길거리 대회 ${r.finish}!`];
   if (r.finish === '우승') {

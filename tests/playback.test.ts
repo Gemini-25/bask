@@ -3,7 +3,7 @@ import { Rng } from '../src/core/rng';
 import { generateTeam, TEAM_INFOS } from '../src/data/teams';
 import { simulateGame } from '../src/sim/engine';
 import { winProb, winProbSeries } from '../src/sim/winprob';
-import { Playback } from '../src/view/playback';
+import { HL_FAST, Playback } from '../src/view/playback';
 
 function game(seed: number) {
   const rng = new Rng(seed);
@@ -27,17 +27,27 @@ describe('재생 모드 (V5)', () => {
     }
   });
 
-  it('하이라이트 모드는 구간 안에서만 재생한다', () => {
+  it('하이라이트 모드 (FM처럼): 구간 밖은 빨리 감고, 구간 안은 1배속', () => {
     const pb = new Playback(g);
-    pb.speed = 16;
+    pb.speed = 2;
     pb.setMode('highlights');
-    let bad = 0;
+    let inside = 0;
+    let fast = 0;
     while (!pb.ended) {
       pb.advance(0.05);
-      if (!pb.ended && !pb.highlights.some(([a, b]) => pb.cur >= a && pb.cur <= b + 1)) bad++;
+      if (pb.ended) break;
+      const inSeg = pb.highlights.some(([a, b]) => pb.cur >= a && pb.cur <= b);
+      if (pb.fastForward) {
+        fast++;
+        expect(pb.effSpeed).toBe(HL_FAST);
+      } else if (inSeg) {
+        inside++;
+        expect(pb.effSpeed).toBeLessThanOrEqual(1);
+      }
     }
-    expect(bad).toBe(0);
-    expect(pb.cuts).toBeGreaterThan(5);
+    expect(inside).toBeGreaterThan(50);
+    expect(fast).toBeGreaterThan(50);
+    expect(pb.cuts).toBe(0);
   });
 
   it('고른 선수만 모드는 그 선수가 코트에 있을 때만 재생한다', () => {

@@ -90,3 +90,16 @@ export function traitPop(c: Career): number {
 export function traitMood(c: Career): number {
   return hasTrait(c, 'optimist') ? 0.25 : 0;
 }
+
+/** 경기 동작 성향 (M16): 화려한 동작·힘 동작·기본기 무게 */
+export function traitStyle(c: Career): { flash: number; power: number; basic: number } {
+  const st = { flash: 1, power: 1, basic: 1 };
+  if (hasTrait(c, 'showman')) st.flash *= 1.5;
+  if (hasTrait(c, 'cool')) {
+    st.basic *= 1.5;
+    st.flash *= 0.85;
+  }
+  if (hasTrait(c, 'hothead')) st.power *= 1.5;
+  if (hasTrait(c, 'competitor')) st.power *= 1.15;
+  return st;
+}

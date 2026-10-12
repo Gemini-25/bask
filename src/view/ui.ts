@@ -1,4 +1,5 @@
 import { POSITION_LABEL } from '../data/player';
+import { LABELS, nextLabelMode, setLabelMode, type LabelMode } from './labels';
 import { grade, RATING_GROUPS } from '../data/ratings';
 import { SCHEME_LABEL } from '../sim/engine';
 import { boxScore, minutesText, type BoxScore } from '../sim/stats';
@@ -61,8 +62,15 @@ export class Ui {
     this.flow = new WinChart($('tab-flow'));
     $('modes').onclick = (e) => {
       const b = (e.target as HTMLElement).closest('button');
-      if (b) act.setMode(b.dataset.mode as PlayMode);
+      if (b?.dataset.mode) act.setMode(b.dataset.mode as PlayMode);
     };
+    // 머리 위 이름표 (번호 / 이름 / 끔)
+    $('labels').onclick = (e) => {
+      const b = (e.target as HTMLElement).closest('button');
+      if (b?.dataset.label) setLabelMode(b.dataset.label as LabelMode);
+      this.syncLabels();
+    };
+    this.syncLabels();
     $('btnPlay').onclick = () => act.togglePause();
     $('btnSkip').onclick = () => act.skipQuarter();
     $('btnEnd').onclick = () => act.toEnd();
@@ -95,6 +103,10 @@ export class Ui {
       } else if (e.key >= '1' && e.key <= '5') act.setSpeed(SPEEDS[Number(e.key) - 1]);
       else if (e.key === 'q' || e.key === 'Q') act.skipQuarter();
       else if (e.key === 'h' || e.key === 'H') act.setMode(this.mode === 'highlights' ? 'all' : 'highlights');
+      else if (e.key === 'l' || e.key === 'L') {
+        nextLabelMode();
+        this.syncLabels();
+      }
       else if (e.key === 'n' || e.key === 'N') act.newGame();
     });
   }
@@ -106,6 +118,10 @@ export class Ui {
     this.lastChart = 0;
     for (const b of $('tabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === tab);
     for (const t of ['log', 'box', 'player', 'shots', 'flow']) $(`tab-${t}`).hidden = t !== tab;
+  }
+
+  private syncLabels() {
+    for (const b of $('labels').querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.label === LABELS.mode);
   }
 
   setMode(mode: PlayMode, hint = '') {
@@ -324,7 +340,7 @@ export class Ui {
   private renderPlayerCard(onCourt: number[], energy: Uint8Array) {
     const game = this.game!;
     if (this.focus < 0) {
-      this.set('card', '<p class="hint">위에서 선수를 고르면 능력치 39개와 체력을 볼 수 있어. 테두리가 밝은 선수가 지금 코트에 있는 선수야.</p>', true);
+      this.set('card', '<p class="hint">위에서 선수를 고르면 능력치 40개와 체력을 볼 수 있어. 테두리가 밝은 선수가 지금 코트에 있는 선수야.</p>', true);
       return;
     }
     const pid = this.focus;

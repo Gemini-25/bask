@@ -12,8 +12,9 @@ import { checkAbilities } from './abilities';
 import { allStarTeam, DREAM, KOREA, koreaTeam, MAGIC, NATIONS, nationTeam, recordNational } from './allstar';
 import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
-import { traitGameBoost, traitSocial } from './personality';
+import { traitGameBoost, traitSocial, traitStyle } from './personality';
 import { comboOpts } from './combos';
+import { shotMove } from '../data/moves';
 import { afterGameFans, gainPopularity, interviewFor, type SnsPost } from './fans';
 import { leagueTeam } from './league';
 import { cheerBoost, gearBoost, has } from './money';
@@ -195,7 +196,9 @@ export function playMatch(c: Career, seed?: number): MatchSetup {
   // 감독도 콤비 짝을 나와 같이 더 쓴다
   const fv: Record<number, number> = { ...favor };
   for (const cb of combos) fv[cb.b] = (fv[cb.b] ?? 0) + COMBO_FAVOR;
-  const game = simulateGame(a, b, s, { energy, favor: fv, minMinutes, combos, ...rules });
+  // 성격에 따라 동작 성향 (쇼맨은 화려하게, 냉철은 기본기, 다혈질·승부욕은 힘으로)
+  const style = myPid >= 0 ? { [myPid]: traitStyle(c) } : {};
+  const game = simulateGame(a, b, s, { energy, favor: fv, minMinutes, combos, style, ...rules });
   return { kind: pg.kind, pro: pg.pro, special: pg.special, label: pg.label, tour: pg.tour, game, myPid, home, opponent: oppId, seed: s, started: meIndex >= 0 && meIndex < 5, pos: meIndex >= 0 ? (home ? a : b).players[meIndex].pos : null };
 }
 
@@ -333,6 +336,16 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     for (const e of g.events) {
       if (e.player !== m.myPid) continue;
       if (e.type === 'ankle') st.ankles++;
+      // 동작으로 넣은 슛 (M16 특수능력 조건)
+      if (e.type === 'made') {
+        const mv = e.move;
+        if (e.andOne) st.andOnes = (st.andOnes ?? 0) + 1;
+        if (mv && (mv === 'putback' || shotMove(mv)?.flashy)) st.moves = (st.moves ?? 0) + 1;
+        if (e.poster || mv === 'contactDunk') st.posters = (st.posters ?? 0) + 1;
+        if (mv === 'stepback' || mv === 'sidestep') st.stepbacks = (st.stepbacks ?? 0) + 1;
+        if (mv === 'fadeaway' || mv === 'turnFade' || mv === 'oneLeg') st.fades = (st.fades ?? 0) + 1;
+        if (mv === 'euro' || mv === 'scoop' || mv === 'reverseLay' || mv === 'doubleClutch') st.euros = (st.euros ?? 0) + 1;
+      }
       if ((e.type === 'made' || e.type === 'miss') && e.quarter >= 4 && e.clock < 120) {
         const before = e.type === 'made' ? (mySide === 0 ? e.score[0] - e.pts - e.score[1] : e.score[1] - e.pts - e.score[0]) : mySide === 0 ? e.score[0] - e.score[1] : e.score[1] - e.score[0];
         if (Math.abs(before) <= 5) {

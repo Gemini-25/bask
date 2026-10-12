@@ -1,4 +1,4 @@
-// 능력치 39개 (S3~S6). 키·윙스팬·체중은 측정값이라 따로 body에 둔다.
+// 능력치 40개 (S3~S6, M16에 센스). 키·윙스팬·체중은 측정값이라 따로 body에 둔다.
 export const RATING_GROUPS = [
   {
     key: 'physical',
@@ -58,6 +58,8 @@ export const RATING_GROUPS = [
       ['resilience', '멘탈 회복력'],
       ['hustle', '허슬'],
       ['teamwork', '팀워크'],
+      // M16: 창의적인 플레이와 화려한 동작이 나오는 빈도
+      ['sense', '센스'],
     ],
   },
 ] as const;

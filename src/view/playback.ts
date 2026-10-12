@@ -1,4 +1,5 @@
 import type { GameEvent, GameResult, Lineup } from '../sim/types';
+import { shotMove } from '../data/moves';
 
 export interface Frame {
   px: Float32Array; // 20
@@ -44,6 +45,10 @@ export class Playback {
   highlights: [number, number][] = [];
   /** 모드 때문에 건너뛴 횟수 (화면 전환 연출용) */
   cuts = 0;
+  /** 지금 실제로 흐르는 배속 (하이라이트 모드는 구간 밖이면 빨리 감기, 안이면 1배속) */
+  effSpeed = 1;
+  /** 하이라이트 모드에서 빨리 감는 중 */
+  fastForward = false;
 
   constructor(public game: GameResult) {
     // 버저비터와 막판 결정적인 슛은 느리게 보여준다
@@ -73,8 +78,14 @@ export class Playback {
   advance(realSeconds: number) {
     if (this.paused || this.ended) return;
     if (performance.now() < this.holdUntil) return;
-    this.slowNow = this.speed <= 8 && this.slow.some(([a, b]) => this.cur >= a && this.cur <= b);
-    const speed = this.slowNow ? Math.min(this.speed, 1) * 0.3 : this.speed;
+    // 하이라이트 모드 (FM처럼): 구간 밖은 빨리 감고, 구간 안은 1배속으로 보여준다
+    const hl = this.mode === 'highlights';
+    const inSeg = hl && this.highlights.some(([a, b]) => this.cur >= a && this.cur <= b);
+    this.fastForward = hl && !inSeg;
+    const base = hl ? (inSeg ? 1 : HL_FAST) : this.speed;
+    this.slowNow = base <= 8 && this.slow.some(([a, b]) => this.cur >= a && this.cur <= b);
+    const speed = this.slowNow ? Math.min(base, 1) * 0.3 : base;
+    this.effSpeed = speed;
     this.cur = Math.min(this.last, this.cur + realSeconds * this.ticksPerSecond * speed);
     this.applyMode();
   }
@@ -83,10 +94,9 @@ export class Playback {
   applyMode() {
     if (this.mode === 'all' || this.ended) return;
     let to = this.cur;
-    if (this.mode === 'highlights') {
-      const seg = this.highlights.find(([, b]) => b >= this.cur);
-      to = !seg ? this.last : seg[0] > this.cur ? seg[0] : this.cur;
-    } else if (this.focusPid >= 0 && !this.lineupAt(this.cur).pids.includes(this.focusPid)) {
+    // 하이라이트 모드는 건너뛰지 않고 빨리 감는다 (advance)
+    if (this.mode === 'highlights') return;
+    else if (this.focusPid >= 0 && !this.lineupAt(this.cur).pids.includes(this.focusPid)) {
       const next = this.game.lineups.find((l) => l.tick > this.cur && l.pids.includes(this.focusPid));
       to = next ? next.tick : this.last;
     }
@@ -170,6 +180,8 @@ export class Playback {
   }
 }
 
+/** 하이라이트 사이를 빨리 감는 배속 */
+export const HL_FAST = 24;
 const HL_BEFORE = 50;
 const HL_AFTER = 18;
 
@@ -180,7 +192,7 @@ export function findHighlights(game: GameResult): [number, number][] {
   for (const e of game.events) {
     const margin = Math.abs(prev[0] - prev[1]);
     const big =
-      (e.type === 'made' && (e.pts === 3 || e.shot === 'dunk' || e.alleyOop || e.andOne || e.clock < 1)) ||
+      (e.type === 'made' && (e.pts === 3 || e.shot === 'dunk' || e.alleyOop || e.andOne || e.clock < 1 || e.poster || (!!e.move && !!shotMove(e.move)?.flashy))) ||
       (e.type === 'miss' && e.blocked) ||
       (e.type === 'turnover' && (e.tov === 'stolenPass' || e.tov === 'stolenDribble')) ||
       e.type === 'ankle' ||

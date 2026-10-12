@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { COURT } from '../sim/court';
 import { ACT, DUNK_LABEL, FLAG_STUN, type GameEvent } from '../sim/types';
+import { shotMove } from '../data/moves';
+import { LABELS } from './labels';
 import { drawArena, drawCheerBanner, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type ArenaDeco, type CrowdMood } from './arena';
 import { drawBenchFigure, drawFigure, type Facing, type Kit } from './character';
 import { sx, sy, szy, VIEW_H, VIEW_W, ZH } from './iso';
 import type { Playback } from './playback';
-import { shade } from './pixel';
+import { drawDigits, shade } from './pixel';
 import { sound } from './sound';
 import { DEV } from './devflags';
 
@@ -127,6 +129,8 @@ export class CourtScene extends Phaser.Scene {
   private slowLabel!: Phaser.GameObjects.Text;
   private modeLabel!: Phaser.GameObjects.Text;
   private emotes = new Map<number, { k: Emote; until: number }>();
+  /** 이름표 (이름 모드는 선명하게 보이게 글자 객체로) */
+  private nameTags: Phaser.GameObjects.Text[] = [];
   private walkers: Walker[] = [];
   private prevLineup: number[] | null = null;
   private confetti: Confetto[] = [];
@@ -173,6 +177,35 @@ export class CourtScene extends Phaser.Scene {
       .setOrigin(1, 1)
       .setDepth(310);
     this.ui(this.modeLabel);
+  }
+
+  /** 등번호 이름표: 팀 색 바탕에 도트 숫자 */
+  private numberTag(ctx: CanvasRenderingContext2D, x: number, top: number, num: number, team: number) {
+    const t = String(num);
+    const w = t.length * 4 - 1;
+    const l = this.host.looks[team as 0 | 1];
+    const x0 = Math.round(x - w / 2) - 2;
+    ctx.fillStyle = 'rgba(11,13,18,0.85)';
+    ctx.fillRect(x0 - 1, top - 2, w + 6, 9);
+    ctx.fillStyle = l.fill;
+    ctx.fillRect(x0, top - 1, w + 4, 7);
+    drawDigits(ctx, t, x, top, l.num);
+  }
+
+  private updateNameTags(tags: ({ x: number; y: number; name: string; team: number } | null)[]) {
+    if (!this.nameTags.length && tags.every((t) => !t)) return;
+    while (this.nameTags.length < 10)
+      this.nameTags.push(this.world(this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '9px', color: '#ffffff', stroke: '#0b0d12', strokeThickness: 3, resolution: 3 }).setOrigin(0.5, 1).setDepth(150)));
+    tags.forEach((t, i) => {
+      const o = this.nameTags[i];
+      if (!t) {
+        o.setVisible(false);
+        return;
+      }
+      if (o.text !== t.name) o.setText(t.name);
+      o.setColor(shade(this.host.looks[t.team as 0 | 1].fill, 0.55));
+      o.setPosition(t.x, t.y).setVisible(true);
+    });
   }
 
   private kit(team: 0 | 1): Kit {
@@ -236,7 +269,7 @@ export class CourtScene extends Phaser.Scene {
       drawCheerBanner(ctx, this.host.looks[0].fill, deco, this.clock);
       this.drawCheerSquad(ctx, deco);
       // 내가 코트에 있으면 관중이 이름을 외친다
-      if (deco.cheer.includes('cheerChant') && pb.speed <= 4 && !pb.paused && this.clock > this.nextChant && this.host.focus >= 0 && lineup.pids.includes(this.host.focus)) {
+      if (deco.cheer.includes('cheerChant') && (pb.mode === 'highlights' ? pb.effSpeed : pb.speed) <= 4 && !pb.paused && this.clock > this.nextChant && this.host.focus >= 0 && lineup.pids.includes(this.host.focus)) {
         this.nextChant = this.clock + 7 + Math.random() * 5;
         const fans = this.fans.filter((f) => f.home && !f.front);
         const f = fans[Math.floor(Math.random() * fans.length)];
@@ -300,6 +333,8 @@ export class CourtScene extends Phaser.Scene {
     }
 
     const focusRef: { v: { x: number; y: number } | null } = { v: null };
+    const tags: ({ x: number; y: number; name: string; team: number } | null)[] = new Array(10).fill(null);
+    const labelMode = LABELS.mode;
     for (let i = 0; i < 10; i++) {
       const pid = lineup.pids[i];
       const pl = pb.game.players[pid];
@@ -372,7 +407,11 @@ export class CourtScene extends Phaser.Scene {
             }
           }
           const em = this.emotes.get(pid);
-          if (em && this.clock < em.until) drawEmote(ctx, px, top - 3, em.k, this.clock);
+          const emoting = !!em && this.clock < em.until;
+          if (emoting) drawEmote(ctx, px, top - 3, em!.k, this.clock);
+          // 머리 위 이름표: 등번호는 도트 숫자, 이름은 글자 객체 (아래에서)
+          if (labelMode === 'number' && !emoting) this.numberTag(ctx, px, top - 8, pl.number, team);
+          if (labelMode === 'name') tags[i] = { x: px, y: top - (emoting ? 13 : 2), name: pl.name, team };
           if (DEV.stamina) {
             ctx.font = '7px monospace';
             ctx.textAlign = 'center';
@@ -447,9 +486,12 @@ export class CourtScene extends Phaser.Scene {
       this.confetti = this.confetti.filter((c) => c.life > 0 && c.y < VIEW_H);
     }
 
+    this.updateNameTags(tags);
     if (focusRef.v) {
       const { x, y } = focusRef.v;
-      const yy = y - 4 - (Math.floor(this.clock * 4) % 2);
+      // 이름표가 있으면 그 위에
+      const lift = labelMode === 'number' ? 8 : labelMode === 'name' ? 12 : 0;
+      const yy = y - 4 - lift - (Math.floor(this.clock * 4) % 2);
       ctx.fillStyle = '#1b1f2a';
       ctx.fillRect(x - 3, yy - 1, 7, 1);
       ctx.fillStyle = '#ffd23f';
@@ -467,7 +509,7 @@ export class CourtScene extends Phaser.Scene {
 
     // 이벤트 연출: 크게 건너뛴 경우엔 생략
     const jump = pb.cur - this.lastTick;
-    if (jump > 0 && jump < 30) for (const ev of pb.eventsBetween(this.lastTick, pb.cur)) this.popEvent(ev, pb.speed);
+    if (jump > 0 && jump < 30) for (const ev of pb.eventsBetween(this.lastTick, pb.cur)) this.popEvent(ev, pb.mode === 'highlights' ? pb.effSpeed : pb.speed);
     if (jump < 0 || jump >= 30) {
       this.banner.setVisible(false);
       this.resetZoom();
@@ -488,7 +530,7 @@ export class CourtScene extends Phaser.Scene {
     let mode = '';
     if (pb.mode === 'highlights') {
       const i = pb.highlightIndex();
-      mode = `HIGHLIGHT ${i || '-'}/${pb.highlights.length}`;
+      mode = pb.fastForward ? `▶▶ 빨리 감기 · 다음 하이라이트 ${pb.highlights.filter(([, b]) => b < pb.cur).length + 1}/${pb.highlights.length}` : `HIGHLIGHT ${i || '-'}/${pb.highlights.length}`;
     } else if (pb.mode === 'focus' && pb.focusPid >= 0) mode = `FOLLOW #${pb.game.players[pb.focusPid].number}`;
     if (this.modeLabel.text !== mode) this.modeLabel.setText(mode);
 
@@ -662,8 +704,11 @@ export class CourtScene extends Phaser.Scene {
         const p = at(e.player);
         const col = shade(looks[e.team].fill, 0.4);
         const dunkName = e.dunk && e.dunk !== 'one' ? `${DUNK_LABEL[e.dunk]}!` : '덩크!';
-        const label = e.combo ? '콤비!' : e.alleyOop ? '앨리웁!' : e.andOne ? '앤드원!' : e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2';
-        const big = e.combo || e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3;
+        // 슛 동작 (M16): 흔한 캐치앤슛·풀업은 빼고 이름을 띄운다
+        const mv = e.move && e.move !== 'catchShoot' && e.move !== 'pullup' ? (e.move === 'putback' ? '풋백 덩크!' : `${shotMove(e.move)?.label ?? ''}!`) : null;
+        const flashy = !!e.move && (e.move === 'putback' || !!shotMove(e.move)?.flashy);
+        const label = e.combo ? '콤비!' : e.poster ? '인유어페이스!!' : e.alleyOop ? '앨리웁!' : e.andOne ? (mv ? `${mv.replace('!', '')} 앤드원!` : '앤드원!') : mv ?? (e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2');
+        const big = e.combo || e.poster || e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3 || flashy;
         if (big) this.emote(e.player, 'note');
         if (loud) sound.play(e.shot === 'dunk' ? 'dunk' : 'swish');
         if (loud && big && calm) sound.play('cheer');
@@ -673,7 +718,7 @@ export class CourtScene extends Phaser.Scene {
         this.cheer(e.team as 0 | 1, big ? 1 : 0.6);
         if (e.team === 0 && e.pts === 3 && this.mood.wave < 0 && Math.random() < 0.25) this.mood.wave = 0;
         if ((e.shot === 'dunk' || e.alleyOop) && calm) {
-          this.cameras.main.shake(140, 0.006);
+          this.cameras.main.shake(e.poster ? 260 : 140, e.poster ? 0.012 : 0.006);
           if (speed <= 2) this.zoomAt(sx(COURT.length / 2 + (side === 0 ? -12.4 : 12.4)), szy(7.5, 2));
         }
         if (big) this.host.onBigPlay?.(e);
@@ -682,7 +727,7 @@ export class CourtScene extends Phaser.Scene {
         const clutch = e.quarter >= 4 && e.clock < 180 && Math.abs(e.score[0] - e.score[1]) <= 5;
         const buzzer = e.clock < 0.6;
         const mine = e.player === this.host.focus && (e.shot === 'dunk' || e.pts === 3);
-        const worth = e.alleyOop || (buzzer && e.pts >= 2) || (clutch && big) || mine || (e.combo && (e.player === this.host.focus || e.other === this.host.focus));
+        const worth = e.alleyOop || e.poster || (buzzer && e.pts >= 2) || (clutch && big) || mine || (flashy && e.player === this.host.focus) || (e.combo && (e.player === this.host.focus || e.other === this.host.focus));
         if (worth && calm && e.tick - this.lastCutIn > 300) {
           this.lastCutIn = e.tick;
           this.cutIn(e, buzzer ? '버저비터!' : label.replace('+2', '득점!'));

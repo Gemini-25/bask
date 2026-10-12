@@ -1,6 +1,7 @@
 // 저장 (K4, K5): 브라우저 저장 슬롯 3개 + 세이브 파일 내보내기·불러오기.
 // 버전 번호를 넣어서 나중 버전에서도 예전 세이브를 읽을 수 있게 한다.
 import { Rng } from '../core/rng';
+import { fillSense } from '../data/player';
 import { dateText, SAVE_VERSION, setCalendar, type Career } from './career';
 import { dunkList } from '../data/dunks';
 import { emptyStats, startAbilities } from './abilities';
@@ -175,6 +176,17 @@ export function migrate(raw: unknown): Career {
     c.streetPending ??= false;
     c.romance ??= null;
     c.settings ??= { romance: true, minigame: true };
+  }
+  if (c.v < 7) {
+    // v6 → v7: 능력치 '센스' (M16), 동작 기록
+    fillSense(c);
+    const st = c.stats;
+    st.moves ??= 0;
+    st.posters ??= 0;
+    st.stepbacks ??= 0;
+    st.fades ??= 0;
+    st.euros ??= 0;
+    st.andOnes ??= 0;
   }
   c.v = SAVE_VERSION;
   return c;

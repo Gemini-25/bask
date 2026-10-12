@@ -124,7 +124,7 @@ function setMode(m: PlayMode) {
   mode = m;
   const pb = host.pb;
   if (pb) pb.setMode(m);
-  const hint = m === 'highlights' && pb ? `${pb.highlights.length}개 장면` : m === 'focus' && pb ? `#${pb.game.players[host.focus].number} ${pb.game.players[host.focus].name} 따라가기` : '';
+  const hint = m === 'highlights' && pb ? `${pb.highlights.length}개 장면 · 나머지는 빨리 감기` : m === 'focus' && pb ? `#${pb.game.players[host.focus].number} ${pb.game.players[host.focus].name} 따라가기` : '';
   ui.setMode(m, hint);
 }
 
