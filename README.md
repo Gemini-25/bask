@@ -9,3 +9,4 @@
 ## 기획
 
 - [기획 질문지](docs/planning/01-questions.md): 방향을 정하기 위한 질문 133개와 추천 답
+- [기획 결정 v1](docs/planning/02-decisions.md): 질문지 답변 정리, 해석, 열린 질문
