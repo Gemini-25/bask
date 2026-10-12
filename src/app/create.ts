@@ -20,7 +20,7 @@ const LOOK_ROWS: { k: keyof Look; label: string; n: number; names?: string[]; co
 ];
 
 function stars(strength: number) {
-  const n = Math.max(1, Math.min(5, Math.round((strength + 20) / 2)));
+  const n = Math.max(1, Math.min(5, Math.round(strength + 17)));
   return '★'.repeat(n) + '☆'.repeat(5 - n);
 }
 

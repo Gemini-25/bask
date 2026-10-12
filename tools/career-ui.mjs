@@ -27,12 +27,34 @@ await page.click('#mbox [data-close]');
 await page.waitForTimeout(300);
 await page.screenshot({ path: `${dir}/c4-home.png` });
 const actions = ['team', 'solo', 'weight', 'team'];
+let shotEvent = false;
+/** 모달을 끝까지 넘긴다: 이벤트는 첫 선택지, 경기 전 모달이 나오면 멈춘다 */
+async function drain() {
+  for (let k = 0; k < 8; k++) {
+    await page.waitForTimeout(250);
+    if (await page.$('#modal[hidden]')) return;
+    if (await page.$('#pgWatch')) return;
+    const ch = await page.$('#mbox .choice');
+    if (ch) {
+      if (!shotEvent) {
+        await page.screenshot({ path: `${dir}/c5b-event.png` });
+        shotEvent = true;
+      }
+      await ch.click();
+      continue;
+    }
+    const close = await page.$('#mbox [data-close]');
+    if (close) await close.click();
+  }
+}
 for (let i = 0; i < 4; i++) {
-  await page.click(`[data-do=${actions[i]}]`);
-  await page.waitForTimeout(600);
+  // 다쳤으면 할 수 있는 것 중 첫 번째
+  const want = await page.$(`[data-do=${actions[i]}]:not([disabled])`);
+  if (want) await want.click();
+  else await page.click('[data-do]:not([disabled])');
+  await page.waitForTimeout(1600);
   if (i === 1) await page.screenshot({ path: `${dir}/c5-week.png` });
-  await page.click('#mbox [data-close]');
-  await page.waitForTimeout(300);
+  await drain();
 }
 await page.screenshot({ path: `${dir}/c6-pregame.png` });
 await page.click('#pgWatch');
@@ -55,6 +77,11 @@ await page.click('[data-tab=team]');
 await page.screenshot({ path: `${dir}/c10-team.png` });
 await page.click('[data-tab=records]');
 await page.screenshot({ path: `${dir}/c11-records.png` });
+await page.click('[data-tab=schedule]');
+await page.screenshot({ path: `${dir}/c11b-schedule.png`, fullPage: true });
+await page.click('[data-tab=abilities]');
+await page.screenshot({ path: `${dir}/c11c-abilities.png` });
+await page.click('[data-tab=week]');
 const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-a=export]')]);
 const savePath = `${dir}/save.json`;
 await dl.saveAs(savePath);

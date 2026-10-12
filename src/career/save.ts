@@ -1,6 +1,9 @@
 // 저장 (K4, K5): 브라우저 저장 슬롯 3개 + 세이브 파일 내보내기·불러오기.
 // 버전 번호를 넣어서 나중 버전에서도 예전 세이브를 읽을 수 있게 한다.
+import { Rng } from '../core/rng';
 import { dateText, SAVE_VERSION, type Career } from './career';
+import { emptyStats, startAbilities } from './abilities';
+import { coachName, createMentor, createRival } from './people';
 import { schoolById } from './schools';
 
 export const SLOTS = 3;
@@ -92,11 +95,29 @@ export function migrate(raw: unknown): Career {
   const c = raw as Career;
   if (!c || typeof c !== 'object' || !c.me || typeof c.week !== 'number') throw new Error('세이브 내용이 망가졌어');
   if (c.v > SAVE_VERSION) throw new Error(`더 새로운 버전(v${c.v})의 세이브야. 게임 파일을 최신으로 바꿔줘`);
-  // v1이 첫 버전. 다음 버전부터 여기에 변환을 더한다
   c.xp ??= {};
   c.counts ??= {};
   c.log ??= [];
   c.games ??= [];
+  if (c.v < 2) {
+    // v1 → v2: 공식 대회, 감독 신뢰도, 친밀도
+    const old = c.pendingGame as unknown as string | null;
+    c.pendingGame = typeof old === 'string' ? { kind: 'practice', opponent: old, label: '연습경기', home: c.games.length % 2 === 0 } : null;
+    for (const g of c.games) {
+      g.kind ??= 'practice';
+      g.label ??= '연습경기';
+    }
+    c.season ??= null;
+    c.trust ??= 40;
+    c.friends ??= Object.fromEntries(c.roster.map((e) => [e.player.id, 25]));
+    c.coach ??= coachName(c.seed);
+    c.mentor ??= createMentor(new Rng(c.seed ^ 77));
+    c.rival ??= createRival(c, new Rng(c.seed ^ 99));
+    c.seenEvents ??= {};
+    c.pendingEvent ??= null;
+    c.stats ??= emptyStats();
+    c.me.abilities ??= startAbilities(c.background);
+  }
   c.v = SAVE_VERSION;
   return c;
 }

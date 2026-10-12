@@ -6,12 +6,14 @@ import { baseRatings, HEIGHT, overall, type Look, type Player, type Position } f
 import { RATING_GROUPS, RATING_KEYS, RATING_LABEL, type RatingKey, type Ratings } from '../data/ratings';
 import { ACT } from '../sim/types';
 import { backgroundById, GROWTH_TYPES, type BackgroundId, type GrowthType } from './backgrounds';
-import { generateSchoolRoster, hsHeightAdj, schoolById, SCHOOLS, type RosterEntry } from './schools';
+import { generateSchoolRoster, hsHeightAdj, schoolById, type RosterEntry } from './schools';
+import { coachName, createMentor, createRival, type Mentor, type Rival } from './people';
+import { emptyStats, startAbilities, type CareerStats } from './abilities';
+import type { PendingEvent } from './events';
+import type { Season } from './season';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const WEEKS_PER_YEAR = 48;
-/** 이 주마다 연습경기 (4주 = 한 달) */
-export const GAME_EVERY = 4;
 export const MAX_RATING = 99;
 /** 선수 만들 때 자유 포인트로 올릴 수 있는 최대치 */
 export const CREATE_CAP = 60;
@@ -68,8 +70,20 @@ export interface GameLine {
   fta: number;
 }
 
+export interface PendingGame {
+  kind: 'practice' | 'official';
+  opponent: string;
+  /** 공식전이면 대회 id */
+  tour?: string;
+  /** '춘계 연맹전 4강' 같은 이름 */
+  label: string;
+  home: boolean;
+}
+
 export interface GameRecord {
   week: number;
+  kind: 'practice' | 'official';
+  label: string;
   opponent: string;
   home: boolean;
   score: [number, number];
@@ -113,8 +127,23 @@ export interface Career {
   roster: RosterEntry[];
   log: WeekLog[];
   games: GameRecord[];
-  /** 이번 주가 끝나고 치를 경기가 있으면 상대 학교 id */
-  pendingGame: string | null;
+  /** 이번 주가 끝나고 치를 경기 */
+  pendingGame: PendingGame | null;
+  /** 올해 대회 일정 (고교 3년 동안) */
+  season: Season | null;
+  /** 감독 신뢰도 0~100 (R2). 공식전 출전 순서와 교체에 반영 */
+  trust: number;
+  /** 팀원 친밀도 0~100 (R1), 선수 id → 값 */
+  friends: Record<string, number>;
+  coach: string;
+  rival: Rival | null;
+  mentor: Mentor;
+  /** 이벤트 id → 마지막으로 일어난 주 */
+  seenEvents: Record<string, number>;
+  /** 아직 고르지 않은 이벤트 */
+  pendingEvent: PendingEvent | null;
+  /** 커리어 통산 기록 (특수능력 조건) */
+  stats: CareerStats;
   counts: Partial<Record<ActionId, number>>;
 }
 
@@ -132,10 +161,6 @@ export function dateText(week: number): string {
   return `${d.grade}학년 ${d.month}월 ${d.wk}주`;
 }
 
-/** 연습경기까지 남은 주 (이번 주 포함) */
-export function weeksToGame(week: number) {
-  return GAME_EVERY - (week % GAME_EVERY);
-}
 
 // ───────────── 선수 만들기 ─────────────
 
@@ -213,11 +238,11 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
   const rng = new Rng(seed);
   const { r: base, body, bg } = creationBase(spec);
   const { r } = applyAlloc(base, spec.alloc, bg.freePoints);
-  const me: Player = { id: 'me', name: spec.name.trim() || '이름없음', number: spec.number, pos: spec.prefPos, body, r, look: spec.look };
+  const me: Player = { id: 'me', name: spec.name.trim() || '이름없음', number: spec.number, pos: spec.prefPos, body, r, look: spec.look, abilities: startAbilities(spec.background) };
   const finalHeight = Math.max(body.heightCm, Math.round(body.heightCm + bg.growth + rng.normal(0, 2)));
   const school = schoolById(spec.school);
   const roster = generateSchoolRoster(rng.fork(7), school, spec.gender, [spec.number]);
-  return {
+  const c: Career = {
     v: SAVE_VERSION,
     seed,
     rng: rng.state,
@@ -240,8 +265,20 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     log: [],
     games: [],
     pendingGame: null,
+    season: null,
+    trust: 40,
+    friends: Object.fromEntries(roster.map((e) => [e.player.id, e.grade === 1 ? 35 : 20])),
+    coach: coachName(seed),
+    rival: null,
+    mentor: createMentor(rng.fork(13)),
+    seenEvents: {},
+    pendingEvent: null,
+    stats: emptyStats(),
     counts: {},
   };
+  c.rival = createRival(c, rng.fork(11));
+  c.rng = rng.state;
+  return c;
 }
 
 /** 예상 최종 키는 ±2cm로 보여준다 (S7: 숨기는 건 없지만 정확히는 모른다) */
@@ -255,7 +292,7 @@ export function myOverall(c: Career, pos: Position = c.prefPos) {
 
 // ───────────── 주간 행동 (T2) ─────────────
 
-export type ActionId = 'team' | 'solo' | 'weight' | 'video' | 'street' | 'friends' | 'rest' | 'rehab';
+export type ActionId = 'team' | 'solo' | 'mentor' | 'weight' | 'video' | 'street' | 'friends' | 'rest' | 'rehab';
 export type FocusId = 'shoot' | 'drive' | 'post' | 'defense' | 'pass';
 
 export interface ActionDef {
@@ -273,18 +310,26 @@ export interface ActionDef {
   injuredOnly?: boolean;
   /** 훈련 장면에서 보여줄 동작 */
   pose: number;
+  /** 감독 신뢰도 변화 */
+  trust: number;
 }
 
 export const ACTIONS: ActionDef[] = [
-  { id: 'team', label: '팀 훈련', desc: '감독님 지도 아래 팀 전술 훈련. 골고루 오른다', pts: { P: 2, T: 5, M: 2 }, fatigue: 13, mood: 0, injuredOk: false, pose: ACT.DRIBBLE },
-  { id: 'solo', label: '개인 훈련', desc: '분야 하나를 집중 훈련. 기술 포인트 + 그 분야 경험치', pts: { P: 1, T: 7, M: 1 }, fatigue: 15, mood: -0.1, injuredOk: false, pose: ACT.SHOOT },
-  { id: 'weight', label: '웨이트', desc: '근력·점프·지구력을 키운다. 많이 지친다', pts: { P: 8, T: 0, M: 1 }, fatigue: 17, mood: -0.1, injuredOk: false, pose: ACT.STANCE },
-  { id: 'video', label: '영상 분석', desc: '프로 경기와 내 경기를 돌려 본다. 정신 포인트, 덜 지친다', pts: { P: 0, T: 1, M: 6 }, fatigue: -2, mood: 0, injuredOk: true, pose: ACT.IDLE },
-  { id: 'street', label: '길거리 3x3', desc: '공원 코트 내기 농구. 가끔 고수를 만난다', pts: { P: 2, T: 4, M: 2 }, fatigue: 11, mood: 0.25, injuredOk: false, pose: ACT.DRIBBLE },
-  { id: 'friends', label: '친구와 놀기', desc: '농구는 잠깐 잊고. 피로가 풀리고 기분이 좋아진다', pts: { P: 0, T: 0, M: 2 }, fatigue: -12, mood: 0.7, injuredOk: true, pose: ACT.CELEBRATE },
-  { id: 'rest', label: '휴식', desc: '푹 쉰다. 피로가 많이 풀린다', pts: { P: 0, T: 0, M: 0 }, fatigue: -26, mood: 0.45, injuredOk: true, pose: ACT.IDLE },
-  { id: 'rehab', label: '재활', desc: '부상 회복이 두 배 빨라진다', pts: { P: 1, T: 0, M: 1 }, fatigue: -16, mood: 0.1, injuredOk: true, injuredOnly: true, pose: ACT.STANCE },
+  { id: 'team', label: '팀 훈련', desc: '감독님 지도 아래 팀 전술 훈련. 골고루 오르고, 감독 신뢰와 팀원 친밀도가 오른다', pts: { P: 2, T: 5, M: 2 }, fatigue: 13, mood: 0, injuredOk: false, pose: ACT.DRIBBLE, trust: 1 },
+  { id: 'solo', label: '개인 훈련', desc: '분야 하나를 집중 훈련. 기술 포인트 + 그 분야 경험치', pts: { P: 1, T: 7, M: 1 }, fatigue: 15, mood: -0.1, injuredOk: false, pose: ACT.SHOOT, trust: 0.3 },
+  { id: 'mentor', label: '은사 특훈', desc: '전설에게 받는 특별 훈련. 고른 분야 경험치가 크게 오른다. 한 달에 한 번', pts: { P: 2, T: 9, M: 3 }, fatigue: 18, mood: 0, injuredOk: false, pose: ACT.SHOOT, trust: 0.3 },
+  { id: 'weight', label: '웨이트', desc: '근력·점프·지구력을 키운다. 많이 지친다', pts: { P: 8, T: 0, M: 1 }, fatigue: 17, mood: -0.1, injuredOk: false, pose: ACT.STANCE, trust: 0.3 },
+  { id: 'video', label: '영상 분석', desc: '프로 경기와 내 경기를 돌려 본다. 정신 포인트, 덜 지친다', pts: { P: 0, T: 1, M: 6 }, fatigue: -2, mood: 0, injuredOk: true, pose: ACT.IDLE, trust: 0.5 },
+  { id: 'street', label: '길거리 3x3', desc: '공원 코트 내기 농구. 가끔 고수를 만난다. 감독님은 별로 안 좋아한다', pts: { P: 2, T: 4, M: 2 }, fatigue: 11, mood: 0.25, injuredOk: false, pose: ACT.DRIBBLE, trust: -0.4 },
+  { id: 'friends', label: '친구와 놀기', desc: '팀원들과 논다. 피로가 풀리고 기분과 친밀도가 오른다', pts: { P: 0, T: 0, M: 2 }, fatigue: -12, mood: 0.7, injuredOk: true, pose: ACT.CELEBRATE, trust: 0 },
+  { id: 'rest', label: '휴식', desc: '푹 쉰다. 피로가 많이 풀린다', pts: { P: 0, T: 0, M: 0 }, fatigue: -26, mood: 0.45, injuredOk: true, pose: ACT.IDLE, trust: 0 },
+  { id: 'rehab', label: '재활', desc: '부상 회복이 두 배 빨라진다', pts: { P: 1, T: 0, M: 1 }, fatigue: -16, mood: 0.1, injuredOk: true, injuredOnly: true, pose: ACT.STANCE, trust: 0.2 },
 ];
+
+/** 은사 특훈은 만난 뒤 4주에 한 번 */
+export function mentorReady(c: Career) {
+  return c.mentor.met && c.week - c.mentor.last >= 4;
+}
 
 export function actionById(id: ActionId): ActionDef {
   return ACTIONS.find((a) => a.id === id)!;
@@ -329,10 +374,11 @@ export function injuryRisk(c: Career, a: ActionDef): number {
   if (a.fatigue <= 0) return 0;
   const f = clamp(c.fatigue + fatigueGain(c, a) * 0.5, 0, 100);
   const p = 0.004 + Math.max(0, f - 45) ** 2 * 0.00012;
-  return clamp(p * (1.2 - c.me.r.recovery / 250), 0, 0.4);
+  return clamp(p * (1.2 - c.me.r.recovery / 250) * (c.me.abilities?.glass ? 1.6 : 1), 0, 0.4);
 }
 
 export function canDo(c: Career, a: ActionDef): boolean {
+  if (a.id === 'mentor' && !mentorReady(c)) return false;
   if (c.injury) return a.injuredOk;
   return !a.injuredOnly;
 }
@@ -371,8 +417,10 @@ export interface WeekResult {
   healed: boolean;
   grew: number;
   notes: string[];
-  /** 이번 주 끝에 연습경기가 있으면 상대 학교 */
-  game: string | null;
+  /** 이번 주 주말 경기 (turn.ts에서 채운다) */
+  game: PendingGame | null;
+  /** 이번 주 이벤트 */
+  event: PendingEvent | null;
 }
 
 /** 한 주를 보낸다 */
@@ -392,10 +440,43 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   const gained: Points = { P: 0, T: 0, M: 0 };
   for (const k of ['P', 'T', 'M'] as const) gained[k] = stoch(rng, a.pts[k] * mult * rng.range(0.85, 1.15));
 
-  // 개인 훈련: 고른 분야 경험치
-  if (id === 'solo') {
+  // 개인 훈련·은사 특훈: 고른 분야 경험치
+  if (id === 'solo' || id === 'mentor') {
     const f = FOCUS.find((x) => x.id === focus) ?? FOCUS[0];
-    for (const k of f.keys) addXp(c, k, (0.9 / f.keys.length) * CONDITION_MULT[c.condition] * rng.range(0.8, 1.2), ups);
+    const big = id === 'mentor' ? 2.2 : 1;
+    for (const k of f.keys) addXp(c, k, ((0.9 * big) / f.keys.length) * CONDITION_MULT[c.condition] * rng.range(0.8, 1.2), ups);
+    if (id === 'mentor') {
+      c.mentor.last = c.week;
+      notes.push(`${c.mentor.name} 선생님: "${rng.pick(['기본이 전부다.', '몸이 기억할 때까지.', '좋아, 그 감각이야.', '오늘은 여기까지. 쉬는 것도 훈련이다.'])}"`);
+    }
+  }
+  // 길거리에서 은사를 만난다
+  if (id === 'street' && !c.mentor.met && (c.counts.street ?? 0) >= 2 && rng.chance(0.3)) {
+    c.mentor.met = true;
+    c.mentor.last = c.week - 4;
+    notes.push(`공원 코트에서 은퇴한 전설 ${c.mentor.name}을(를) 만났다! 이제 '은사 특훈'을 할 수 있다.`);
+  }
+  // 감독 신뢰도와 친밀도
+  let dTrust = a.trust;
+  if (id === 'rest' && c.fatigue < 25) dTrust -= 0.3;
+  c.trust = clamp(c.trust + dTrust, 0, 100);
+  const mates = c.roster.map((e) => e.player.id);
+  if (id === 'team') {
+    for (const pid of mates) c.friends[pid] = clamp((c.friends[pid] ?? 20) + 0.6, 0, 100);
+    for (let i = 0; i < 2; i++) {
+      const pid = rng.pick(mates);
+      c.friends[pid] = clamp(c.friends[pid] + 1.5, 0, 100);
+    }
+  } else if (id === 'friends' && mates.length) {
+    const picked: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const pool = mates.filter((m) => !picked.includes(m));
+      const pid = pool[rng.weighted(pool.map((m) => 30 + (c.friends[m] ?? 20)))];
+      picked.push(pid);
+      c.friends[pid] = clamp((c.friends[pid] ?? 20) + 7, 0, 100);
+    }
+    const names = picked.map((pid) => c.roster.find((e) => e.player.id === pid)!.player.name);
+    notes.push(`${names.join(', ')}와(과) ${rng.pick(['PC방에 갔다', '떡볶이를 먹었다', '노래방에 갔다', '영화를 봤다', '한강에서 자전거를 탔다'])}.`);
   }
   // 길거리: 가끔 고수에게 배운다
   if (id === 'street' && rng.chance(0.18)) {
@@ -426,6 +507,8 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
     const weeks = rng.int(inj.weeks[0], inj.weeks[1]);
     injured = { name: inj.name, weeks, total: weeks };
     c.injury = injured;
+    c.stats.injuries++;
+    c.stats.lastInjury = c.week;
     notes.push(`훈련 중 ${inj.name}! ${weeks}주 동안 쉬어야 한다.`);
   }
 
@@ -459,20 +542,9 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   c.log.push({ week: c.week, action: id, focus, gained, notes: notes.slice() });
   if (c.log.length > 80) c.log.shift();
 
-  // 다음 주로. 한 달이 끝나면 연습경기
-  const game = (c.week + 1) % GAME_EVERY === 0 ? pickOpponent(c, rng) : null;
-  c.pendingGame = game;
   c.week++;
   c.rng = rng.state;
-  return { action: a, focus, gained, ups, xpGain, fatigueBefore, fatigueAfter: c.fatigue, conditionBefore, conditionAfter: c.condition, injured, healed, grew, notes, game };
-}
-
-function pickOpponent(c: Career, rng: Rng): string {
-  const others = SCHOOLS.filter((s) => s.id !== c.school);
-  // 최근에 붙은 팀은 피한다
-  const recent = new Set(c.games.slice(-3).map((g) => g.opponent));
-  const pool = others.filter((s) => !recent.has(s.id));
-  return rng.pick(pool.length ? pool : others).id;
+  return { action: a, focus, gained, ups, xpGain, fatigueBefore, fatigueAfter: c.fatigue, conditionBefore, conditionAfter: c.condition, injured, healed, grew, notes, game: null, event: null };
 }
 
 // ───────────── 능력치 투자 ─────────────

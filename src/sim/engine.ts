@@ -7,6 +7,7 @@
 
 import { clamp, dist, lerp, segDist, sigmoid } from '../core/math';
 import { Rng } from '../core/rng';
+import { FX, lv } from '../data/abilities';
 import { overall, POS_GROUP, type Player } from '../data/player';
 import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
@@ -267,6 +268,8 @@ class GameSim {
   private clockRunning = false;
   private elapsed = 0;
   private favor: Record<number, number> = {};
+  /** 연속 성공 (인 더 존) */
+  private streak: number[] = [];
   private minMin: Record<number, number> = {};
   private score: [number, number] = [0, 0];
   private arrow: Side = 0;
@@ -348,6 +351,7 @@ class GameSim {
     const n = this.players.length;
     this.energy = this.players.map((_, k) => opts.energy?.[k] ?? 100);
     this.favor = opts.favor ?? {};
+    this.streak = this.players.map(() => 0);
     this.minMin = opts.minMinutes ?? {};
     this.pf = new Array<number>(n).fill(0);
     this.tech = new Array<number>(n).fill(0);
@@ -1062,7 +1066,8 @@ class GameSim {
         const r = s.pl.r;
         let p = 0.765 + (r.freeThrow - 50) * 0.0055;
         const clutch = this.quarter >= 4 && this.clock < 120 && Math.abs(this.score[0] - this.score[1]) <= 6;
-        if (clutch) p += (r.composure - 50) * 0.002;
+        if (clutch) p += (r.composure - 50) * 0.002 + lv(s.pl, 'clutch') * 0.01 - (lv(s.pl, 'chicken') ? 0.05 : 0);
+        if (lv(s.pl, 'ftPhobia')) p -= 0.12;
         p *= 0.94 + 0.06 * this.fit(s);
         ph.made = this.rng.chance(clamp(p, 0.3, 0.97));
         this.jumpFx(s, 0.08, 0.5, ACT.SHOOT);
@@ -1365,7 +1370,7 @@ class GameSim {
       // 손을 뻗다가 파울 (반칙이 많으면 조심한다)
       let lamF = 0.012 + ((60 - d.pl.r.iq) / 100) * 0.012 + (this.act.k === 'drive' ? 0.03 : 0) + (trapped ? 0.04 : 0);
       lamF *= 1.3 - (d.pl.r.focus / 100) * 0.5;
-      lamF *= this.foulCare(d.pid);
+      lamF *= this.foulCare(d.pid) * (lv(d.pl, 'foulProne') ? 1.4 : 1);
       if (this.rng.chance(Math.max(0, lamF) * DT)) {
         this.callFoul(d.i, h.i, 'reach');
         return;
@@ -1574,6 +1579,24 @@ class GameSim {
     return (si.kind === 'dunk' || si.kind === 'layup' ? 1 : this.hot[p.pid]) * tired;
   }
 
+  /** 4쿼터·연장 마지막 2분, 5점 차 이내 */
+  private clutchTime() {
+    return this.quarter >= 4 && this.clock < 120 && Math.abs(this.score[0] - this.score[1]) <= 5;
+  }
+
+  /** 특수능력이 슛 성공률에 주는 배율 */
+  private abilityShot(h: SP): number {
+    let m = 1;
+    if (this.clutchTime()) {
+      m *= 1 + FX.clutch[lv(h.pl, 'clutch')];
+      if (lv(h.pl, 'chicken')) m *= 0.94;
+    }
+    if (this.streak[h.pid] >= 3) m *= 1 + FX.zone[lv(h.pl, 'zone')];
+    let mood = 0;
+    for (const t of this.mates(h.team)) if (t !== h) mood = Math.max(mood, FX.moodMaker[lv(t.pl, 'moodMaker')]);
+    return m * (1 + mood);
+  }
+
   /** 슛 견제 정도 (0 = 완전 노마크, 1 = 손이 얼굴 앞) */
   private contest(s: SP, look = 0): { c: number; blocker: number; c1: number } {
     const H = this.hoop(s.team);
@@ -1779,7 +1802,7 @@ class GameSim {
     if (dist(d.x, d.y, h.x, h.y) < 1.8 && d.stun <= 0) {
       const r = h.pl.r;
       const edge = r.ballHandling + 0.5 * r.speed + 0.5 * r.accel - d.pl.r.perimeterD - d.pl.r.agility;
-      const p = 0.05 * sigmoid((edge - 10) / 8);
+      const p = 0.05 * sigmoid((edge - 10) / 8) * FX.ankle[lv(h.pl, 'ankle')];
       if (this.rng.chance(p)) {
         d.stun = 0.7;
         this.nextThink = this.t + 0.15;
@@ -1808,7 +1831,12 @@ class GameSim {
     const { c, blocker, c1 } = this.contest(h);
     let si = shotInfo(h.pl, L.u, L.v, ph.post, c);
     if (ph.alley && si.dist < 2.6) si = { ...si, kind: 'dunk', pOpen: 0.86 + (h.pl.r.dunk - 50) * 0.003 };
-    let p = si.pOpen * contestFactor(si.kind, c) * this.form(h, si);
+    // 특수능력: 퀵 릴리즈는 견제를 덜 받고, 철벽 수비는 더 준다
+    const dd0 = blocker >= 0 ? this.P[blocker] : this.defenderOf(h.i);
+    let cAdj = c;
+    if (si.kind !== 'dunk' && si.kind !== 'layup') cAdj *= 1 - FX.quickRelease[lv(h.pl, 'quickRelease')];
+    cAdj = Math.min(1, cAdj * (1 + FX.lockdown[lv(dd0.pl, 'lockdown')]));
+    let p = si.pOpen * contestFactor(si.kind, cAdj) * this.form(h, si) * this.abilityShot(h);
     const assist = this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 3.2 ? this.lastPass.from : -1;
     const fast = this.possLive && this.t - this.possStart < 7;
     const wasDrive = this.lastDrive;
@@ -1819,7 +1847,7 @@ class GameSim {
     this.ball.holder = -1;
     this.misc = null;
     const near = si.kind === 'dunk' || si.kind === 'layup' || si.kind === 'hook' || si.kind === 'floater';
-    const d = blocker >= 0 ? this.P[blocker] : this.defenderOf(h.i);
+    const d = dd0;
     if (c1 > 0.3 && dist(d.x, d.y, h.x, h.y) < 2.5) this.jumpFx(d, 0.25 + d.pl.r.jump / 400, 0.45, ACT.CONTEST);
 
     // 차징: 돌파하다 자리 잡은 도움 수비와 부딪힌다
@@ -1836,7 +1864,7 @@ class GameSim {
     let pFoul = near ? c1 * (0.23 + ((h.pl.r.strength + h.pl.r.layup) / 200) * 0.15) : c1 * 0.028;
     if (wasDrive) pFoul *= 1.25;
     pFoul *= 1.25 - ((d.pl.r.iq + d.pl.r.focus) / 400) * 1.0;
-    pFoul *= this.foulCare(d.pid);
+    pFoul *= this.foulCare(d.pid) * (lv(d.pl, 'foulProne') ? 1.4 : 1);
     const fouled = this.rng.chance(clamp(pFoul, 0, 0.45));
     if (fouled) p *= near ? 0.55 : 0.35;
 
@@ -1893,6 +1921,7 @@ class GameSim {
     const si = ph.info;
     const label = SHOT_LABEL[si.kind];
     const fouled = ph.fouler >= 0;
+    this.streak[h.pid] = ph.made ? this.streak[h.pid] + 1 : 0;
     if (ph.made) {
       this.addScore(h.team, si.pts);
       const ast = ph.assist >= 0 ? ` (어시스트 ${this.name(ph.assist)})` : '';
@@ -1988,7 +2017,8 @@ class GameSim {
         (1 + (p.pl.body.heightCm - 196) / 45) *
         (offTeam ? (ph.ft ? 0.3 : 0.55) : 1) *
         (0.85 + 0.15 * this.fit(p)) *
-        (p.stun > 0 ? 0.4 : 1);
+        (p.stun > 0 ? 0.4 : 1) *
+        (1 + FX.rebound[lv(p.pl, 'rebound')]);
       cands.push({ p, w });
     }
     if (cands.length === 0) {
@@ -2086,7 +2116,7 @@ class GameSim {
     const madeInbound = inbound && this.ph.k === 'inbound' && this.ph.made;
     if (!from && !madeInbound && !handoff) {
       const pr = this.passRisk(h, m, false, ex, ey, lob);
-      if (pr.by >= 0 && this.rng.chance(pr.risk)) {
+      if (pr.by >= 0 && this.rng.chance(pr.risk * (1 - FX.noLook[lv(h.pl, 'noLook')]))) {
         intercept = pr.by;
         if (DEBUG.intercept) {
           const d = this.P[pr.by];

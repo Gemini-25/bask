@@ -1,5 +1,6 @@
 import { clamp } from '../core/math';
 import type { Rng } from '../core/rng';
+import type { AbilityId } from './abilities';
 import { koreanName, type Gender } from './names';
 import { RATING_KEYS, type Body, type RatingKey, type Ratings } from './ratings';
 
@@ -25,6 +26,8 @@ export interface Player {
   body: Body;
   r: Ratings;
   look: Look;
+  /** 특수능력 단계 (S8). 없으면 일반 선수 */
+  abilities?: Partial<Record<AbilityId, number>>;
 }
 
 /** 이름에서 겉모습을 정한다 (같은 선수는 항상 같은 모습) */

@@ -1,8 +1,11 @@
 // 커리어 자동 플레이: 간단한 전략으로 N주를 돌려 성장 곡선·출전 시간·부상을 본다
 // npx tsx tools/career.ts [주 수] [배경] [포지션] [시드]
 import { BACKGROUNDS, type BackgroundId } from '../src/career/backgrounds';
-import { actionById, canDo, costOf, createCareer, dateText, doWeek, invest, myOverall, POINT_OF, type ActionId, type Career, type FocusId } from '../src/career/career';
+import { actionById, canDo, costOf, createCareer, dateText, invest, myOverall, POINT_OF, type ActionId, type Career, type FocusId } from '../src/career/career';
 import { applyMatch, myTeam, playMatch } from '../src/career/match';
+import { schoolById } from '../src/career/schools';
+import { afterGame, ensureSeason, playWeek } from '../src/career/turn';
+import { resolveEvent } from '../src/career/events';
 import { lookFor, overall, type Position } from '../src/data/player';
 import { RATING_KEYS, type RatingKey } from '../src/data/ratings';
 
@@ -41,7 +44,7 @@ function autoInvest(c: Career) {
 
 for (const bg of BGS) {
   const c = createCareer(
-    { name: '테스트', number: 7, gender: 'M', prefPos: POS, background: bg, growth: 'normal', heightDelta: 0, build: 'normal', look: lookFor('t'), alloc: {}, school: 'HANB' },
+    { name: '테스트', number: 7, gender: 'M', prefPos: POS, background: bg, growth: 'normal', heightDelta: 0, build: 'normal', look: lookFor('t'), alloc: {}, school: process.env.SCHOOL ?? 'HANB' },
     SEED,
   );
   // 자유 포인트는 자동 투자처럼 종합 능력치 위주로
@@ -66,6 +69,7 @@ for (const bg of BGS) {
     c.me.r[best]++;
     left--;
   }
+  ensureSeason(c);
   const start = myOverall(c);
   const rows: string[] = [];
   let injWeeks = 0;
@@ -77,6 +81,7 @@ for (const bg of BGS) {
   let gamePts = 0;
   let xpUps = 0;
   bought = 0;
+  const evCount: Record<string, number> = {};
   const focusCycle: FocusId[] = ['shoot', 'drive', 'defense', 'pass'];
   for (let w = 0; w < WEEKS; w++) {
     let id: ActionId;
@@ -86,7 +91,11 @@ for (const bg of BGS) {
     else id = (['team', 'solo', 'weight', 'team', 'solo', 'video', 'street'] as ActionId[])[w % 7];
     if (!canDo(c, actionById(id))) id = 'rest';
     const hadInj = !!c.injury;
-    const r = doWeek(c, id, focusCycle[w % 4]);
+    const r = playWeek(c, id, focusCycle[w % 4]);
+    if (c.pendingEvent) {
+      evCount[c.pendingEvent.id] = (evCount[c.pendingEvent.id] ?? 0) + 1;
+      resolveEvent(c, c.pendingEvent, 0);
+    }
     trainPts += r.gained.P + r.gained.T + r.gained.M;
     xpUps += Object.values(r.ups).reduce((a, b) => a + (b ?? 0), 0);
     if (r.injured) injuries++;
@@ -95,6 +104,7 @@ for (const bg of BGS) {
     if (r.game) {
       const m = playMatch(c);
       const rep = applyMatch(c, m);
+      afterGame(c);
       gamePts += rep.gained.P + rep.gained.T + rep.gained.M;
       xpUps += Object.values(rep.ups).reduce((a, b) => a + (b ?? 0), 0);
       autoInvest(c);
@@ -102,12 +112,17 @@ for (const bg of BGS) {
       if (rep.line) minutes += rep.line.sec / 60;
       if (m.started) starts++;
       const depth = myTeam(c).meIndex;
-      rows.push(`  ${dateText(c.week - 1).padEnd(12)} OVR ${myOverall(c).toFixed(1).padStart(5)}  fat ${c.fatigue.toFixed(0).padStart(3)} cond ${c.condition}  ${rep.line ? `${(rep.line.sec / 60).toFixed(0).padStart(2)}분 ${String(rep.line.pts).padStart(2)}점 ${rep.grade}` : '결장'}  ${rep.score.join(':')} ${m.started ? '주전' : '벤치'} depth ${depth} ${c.injury ? '부상:' + c.injury.name : ''}`);
+      rows.push(`  ${dateText(c.week - 1).padEnd(12)} ${m.label.padEnd(10)} trust ${c.trust.toFixed(0).padStart(3)} OVR ${myOverall(c).toFixed(1).padStart(5)}  fat ${c.fatigue.toFixed(0).padStart(3)} cond ${c.condition}  ${rep.line ? `${(rep.line.sec / 60).toFixed(0).padStart(2)}분 ${String(rep.line.pts).padStart(2)}점 ${rep.grade}` : '결장'}  ${rep.score.join(':')} ${m.started ? '주전' : '벤치'} depth ${depth} ${c.injury ? '부상:' + c.injury.name : ''}`);
     }
+  }
+  if (process.env.T) {
+    for (const t of (c.season?.tours ?? [])) console.log(`  ${t.name}: 우승 ${t.champion ? schoolById(t.champion).name : '-'} · 내 성적 ${t.myFinish ?? '-'}`);
   }
   const team = myTeam(c).team.players.map((p) => overall(p, p.pos).toFixed(0)).join(' ');
   console.log(`\n[${bg}] ${POS} OVR ${start.toFixed(1)} → ${myOverall(c).toFixed(1)}  키 ${c.me.body.heightCm}/${c.finalHeight}  부상 ${injuries}번 ${injWeeks}주  경기 ${games} 주전 ${starts} 평균 ${(minutes / Math.max(1, games)).toFixed(1)}분  남은 포인트 ${JSON.stringify(c.points)}`);
   console.log(`  팀 OVR 순서: ${team}`);
+  console.log('  특수능력:', JSON.stringify(c.me.abilities), 'stats', JSON.stringify({ ...c.stats, recentPf: undefined, ftAfter: undefined }));
+  if (process.env.E) console.log('  이벤트:', JSON.stringify(evCount), Object.values(evCount).reduce((a, b) => a + b, 0), '번', 'trust', c.trust.toFixed(0), 'rival', c.rival?.w, '-', c.rival?.l);
   console.log(`  포인트: 훈련 ${trainPts} 경기 ${gamePts}  산 능력치 ${bought}  경험치로 오른 능력치 ${xpUps}`);
   if (process.env.V) console.log(rows.join('\n'));
   else console.log(rows.slice(0, 2).concat(['  ...'], rows.slice(-2)).join('\n'));

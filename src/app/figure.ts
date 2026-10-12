@@ -28,6 +28,11 @@ function loop(now: number) {
   else running = false;
 }
 
+/** 매 프레임 다시 그리는 캔버스 (화면에서 빠지면 저절로 멈춘다) */
+export function liveCanvas(canvas: HTMLCanvasElement, draw: (ctx: CanvasRenderingContext2D, t: number) => void) {
+  register({ canvas, draw });
+}
+
 function register(l: Live) {
   live.add(l);
   if (!running) {

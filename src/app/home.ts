@@ -20,14 +20,18 @@ import {
   myOverall,
   POINT_LABEL,
   POINT_OF,
-  weeksToGame,
   type ActionId,
   type Career,
   type FocusId,
   type Points,
 } from '../career/career';
-import { myTeam } from '../career/match';
+import { ABILITIES, abilityDef, FX, stars, type AbilityId } from '../data/abilities';
+import { abilityProgress } from '../career/abilities';
+import { myTeam, trustBonus } from '../career/match';
+import { avgFriendship } from '../career/people';
 import { schoolById } from '../career/schools';
+import { groupStandings, nextGame, PRACTICE_WEEKS, roundLabel, type Tour } from '../career/season';
+import { placeOf, TownMap, type PlaceId } from './townmap';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, toast } from './dom';
@@ -41,7 +45,15 @@ export interface HomeActions {
   toTitle(): void;
 }
 
-type Tab = 'week' | 'stats' | 'team' | 'records';
+type Tab = 'week' | 'stats' | 'team' | 'schedule' | 'abilities' | 'records';
+const TABS: [Tab, string][] = [
+  ['week', '행동'],
+  ['stats', '능력치'],
+  ['team', '팀'],
+  ['schedule', '일정'],
+  ['abilities', '특수능력'],
+  ['records', '기록'],
+];
 const COND_COLOR = ['#ff5a4a', '#ff9a4a', '#c9ced9', '#7bd88f', '#5fe0ff'];
 
 export function fatigueColor(f: number) {
@@ -60,6 +72,10 @@ export class Home {
   private pending: Partial<Record<RatingKey, number>> = {};
   private focus: FocusId = 'shoot';
   private c: Career | null = null;
+  private map: TownMap | null = null;
+  /** 맵에서 고른 건물의 행동 강조 */
+  private hl: PlaceId | null = null;
+  private busy = false;
 
   constructor(private act: HomeActions) {
     const root = $('scr-home');
@@ -80,28 +96,36 @@ export class Home {
       <div class="home">
         <aside class="pcard" id="pcard"></aside>
         <section class="hmain">
-          <nav class="tabs htabs">
-            ${(
-              [
-                ['week', '이번 주'],
-                ['stats', '능력치'],
-                ['team', '팀'],
-                ['records', '기록'],
-              ] as [Tab, string][]
-            )
-              .map(([t, l]) => `<button type="button" data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${l}</button>`)
-              .join('')}
+          <div class="townwrap"><canvas class="px town" id="townMap" aria-label="마을 지도: 건물을 누르면 그곳에서 할 수 있는 행동을 보여준다"></canvas></div>
+          <nav class="menu" id="hmenu">
+            ${TABS.map(([t, l]) => `<button type="button" data-tab="${t}" class="${this.tab === t ? 'on' : ''}">${l}</button>`).join('')}
           </nav>
           <div class="hbody" id="hbody"></div>
         </section>
       </div>`;
     this.renderCard();
     this.renderTab();
+    const kit = { jersey: school.color, trim: numberColorFor(school.color) };
+    this.map = new TownMap($('townMap') as HTMLCanvasElement, () => ({ pl: c.me, kit, injured: !!c.injury }), (id) => {
+      this.hl = id;
+      this.tab = 'week';
+      this.syncTabs();
+      this.renderTab();
+    });
+    this.busy = false;
+  }
+
+  private syncTabs() {
+    for (const b of $('scr-home').querySelectorAll('#hmenu button')) b.classList.toggle('on', (b as HTMLElement).dataset.tab === this.tab);
   }
 
   private nextText(c: Career) {
-    const w = weeksToGame(c.week);
-    return w === 1 ? '<b class="hot">이번 주말 연습경기!</b>' : `연습경기까지 <b>${w}주</b>`;
+    if (c.pendingGame) return `<b class="hot">이번 주말 ${esc(c.pendingGame.label)}!</b>`;
+    const n = nextGame(c);
+    if (!n) return '<span class="muted">남은 경기 없음</span>';
+    const w = n.week - c.week + 1;
+    const opp = n.opponent ? ` vs ${esc(schoolById(n.opponent).name)}` : '';
+    return w === 1 ? `<b class="hot">이번 주말 ${esc(n.label)}${opp}</b>` : `다음 경기: <b>${esc(n.label)}</b>${opp} · ${w}주 뒤`;
   }
 
   private renderCard() {
@@ -121,14 +145,32 @@ export class Home {
       ${inj}
       <div class="meter"><span>컨디션</span><b style="color:${COND_COLOR[c.condition]}">${CONDITION_LABEL[c.condition]}</b><span class="dots">${[0, 1, 2, 3, 4].map((i) => `<i class="${i <= c.condition ? 'on' : ''}" style="${i <= c.condition ? `background:${COND_COLOR[c.condition]}` : ''}"></i>`).join('')}</span></div>
       <div class="meter"><span>피로</span><b>${Math.round(c.fatigue)}</b><span class="bar"><i style="width:${c.fatigue}%;background:${fatigueColor(c.fatigue)}"></i></span></div>
+      <div class="meter"><span>감독 신뢰</span><b>${Math.round(c.trust)}</b><span class="bar"><i style="width:${c.trust}%;background:#5fb4ff"></i></span></div>
+      <div class="meter"><span>팀 친밀도</span><b>${Math.round(avgFriendship(c))}</b><span class="bar"><i style="width:${avgFriendship(c)}%;background:#ff8ac0"></i></span></div>
+      ${this.abilityChips()}
       <div class="kvs">
         <div><span>키</span><b>${c.me.body.heightCm}cm</b><small>최종 ${h0}~${h1}</small></div>
         <div><span>체중</span><b>${c.me.body.weightKg}kg</b></div>
         <div><span>잠재력</span><b>${c.potential}</b></div>
         <div><span>성장</span><b>${gt.label}</b></div>
       </div>
-      <div class="ppts"><h4>가진 포인트</h4>${pointsHtml(c.points)}</div>`;
+      <div class="ppts"><h4>가진 포인트</h4>${pointsHtml(c.points)}</div>
+      ${this.rivalHtml()}`;
     figureCanvas($('homeFig') as HTMLCanvasElement, () => ({ pl: c.me, kit: { jersey: school.color, trim: numberColorFor(school.color) } }));
+  }
+
+  private abilityChips() {
+    const ab = this.c!.me.abilities ?? {};
+    const list = (Object.entries(ab) as [AbilityId, number][]).filter(([, n]) => n);
+    if (!list.length) return '';
+    return `<div class="abs">${list.map(([id, n]) => `<span class="ab ${abilityDef(id).bad ? 'bad' : ''}" title="${esc(abilityDef(id).desc)}">${abilityDef(id).label}${abilityDef(id).bad ? '' : ` <b>${stars(n)}</b>`}</span>`).join('')}</div>`;
+  }
+
+  private rivalHtml() {
+    const r = this.c!.rival;
+    if (!r) return '';
+    return `<div class="rival"><h4>라이벌</h4><div><b>${esc(r.player.name)}</b> <span class="muted">${esc(schoolById(r.school).name)} · ${r.player.pos}</span></div>
+      <div class="muted">종합 <b class="ink">${overall(r.player, r.player.pos).toFixed(0)}</b> · 맞대결 ${r.w}승 ${r.l}패</div></div>`;
   }
 
   private renderTab() {
@@ -136,30 +178,97 @@ export class Home {
     if (this.tab === 'week') body.innerHTML = this.weekHtml();
     else if (this.tab === 'stats') body.innerHTML = this.statsHtml();
     else if (this.tab === 'team') body.innerHTML = this.teamHtml();
+    else if (this.tab === 'schedule') body.innerHTML = this.scheduleHtml();
+    else if (this.tab === 'abilities') body.innerHTML = this.abilitiesHtml();
     else body.innerHTML = this.recordsHtml();
+  }
+
+  private scheduleHtml() {
+    const c = this.c!;
+    const s = c.season;
+    if (!s) return '<p class="hint">고교 대회 일정이 끝났다.</p>';
+    const name = (id: string) => `<span class="${id === c.school ? 'mine' : ''}">${esc(schoolById(id).name)}</span>`;
+    const tourHtml = (t: Tour) => {
+      const first = t.weeks[0];
+      const last = t.weeks[t.weeks.length - 1];
+      const status = t.done ? `우승 ${name(t.champion!)}` : c.week > first ? '진행 중' : `${first - c.week + 1}주 뒤`;
+      const mine = t.myFinish ? `<b class="fin">${esc(t.myFinish)}</b>` : t.kind === 'finals' && !t.teams.length ? '<span class="muted">시즌 성적 4위까지</span>' : t.teams.includes(c.school) ? '<span class="muted">출전</span>' : '<span class="muted">출전 못 함</span>';
+      const rounds = t.weeks
+        .map((w, r) => {
+          const ms = t.matches.filter((m) => m.round === r);
+          if (!ms.length) return '';
+          return `<div class="rnd"><h5>${roundLabel(t, r)} <small>${dateText(w)}</small></h5>${ms
+            .map((m) => {
+              const sc = m.score ? `<b>${m.score[0]}:${m.score[1]}</b>` : '<span class="muted">-</span>';
+              const mineCls = m.a === c.school || m.b === c.school ? ' my' : '';
+              return `<div class="mt${mineCls}"><span class="${m.winner === m.a ? 'w' : ''}">${name(m.a)}</span>${sc}<span class="${m.winner === m.b ? 'w' : ''}">${name(m.b)}</span></div>`;
+            })
+            .join('')}</div>`;
+        })
+        .join('');
+      const groups = t.groups
+        ? `<div class="grps">${t.groups
+            .map(
+              (_, gi) =>
+                `<table class="ttable gt"><tr><th class="nm">${gi === 0 ? 'A' : 'B'}조</th><th>승</th><th>패</th><th>득실</th></tr>${groupStandings(t, gi)
+                  .map((st) => `<tr class="${st.id === c.school ? 'me' : ''}"><td class="nm">${esc(schoolById(st.id).name)}</td><td>${st.w}</td><td>${st.l}</td><td>${st.pf - st.pa > 0 ? '+' : ''}${st.pf - st.pa}</td></tr>`)
+                  .join('')}</table>`,
+            )
+            .join('')}</div>`
+        : '';
+      return `<details class="tour" ${c.week >= first - 4 && c.week <= last + 1 ? 'open' : ''}><summary><b>${esc(t.name)}</b><span class="muted">${dateText(first)} ~ ${dateText(last)}</span><span>${mine}</span><span class="st">${status}</span></summary>${groups}<div class="rnds">${rounds || '<p class="muted">대진 발표 전</p>'}</div></details>`;
+    };
+    const practice = PRACTICE_WEEKS.map((w) => s.year * 48 + w)
+      .map((w) => {
+        const g = c.games.find((x) => x.week === w && x.kind === 'practice');
+        return `<li class="${w < c.week ? 'past' : ''}"><span>${dateText(w)}</span>${g ? `<b class="${g.won ? 'win' : 'loss'}">${g.won ? '승' : '패'} ${g.score[0]}:${g.score[1]}</b> vs ${esc(schoolById(g.opponent).name)}` : w < c.week ? '' : '<span class="muted">예정</span>'}</li>`;
+      })
+      .join('');
+    return `<div class="tours">${s.tours.map(tourHtml).join('')}</div>
+      <h4 class="sub">연습경기</h4><ul class="plist">${practice}</ul>
+      <p class="hint">공식 대회에선 연습경기처럼 출전 시간을 보장해 주지 않는다. 감독 신뢰도가 높을수록 기회를 더 받는다 (지금 보정 ${trustBonus(c) >= 0 ? '+' : ''}${trustBonus(c).toFixed(1)}).</p>`;
+  }
+
+  private abilitiesHtml() {
+    const c = this.c!;
+    const ab = c.me.abilities ?? {};
+    const prog = abilityProgress(c);
+    const good = ABILITIES.filter((a) => !a.bad).map((a) => {
+      const p = prog.find((x) => x.id === a.id)!;
+      const n = ab[a.id] ?? 0;
+      const fx = (FX as Record<string, number[]>)[a.id];
+      const need = p.need
+        ? `<small>다음 ${stars(n + 1)}: ${esc(p.how.split(' + ')[0])} <b>${p.stat}</b>/${p.need[0]} · ${esc(p.how.split(' + ')[1])} <b>${p.rating}</b>/${p.need[1]}</small>`
+        : '<small class="good">최고 단계</small>';
+      return `<div class="abrow ${n ? 'have' : ''}"><div><b>${a.label}</b> <span class="st">${n ? stars(n) : '☆'}</span>${fx && n ? ` <small class="muted">효과 ${fx[n] < 1 ? `${Math.round(fx[n] * 100)}%` : `×${fx[n]}`}</small>` : ''}</div><p>${esc(a.desc)}</p>${need}</div>`;
+    });
+    const bad = ABILITIES.filter((a) => a.bad && ab[a.id]).map((a) => `<div class="abrow bad"><div><b>${a.label}</b></div><p>${esc(a.desc)}</p></div>`);
+    return `<div class="abgrid">${good.join('')}</div>${bad.length ? `<h4 class="sub">나쁜 버릇</h4><div class="abgrid">${bad.join('')}</div><p class="hint">관련 능력치를 올리고 기록이 좋아지면 사라진다.</p>` : ''}
+      <p class="hint">특수능력은 경기 기록과 능력치가 조건을 채우면 저절로 생기고, ★3까지 진화한다.</p>`;
   }
 
   private weekHtml() {
     const c = this.c!;
     if (c.pendingGame) {
-      const opp = schoolById(c.pendingGame);
-      return `<div class="act gamecard"><div class="ah"><b>연습경기</b></div><p>${esc(opp.city)} ${esc(opp.name)} · ${esc(opp.blurb)}</p><button type="button" class="primary big" data-a="game">경기장으로 ▶</button></div>`;
+      const opp = schoolById(c.pendingGame.opponent);
+      return `<div class="act gamecard"><div class="ah"><b>${esc(c.pendingGame.label)}</b></div><p>${esc(opp.city)} ${esc(opp.name)} · ${esc(opp.blurb)}</p><button type="button" class="primary big" data-a="game">경기장으로 ▶</button></div>`;
     }
-    const cards = ACTIONS.filter((a) => !a.injuredOnly || c.injury)
+    const cards = ACTIONS.filter((a) => (!a.injuredOnly || c.injury) && (a.id !== 'mentor' || c.mentor.met))
       .map((a) => {
         const ok = canDo(c, a);
         const ex = expectedPoints(c, a);
         const fg = fatigueGain(c, a);
         const risk = injuryRisk(c, a);
         const focus =
-          a.id === 'solo'
+          a.id === 'solo' || a.id === 'mentor'
             ? `<div class="focus">${FOCUS.map((f) => `<button type="button" class="chipbtn ${this.focus === f.id ? 'on' : ''}" data-focus="${f.id}" title="${f.keys.map((k) => RATING_LABEL[k]).join(', ')}">${f.label}</button>`).join('')}</div>`
             : '';
-        return `<div class="act ${ok ? '' : 'off'}">
-          <div class="ah"><b>${a.label}</b>${risk >= 0.03 ? `<span class="risk" title="이번 주 부상 확률">부상 ${Math.round(risk * 100)}%</span>` : ''}</div>
+        const place = placeOf(a.id);
+        return `<div class="act ${ok ? '' : 'off'} ${this.hl === place.id ? 'pulse' : ''}">
+          <div class="ah"><b>${a.label}</b><small class="muted">${place.label}</small>${risk >= 0.03 ? `<span class="risk" title="이번 주 부상 확률">부상 ${Math.round(risk * 100)}%</span>` : ''}</div>
           <p>${a.desc}</p>${focus}
           <div class="ap">${pointsHtml(ex, true) || '<span class="muted">포인트 없음</span>'}<span class="fat ${fg > 0 ? 'up' : 'down'}">피로 ${fg > 0 ? '+' : ''}${Math.round(fg)}</span></div>
-          <button type="button" class="${ok ? 'primary' : ''}" data-do="${a.id}" ${ok ? '' : 'disabled'}>${ok ? '이걸로 한 주 보내기' : c.injury ? '부상 중엔 못 해' : '지금은 못 해'}</button>
+          <button type="button" class="${ok ? 'primary' : ''}" data-do="${a.id}" ${ok ? '' : 'disabled'}>${ok ? '이걸로 한 주 보내기' : c.injury ? '부상 중엔 못 해' : a.id === 'mentor' ? '다음 달에 다시' : '지금은 못 해'}</button>
         </div>`;
       })
       .join('');
@@ -220,16 +329,22 @@ export class Home {
         const role = i < 5 ? '주전' : i === 5 ? '식스맨' : '벤치';
         const me = p.id === 'me';
         const g = me ? Math.floor(c.week / 48) + 1 : gradeOf.get(p.id);
-        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${g}학년</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}</td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td></tr>`;
+        const fr = me ? '' : this.heart(c.friends[p.id] ?? 0);
+        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${g}학년</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}</td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
       })
       .join('');
     const out = c.roster
       .filter((e) => !inTeam.has(e.player.id))
-      .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}</td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td></tr>`)
+      .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}</td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td><td class="hrt">${this.heart(c.friends[e.player.id] ?? 0)}</td></tr>`)
       .join('');
-    const meOut = c.injury ? `<tr class="me dim"><td>부상</td><td>${c.prefPos}</td><td></td><td class="nm"><span class="no">${c.me.number}</span>${esc(c.me.name)} <b class="tagme">나</b></td><td>${c.me.body.heightCm}</td><td>${myOverall(c).toFixed(0)}</td></tr>` : '';
-    return `<div class="tablewrap"><table class="ttable"><tr><th>역할</th><th>포지션</th><th>학년</th><th class="nm">선수</th><th>키</th><th>종합</th></tr>${rows}${meOut}${out}</table></div>
+    const meOut = c.injury ? `<tr class="me dim"><td>부상</td><td>${c.prefPos}</td><td></td><td class="nm"><span class="no">${c.me.number}</span>${esc(c.me.name)} <b class="tagme">나</b></td><td>${c.me.body.heightCm}</td><td>${myOverall(c).toFixed(0)}</td><td></td></tr>` : '';
+    return `<p class="muted coach">감독 <b class="ink">${esc(c.coach)}</b> · 신뢰도 ${Math.round(c.trust)}</p><div class="tablewrap"><table class="ttable"><tr><th>역할</th><th>포지션</th><th>학년</th><th class="nm">선수</th><th>키</th><th>종합</th><th>친밀도</th></tr>${rows}${meOut}${out}</table></div>
       <p class="hint">감독은 포지션마다 종합 능력치가 가장 높은 선수를 주전으로 쓴다. 선호 포지션이 아니어도 팀 사정에 따라 다른 자리에 설 수 있다. 연습경기에선 신입생도 식스맨으로 기회를 받는다.</p>`;
+  }
+
+  private heart(v: number) {
+    const n = Math.round(v / 20);
+    return `<span title="친밀도 ${Math.round(v)}">${'♥'.repeat(n)}<span class="dimh">${'♥'.repeat(5 - n)}</span></span>`;
   }
 
   private recordsHtml() {
@@ -256,7 +371,7 @@ export class Home {
       .map((g) => {
         const opp = schoolById(g.opponent);
         const l = g.line;
-        return `<tr><td>${dateText(g.week)}</td><td class="nm">${g.home ? 'vs' : '@'} ${esc(opp.name)}</td><td class="${g.won ? 'win' : 'loss'}">${g.won ? '승' : '패'} ${g.score[0]}:${g.score[1]}</td>${
+        return `<tr><td>${dateText(g.week)}</td><td class="nm">${esc(g.label ?? '연습경기')}</td><td class="nm">${g.home ? 'vs' : '@'} ${esc(opp.name)}</td><td class="${g.won ? 'win' : 'loss'}">${g.won ? '승' : '패'} ${g.score[0]}:${g.score[1]}</td>${
           l
             ? `<td>${minutesText(l.sec)}</td><td>${l.pts}</td><td>${l.reb}</td><td>${l.ast}</td><td>${l.fgm}/${l.fga}</td><td>${l.tpm}/${l.tpa}</td><td class="grd g${g.grade}">${g.grade}</td>`
             : '<td colspan="7" class="muted">결장</td>'
@@ -268,7 +383,7 @@ export class Home {
       .reverse()
       .map((w) => `<li><span class="t">${dateText(w.week)}</span><b>${esc(ACTIONS.find((a) => a.id === w.action)!.label)}${w.focus && w.action === 'solo' ? ` (${FOCUS.find((f) => f.id === w.focus)!.label})` : ''}</b>${pointsHtml(w.gained, true)}${w.notes.length ? `<small>${w.notes.map(esc).join(' · ')}</small>` : ''}</li>`)
       .join('');
-    return `${avg}${rows ? `<div class="tablewrap"><table class="ttable"><tr><th>날짜</th><th class="nm">상대</th><th>결과</th><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>야투</th><th>3점</th><th>평가</th></tr>${rows}</table></div>` : ''}
+    return `${avg}${rows ? `<div class="tablewrap"><table class="ttable"><tr><th>날짜</th><th class="nm">경기</th><th class="nm">상대</th><th>결과</th><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>야투</th><th>3점</th><th>평가</th></tr>${rows}</table></div>` : ''}
       <h4 class="sub">최근 훈련</h4><ul class="wlog">${log || '<li class="muted">아직 없다</li>'}</ul>`;
   }
 
@@ -279,7 +394,8 @@ export class Home {
     const tab = t.closest('[data-tab]') as HTMLElement | null;
     if (tab) {
       this.tab = tab.dataset.tab as Tab;
-      for (const b of $('scr-home').querySelectorAll('.htabs button')) b.classList.toggle('on', (b as HTMLElement).dataset.tab === this.tab);
+      this.hl = null;
+      this.syncTabs();
       return this.renderTab();
     }
     const f = t.closest('[data-focus]') as HTMLElement | null;
@@ -294,7 +410,15 @@ export class Home {
         this.tab = 'stats';
         return this.render(c);
       }
-      return this.act.doWeek(d.dataset.do as ActionId, this.focus);
+      if (this.busy) return;
+      // 그 건물까지 걸어간 다음 한 주를 보낸다
+      const id = d.dataset.do as ActionId;
+      this.busy = true;
+      d.textContent = '가는 중...';
+      const go = () => this.act.doWeek(id, this.focus);
+      if (this.map) this.map.walkTo(placeOf(id).id, go);
+      else go();
+      return;
     }
     const inv = t.closest('[data-inv]') as HTMLButtonElement | null;
     if (inv && !inv.disabled) {

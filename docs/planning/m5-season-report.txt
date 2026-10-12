@@ -1,0 +1,69 @@
+M5 시즌 리포트: tools/career.ts 47 (1학년 1년, 자동 전략, 시드 1~4). T=1 대회 성적, E=1 이벤트
+전략: 팀/개인/웨이트/팀/개인/영상/길거리 순환, 피로 62 넘으면 휴식, 컨디션 나쁘면 친구, 부상이면 재활. 이벤트는 첫 선택지.
+
+  춘계 연맹전: 우승 한빛고 · 내 성적 우승
+  협회장기: 우승 해성고 · 내 성적 4강
+  전국체전: 우승 한빛고 · 내 성적 우승
+  왕중왕전: 우승 한빛고 · 내 성적 우승
+
+[ordinary] SG OVR 44.4 → 57.3  키 185/186  부상 1번 2주  경기 19 주전 18 평균 23.2분  남은 포인트 {"P":0,"T":1,"M":0}
+  팀 OVR 순서: 57 61 45 48 56 50 46 46 46 44 43 42
+  특수능력: {"foulProne":1,"quickRelease":2,"lockdown":1} stats {"games":18,"clutchMade":7,"clutchMiss":5,"ankles":2,"threesMade":121,"ast":39,"reb":33,"stlblk":21,"ftm":23,"fta":35,"foulOuts":5,"big":10,"injuries":1,"lastInjury":31}
+  이벤트: {"rivalMeet":1,"teamDinner":4,"interview":2,"kidFan":1,"rivalSns":2,"rain":1,"coachTrust":1,"newShoes":1,"tacticsNote":1,"seniorShot":1,"chemistry":1,"kidsCourt":1,"mateWorry":1,"newYearGoal":1} 19 번 trust 100 rival 3 - 1
+  포인트: 훈련 347 경기 285  산 능력치 169  경험치로 오른 능력치 32
+
+  춘계 연맹전: 우승 진해고 · 내 성적 4강
+  협회장기: 우승 한빛고 · 내 성적 우승
+  전국체전: 우승 무등고 · 내 성적 4강
+  왕중왕전: 우승 한빛고 · 내 성적 우승
+
+[street] PG OVR 44.2 → 53.6  키 178/179  부상 2번 5주  경기 18 주전 10 평균 18.2분  남은 포인트 {"P":0,"T":0,"M":2}
+  팀 OVR 순서: 51 50 44 54 54 50 49 49 48 44 43 41
+  특수능력: {"ankle":2} stats {"games":16,"clutchMade":1,"clutchMiss":2,"ankles":31,"threesMade":12,"ast":52,"reb":21,"stlblk":10,"ftm":29,"fta":46,"foulOuts":0,"big":1,"injuries":2,"lastInjury":42}
+  이벤트: {"rivalMeet":1,"seniorShot":3,"teamDinner":4,"newShoes":1,"rivalSns":2,"rain":1,"kidFan":1,"kidsCourt":1,"tacticsNote":1,"mentorHomework":1,"coachTrust":1,"newYearGoal":1,"chemistry":1} 19 번 trust 85 rival 1 - 0
+  포인트: 훈련 333 경기 202  산 능력치 154  경험치로 오른 능력치 24
+
+  춘계 연맹전: 우승 한빛고 · 내 성적 우승
+  협회장기: 우승 태화고 · 내 성적 조별리그 탈락
+  전국체전: 우승 해성고 · 내 성적 8강
+  왕중왕전: 우승 태화고 · 내 성적 4강
+
+[lateTall] C OVR 43.7 → 50.6  키 211/213  부상 0번 1주  경기 15 주전 0 평균 18.5분  남은 포인트 {"P":0,"T":0,"M":0}
+  팀 OVR 순서: 50 50 45 50 55 51 51 47 45 41 40 37
+  특수능력: {"rebound":1} stats {"games":15,"clutchMade":0,"clutchMiss":2,"ankles":0,"threesMade":0,"ast":6,"reb":83,"stlblk":9,"ftm":8,"fta":14,"foulOuts":0,"big":0,"injuries":1,"lastInjury":30}
+  이벤트: {"rivalMeet":1,"teamDinner":2,"slump":1,"seniorShot":2,"rain":1,"tired":1,"newShoes":1,"tacticsNote":1,"mateWorry":2,"rivalSns":1,"kidsCourt":1,"newYearGoal":1,"street3x3":1} 16 번 trust 65 rival 1 - 0
+  포인트: 훈련 335 경기 133  산 능력치 151  경험치로 오른 능력치 12
+
+  춘계 연맹전: 우승 한빛고 · 내 성적 우승
+  협회장기: 우승 한빛고 · 내 성적 우승
+  전국체전: 우승 화성고 · 내 성적 준우승
+  왕중왕전: 우승 한빛고 · 내 성적 우승
+
+[abroad] SF OVR 37.9 → 50.7  키 189/192  부상 1번 1주  경기 20 주전 16 평균 30.7분  남은 포인트 {"P":1,"T":1,"M":2}
+  팀 OVR 순서: 52 47 55 53 58 51 46 46 45 44 42 42
+  특수능력: {"quickRelease":2,"lockdown":1} stats {"games":20,"clutchMade":2,"clutchMiss":2,"ankles":1,"threesMade":122,"ast":43,"reb":34,"stlblk":17,"ftm":25,"fta":39,"foulOuts":1,"big":11,"injuries":1,"lastInjury":37}
+  이벤트: {"rivalMeet":1,"teamDinner":4,"newShoes":1,"seniorShot":3,"rain":1,"kidFan":1,"coachTrust":1,"rivalSns":1,"kidsCourt":1,"mentorHomework":1,"newYearGoal":1} 16 번 trust 98 rival 0 - 1
+  포인트: 훈련 322 경기 318  산 능력치 165  경험치로 오른 능력치 34
+
+  춘계 연맹전: 우승 한빛고 · 내 성적 우승
+  협회장기: 우승 한밭고 · 내 성적 조별리그 탈락
+  전국체전: 우승 해성고 · 내 성적 4강
+  왕중왕전: 우승 한빛고 · 내 성적 우승
+
+[convert] PF OVR 37.0 → 45.2  키 195/196  부상 0번 0주  경기 17 주전 3 평균 14.5분  남은 포인트 {"P":1,"T":0,"M":0}
+  팀 OVR 순서: 56 48 49 49 51 48 48 47 45 44 44 41
+  특수능력: {"lockdown":1} stats {"games":17,"clutchMade":0,"clutchMiss":0,"ankles":0,"threesMade":0,"ast":7,"reb":62,"stlblk":6,"ftm":18,"fta":22,"foulOuts":0,"big":0,"injuries":0,"lastInjury":-99}
+  이벤트: {"rivalMeet":1,"seniorShot":2,"teamDinner":4,"rivalSns":3,"newShoes":1,"kidsCourt":1,"tacticsNote":1,"slump":1,"newYearGoal":1,"chemistry":1,"coachTrust":1,"kidFan":1,"mateWorry":1} 19 번 trust 74 rival 1 - 1
+  포인트: 훈련 393 경기 160  산 능력치 169  경험치로 오른 능력치 14
+
+--- 약한 학교 (탐라고) ---
+  춘계 연맹전: 우승 화성고 · 내 성적 8강
+  협회장기: 우승 진해고 · 내 성적 4강
+  전국체전: 우승 한빛고 · 내 성적 8강
+  왕중왕전: 우승 송도고 · 내 성적 출전 못 함
+
+[ordinary] SG OVR 44.4 → 55.4  키 184/185  부상 0번 0주  경기 13 주전 13 평균 28.4분  남은 포인트 {"P":1,"T":0,"M":1}
+  팀 OVR 순서: 45 59 41 47 51 48 46 42 40 37 37 33
+  특수능력: {"quickRelease":2} stats {"games":13,"clutchMade":0,"clutchMiss":1,"ankles":0,"threesMade":99,"ast":25,"reb":28,"stlblk":10,"ftm":34,"fta":52,"foulOuts":0,"big":9,"injuries":0,"lastInjury":-99}
+  이벤트: {"rivalMeet":1,"kidFan":2,"newShoes":1,"rivalSns":2,"teamDinner":1,"kidsCourt":2,"seniorShot":2,"coachTrust":1,"tired":1,"newYearGoal":1,"mentorHomework":1,"street3x3":1} 16 번 trust 79 rival 1 - 2
+  포인트: 훈련 361 경기 156  산 능력치 145  경험치로 오른 능력치 31

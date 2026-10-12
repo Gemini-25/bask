@@ -3,10 +3,11 @@ import galmuri11 from 'galmuri/dist/Galmuri11.woff2?url';
 import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
 import { $, closeModal, download, modal, pickFile, show, toast } from './app/dom';
-import { preGameModal, renderResult, weekModal } from './app/flow';
+import { eventModal, preGameModal, renderResult, weekModal } from './app/flow';
 import { Home } from './app/home';
 import { renderTitle } from './app/title';
-import { createCareer, dateOf, dateText, doWeek, myOverall, type Career } from './career/career';
+import { createCareer, dateOf, dateText, myOverall, type Career } from './career/career';
+import { afterGame, ensureSeason, playWeek } from './career/turn';
 import { applyMatch, playMatch, type GameReport, type MatchSetup } from './career/match';
 import { deleteSlot, exportCareer, importCareer, loadCareer, saveCareer, slotInfo } from './career/save';
 import { schoolById } from './career/schools';
@@ -144,7 +145,7 @@ function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exh
   $('btnDone').hidden = !career;
   $('careerbar').hidden = !opts.banner;
   $('careerbar').innerHTML = opts.banner ?? '';
-  show('game', career ? '연습경기' : '프로 리그 관람 (데모)');
+  show('game', career ? (match?.label ?? '연습경기') : '프로 리그 관람 (데모)');
   phaser?.scale.refresh();
 }
 
@@ -184,12 +185,10 @@ function save() {
 const home = new Home({
   doWeek(id, focus) {
     const c = career!;
-    const r = doWeek(c, id, focus);
+    const r = playWeek(c, id, focus);
     save();
     home.render(c);
-    weekModal(c, r, () => {
-      if (c.pendingGame) preGame();
-    });
+    weekModal(c, r, () => afterWeek());
   },
   save(silent) {
     save();
@@ -210,11 +209,26 @@ const home = new Home({
   },
 });
 
+/** 한 주가 끝난 뒤: 이벤트 → 주말 경기 */
+function afterWeek() {
+  const c = career!;
+  if (c.pendingEvent) {
+    eventModal(c, () => {
+      save();
+      home.render(c);
+      afterWeek();
+    });
+    return;
+  }
+  if (c.pendingGame) preGame();
+}
+
 function toHome() {
   const c = career!;
+  ensureSeason(c);
   show('home', `${c.me.name} · ${schoolById(c.school).name}`);
   home.render(c);
-  if (c.pendingGame) preGame();
+  afterWeek();
 }
 
 function preGame() {
@@ -246,7 +260,7 @@ function watchMatch() {
   const c = career!;
   const m = match!;
   const me = m.myPid >= 0 ? m.game.players[m.myPid] : null;
-  const banner = `<b>연습경기</b> · ${dateText(c.week - 1)} · ${me ? `내 선수 <b>#${me.number} ${me.name}</b> (노란 화살표 · 박스스코어 '나')` : '부상으로 결장'}`;
+  const banner = `<b>${m.label}</b> · ${dateText(c.week - 1)} · ${me ? `내 선수 <b>#${me.number} ${me.name}</b> (노란 화살표 · 박스스코어 '나')` : '부상으로 결장'}`;
   watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch });
 }
 
@@ -255,6 +269,9 @@ function finishMatch() {
   const m = match!;
   if (!report) {
     report = applyMatch(c, m);
+    // 해가 바뀌는 주에 경기가 있었으면 진급
+    const notes = afterGame(c);
+    if (notes.length) report.abilityNotes.push(...notes);
     save();
   }
   renderResult(c, m, report, ovrBefore, {

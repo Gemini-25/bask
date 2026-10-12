@@ -10,13 +10,13 @@ import {
   CREATE_CAP,
   dateText,
   doWeek,
-  GAME_EVERY,
   invest,
   investCost,
   MAX_RATING,
   type CreateSpec,
 } from '../src/career/career';
 import { applyMatch, depthChart, myTeam, playMatch } from '../src/career/match';
+import { playWeek } from '../src/career/turn';
 import { exportCareer, importCareer } from '../src/career/save';
 import { lookFor, POSITIONS } from '../src/data/player';
 import { RATING_KEYS } from '../src/data/ratings';
@@ -86,13 +86,13 @@ describe('주간 행동과 성장 (T1~T3)', () => {
     expect(c.points.T).toBe(100 - cost.T);
   });
 
-  it('한 주가 지나면 날짜가 가고 4주마다 연습경기', () => {
+  it('한 주가 지나면 날짜가 가고, 3월 4주에 첫 연습경기', () => {
     const c = createCareer(spec(), 3);
     expect(dateText(c.week)).toBe('1학년 3월 1주');
-    for (let i = 0; i < GAME_EVERY - 1; i++) expect(doWeek(c, 'rest').game).toBeNull();
-    const r = doWeek(c, 'video');
-    expect(r.game).not.toBeNull();
-    expect(c.pendingGame).toBe(r.game);
+    for (let i = 0; i < 3; i++) expect(playWeek(c, 'rest').game).toBeNull();
+    const r = playWeek(c, 'video');
+    expect(r.game?.kind).toBe('practice');
+    expect(c.pendingGame).toEqual(r.game);
     expect(dateText(c.week)).toBe('1학년 4월 1주');
   });
 
@@ -140,7 +140,7 @@ describe('연습경기 (E7, T1)', () => {
 
   it('경기를 치르면 기록이 남고 포인트가 들어오고, 신입생도 뛴다', () => {
     const c = createCareer(spec({ background: 'convert' }), 6);
-    for (let i = 0; i < GAME_EVERY; i++) doWeek(c, 'video');
+    for (let i = 0; i < 4; i++) playWeek(c, 'video');
     const m = playMatch(c);
     expect(m.myPid).toBeGreaterThanOrEqual(0);
     const rep = applyMatch(c, m);
@@ -152,7 +152,7 @@ describe('연습경기 (E7, T1)', () => {
 
   it('다친 선수는 결장', () => {
     const c = createCareer(spec(), 7);
-    for (let i = 0; i < GAME_EVERY; i++) doWeek(c, 'rest');
+    for (let i = 0; i < 4; i++) playWeek(c, 'rest');
     c.injury = { name: '발목 염좌', weeks: 2, total: 2 };
     const m = playMatch(c);
     expect(m.myPid).toBe(-1);
