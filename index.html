@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BASK · 경기 엔진 테스트</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <div class="brand">BASK <span>M1 경기 엔진 테스트</span></div>
+        <div class="seed">경기 번호 <b id="seed">-</b></div>
+      </header>
+
+      <section class="board" aria-label="스코어보드">
+        <div class="team t0"><span class="chip" id="chip0"></span><span class="tname" id="tname0">-</span><span class="score" id="score0">0</span></div>
+        <div class="clockbox">
+          <div class="q" id="quarter">1Q</div>
+          <div class="clock" id="clock">10:00</div>
+          <div class="sc"><small>샷클락</small><span id="shotclock">24</span></div>
+        </div>
+        <div class="team t1"><span class="score" id="score1">0</span><span class="tname" id="tname1">-</span><span class="chip" id="chip1"></span></div>
+        <div class="progress"><i id="progress"></i></div>
+      </section>
+
+      <div class="main">
+        <div class="courtcol">
+          <div id="game"></div>
+          <div class="controls">
+            <button type="button" id="btnPlay" title="단축키 Space">❚❚ 일시정지</button>
+            <div class="speeds" id="speeds"></div>
+            <button type="button" id="btnSkip" title="단축키 Q">쿼터 넘기기</button>
+            <button type="button" id="btnEnd">결과 보기</button>
+            <button type="button" id="btnRestart">처음부터</button>
+            <button type="button" id="btnNew" class="primary" title="단축키 N">새 경기</button>
+          </div>
+        </div>
+        <aside class="panel">
+          <nav class="tabs" id="tabs">
+            <button type="button" data-tab="log" class="on">문자 중계</button>
+            <button type="button" data-tab="box">박스스코어</button>
+            <button type="button" data-tab="player">선수</button>
+          </nav>
+          <div class="tab" id="tab-log"><ul class="log" id="log"></ul></div>
+          <div class="tab" id="tab-box" hidden></div>
+          <div class="tab" id="tab-player" hidden>
+            <div class="roster" id="roster"></div>
+            <div class="card" id="card"></div>
+          </div>
+        </aside>
+      </div>
+      <footer class="foot">원 = 선수 (숫자는 등번호), 주황 점 = 공. 노란 화살표는 고른 선수. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · N 새 경기</footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

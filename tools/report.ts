@@ -12,6 +12,8 @@ const kinds: Record<string, { a: number; m: number }> = {};
 const tov: Record<string, number> = {};
 const plays: Record<string, number> = {};
 let margin = 0;
+let topSum = 0;
+let topMax = 0;
 const t0 = performance.now();
 for (let g = 0; g < N; g++) {
   const rng = new Rng(1000 + g);
@@ -36,6 +38,9 @@ for (let g = 0; g < N; g++) {
     agg.tov += t.tov;
   }
   margin += Math.abs(res.final[0] - res.final[1]);
+  const top = Math.max(...box.players.map((p) => p.pts));
+  topSum += top;
+  topMax = Math.max(topMax, top);
   agg.poss += res.counters.possessions[0] + res.counters.possessions[1];
   agg.passes += res.counters.passes;
   agg.intercepts += res.counters.intercepts;
@@ -61,7 +66,8 @@ const TG = N * 2; // 팀-경기 수
 const f = (v: number, d = 1) => v.toFixed(d);
 const pct = (a: number, b: number) => (b ? ((a / b) * 100).toFixed(1) + '%' : '-');
 const row = (name: string, val: string, ref: string) => console.log(`${name.padEnd(16)} ${val.padStart(9)}   기준 ${ref}`);
-console.log(`\n${N}경기 (${f(ms / N, 0)}ms/경기), 팀당 경기 평균. 기준은 유로리그 2023-24 평균 근사\n`);
+console.log(`\n${N}경기 (${f(ms / N, 0)}ms/경기), 팀당 경기 평균. 기준은 유로리그 2023-24 평균 근사`);
+console.log('※ 아직 파울·자유투가 없어서 득점은 자유투 몫(경기당 약 15점)만큼 낮게 나온다.\n');
 row('득점', f(agg.pts / TG), '80~82');
 row('공격 횟수', f(agg.poss / TG), '71~73');
 row('야투 시도', f(agg.fga / TG), '61~63');
@@ -79,6 +85,8 @@ row('턴오버', f(agg.tov / TG), '12~13');
 row('속공 득점', f(agg.fbPts / TG), '8~12');
 row('평균 점수차', f(margin / N), '10~13');
 row('연장 비율', pct(agg.ot, N), '4~6%');
+row('경기 최다 득점', f(topSum / N), '24~28');
+row('최다 득점 기록', String(topMax), '40점대');
 console.log('');
 console.log(`패스 ${f(agg.passes / TG)}/팀경기, 가로채기 ${pct(agg.intercepts, agg.passes)} / 패스, 돌파 ${f(agg.drives / TG)}, 앵클 ${f(agg.ankle / TG)}, 슛까지 평균 ${f(agg.shotTime / agg.shotN)}초`);
 console.log('슛 종류:', Object.entries(kinds).map(([k, v]) => `${k} ${f(v.a / TG)}개 ${pct(v.m, v.a)}`).join(', '));

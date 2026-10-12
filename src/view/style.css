@@ -1,0 +1,516 @@
+/* 도트 게임 UI. 체육관 조명이 꺼진 남색 바탕에 전광판 주황. */
+:root {
+  --bg: #12151d;
+  --panel: #1b202c;
+  --panel2: #232a39;
+  --line: #343d54;
+  --ink: #e9ecf3;
+  --muted: #98a2b9;
+  --led: #ffb545;
+  --led-dim: #6b4a1a;
+  --good: #7bd88f;
+  --bad: #ff8a7a;
+  --font: 'Galmuri11', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel2);
+  border: 0;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35),
+    0 0 0 2px var(--line);
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover {
+  background: #2c3448;
+}
+button:active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 rgba(0, 0, 0, 0.35),
+    0 0 0 2px var(--line);
+}
+button.on {
+  background: var(--led);
+  color: #1d1406;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.25),
+    0 0 0 2px #b9772a;
+}
+button.primary {
+  background: #2f6f4c;
+  box-shadow:
+    inset 0 -2px 0 rgba(0, 0, 0, 0.3),
+    0 0 0 2px #4fa477;
+}
+button:focus-visible {
+  outline: 2px solid var(--led);
+  outline-offset: 3px;
+}
+
+#app {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 12px 16px 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.brand {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 2px;
+  color: var(--led);
+}
+.brand span {
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0;
+  color: var(--muted);
+  margin-left: 8px;
+}
+.seed {
+  color: var(--muted);
+  font-size: 12px;
+}
+.seed b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 스코어보드 */
+.board {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  background: #0b0d12;
+  box-shadow: 0 0 0 2px var(--line);
+  padding: 10px 16px 14px;
+}
+.team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.team.t1 {
+  justify-content: flex-end;
+}
+.chip {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.tname {
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.score {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--led);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.2ch;
+  text-align: center;
+  text-shadow: 0 0 10px rgba(255, 181, 69, 0.35);
+}
+.clockbox {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  padding: 0 12px;
+}
+.clockbox .q {
+  font-size: 12px;
+  color: var(--muted);
+}
+.clockbox .clock {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.clockbox .sc {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 11px;
+}
+.clockbox .sc span {
+  color: #ff6a4a;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.clockbox .sc span.low {
+  animation: blink 0.5s steps(2) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #1f2433;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--led-dim);
+}
+
+/* 본문 */
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (min-width: 1080px) {
+  .main {
+    grid-template-columns: minmax(0, 1fr) 380px;
+  }
+}
+.courtcol {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  align-content: start;
+}
+#game {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 624 / 368;
+  align-self: start;
+  overflow: hidden;
+  background: #1b1f2a;
+  box-shadow: 0 0 0 2px var(--line);
+}
+#game canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.speeds {
+  display: flex;
+  gap: 4px;
+}
+.speeds button {
+  padding: 5px 8px;
+  min-width: 40px;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  background: var(--panel);
+  box-shadow: 0 0 0 2px var(--line);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: 640px;
+}
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 8px 8px 0;
+}
+.tabs button {
+  flex: 1;
+  box-shadow: none;
+  background: transparent;
+  color: var(--muted);
+  border-bottom: 2px solid var(--line);
+}
+.tabs button.on {
+  color: var(--led);
+  background: transparent;
+  border-bottom-color: var(--led);
+  box-shadow: none;
+}
+.tab {
+  overflow: auto;
+  padding: 8px 10px 12px;
+  min-height: 240px;
+}
+
+/* 문자 중계 */
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.log li {
+  display: grid;
+  grid-template-columns: 62px auto 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 4px;
+}
+.log li:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.025);
+}
+.log .t {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.log .m {
+  min-width: 0;
+}
+.log .sc {
+  color: var(--led);
+  font-variant-numeric: tabular-nums;
+}
+.log li.miss .m,
+.log li.rebound .m {
+  color: var(--muted);
+}
+.log li.turnover .m {
+  color: var(--bad);
+}
+.log li.ankle .m {
+  color: #ffe066;
+}
+.log li.big .m {
+  color: #fff;
+  font-weight: 700;
+}
+.log li.quarterStart,
+.log li.quarterEnd,
+.log li.gameEnd,
+.log li.tip {
+  color: var(--led);
+}
+.log li.quarterStart,
+.log li.quarterEnd,
+.log li.gameEnd {
+  grid-template-columns: 62px 1fr;
+  background: #2a2416;
+}
+.tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 0 4px;
+  line-height: 16px;
+}
+
+/* 박스스코어 */
+#tab-box h3 {
+  font-size: 13px;
+  margin: 8px 0 4px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.tablewrap {
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+th,
+td {
+  padding: 3px 4px;
+  text-align: right;
+  white-space: nowrap;
+}
+th {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 11px;
+  border-bottom: 2px solid var(--line);
+}
+th.nm,
+td.nm {
+  text-align: left;
+}
+td.nm small {
+  color: var(--muted);
+}
+tr[data-p] {
+  cursor: pointer;
+}
+tr[data-p]:hover {
+  background: #262d3e;
+}
+tr.focus {
+  background: #3a3220 !important;
+}
+tr.tot td {
+  border-top: 2px solid var(--line);
+  color: var(--led);
+}
+.no {
+  display: inline-block;
+  min-width: 2.2ch;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 10px 0 0;
+}
+
+/* 선수 */
+.roster {
+  display: grid;
+  gap: 6px;
+}
+.rteam {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.rteam .tag {
+  margin-right: 4px;
+}
+.rteam button {
+  padding: 3px 6px;
+  font-size: 12px;
+}
+.rteam button.focus {
+  background: #3a3220;
+  box-shadow: 0 0 0 2px var(--led);
+}
+.card .ph {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.card .ph b {
+  font-size: 15px;
+}
+.card .ph span:last-child {
+  color: var(--muted);
+}
+.card .body {
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+.rg h4 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--led);
+}
+.rt {
+  display: grid;
+  grid-template-columns: 92px 1fr 18px 26px;
+  gap: 6px;
+  align-items: center;
+  padding: 1px 0;
+}
+.rl {
+  color: var(--muted);
+  font-size: 12px;
+}
+.bar {
+  height: 6px;
+  background: #11141b;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.bar i {
+  display: block;
+  height: 100%;
+  background: #5a83c9;
+}
+.gr {
+  font-weight: 700;
+  text-align: center;
+}
+.rv {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.gS {
+  color: #ffd23f;
+}
+.gA {
+  color: #ff9f43;
+}
+.gB {
+  color: #ffcc66;
+}
+.gC {
+  color: #7bd88f;
+}
+.gD {
+  color: #6ec1ff;
+}
+.gE {
+  color: #a0a8c0;
+}
+.gF,
+.gG {
+  color: #6a7189;
+}
+
+.foot {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .score {
+    font-size: 26px;
+  }
+  .tname {
+    font-size: 12px;
+  }
+  .clockbox .clock {
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clockbox .sc span.low {
+    animation: none;
+  }
+}

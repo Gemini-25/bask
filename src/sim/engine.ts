@@ -181,6 +181,8 @@ class GameSim {
   private tick = 0;
   private buzzer = false;
   private hot: number[];
+  /** 선수별 슛 시도. 한 명에게 몰리면 수비가 그 선수를 집중 견제한다. */
+  private fga = new Array<number>(10).fill(0);
   private events: GameEvent[] = [];
   private qLen: number;
   private otLen: number;
@@ -652,10 +654,11 @@ class GameSim {
       ev += (55 - r.teamwork) * 0.0015;
       if (si.kind === 'three') {
         // 수비가 붙은 3점은 꺼린다. 리그 성향상 3점을 아끼는 편 (슈터는 덜 아낀다)
-        ev -= c * 0.15 + clamp(0.22 - (r.three - 50) * 0.004, 0, 0.26);
+        ev -= c * 0.15 + clamp(0.13 - (r.three - 50) * 0.004, 0, 0.2);
       }
       if (play?.k === 'iso' && play.star === h.i) ev += 0.04;
       if (L.u > 9.6 && tLeft > 3) ev -= 0.1; // 너무 먼 슛은 꺼린다
+      ev -= clamp((this.share(h.i) - 0.25) * 1.2, 0, 0.3); // 많이 쐈으면 동료를 찾는다
       opts.push({ v: ev, go: () => this.startGather(h, post), label: 'shot-' + si.kind + '@' + c.toFixed(2) });
     }
 
@@ -669,6 +672,7 @@ class GameSim {
       let ev = lerp(0.68, 1.26, lane) + (skill - 50) * 0.004;
       if (play?.k === 'iso' && play.star === h.i) ev += 0.05;
       if (this.mode === 'advance' && lane > 0.7) ev += 0.08;
+      ev -= clamp((this.share(h.i) - 0.25) * 1.0, 0, 0.25);
       opts.push({ v: ev, go: () => this.startDrive(h), label: 'drive@' + lane.toFixed(2) });
     }
 
@@ -720,7 +724,15 @@ class GameSim {
   /** 공격을 계속했을 때 기대 득점. 샷클락이 줄어들수록 떨어진다. */
   private vCont(tLeft: number): number {
     const base = 1.02 * Math.pow(clamp((tLeft - 1.2) / 10, 0, 1), 0.6);
-    return base + 0.1 * clamp((tLeft - 13) / 10, 0, 1);
+    return base + 0.06 * clamp((tLeft - 13) / 10, 0, 1);
+  }
+
+  /** 팀 슛 중 이 선수 비중 (경기 초반엔 0에 가깝게) */
+  private share(i: number): number {
+    const base = i < 5 ? 0 : 5;
+    let team = 0;
+    for (let k = base; k < base + 5; k++) team += this.fga[k];
+    return this.fga[i] / (team + 8);
   }
 
   private form(i: number, si: ShotInfo): number {
@@ -768,7 +780,9 @@ class GameSim {
         } else if (cr > c2) c2 = cr;
       }
     }
-    return { c: clamp(c1 + 0.3 * c2, 0, 1), blocker: bi, c1 };
+    // 슛을 많이 쏘는 선수는 수비가 집중해서 막는다
+    const focus = clamp((this.share(s.i) - 0.22) * 2.2, 0, 0.45);
+    return { c: clamp(c1 + 0.3 * c2 + focus, 0, 1), blocker: bi, c1 };
   }
 
   /** 골대까지 돌파 길이 얼마나 열려 있나 (0~1) */
@@ -850,6 +864,7 @@ class GameSim {
     if (play?.k === 'post' && play.star === m.i && Lm.u < 4) v += 0.12;
     if (this.lastPass && this.lastPass.from === m.i && this.t - this.lastPass.t < 2) v -= 0.06;
     v += (h.pl.r.teamwork - 50) * 0.0008;
+    v -= clamp((this.share(m.i) - 0.28) * 0.8, 0, 0.2);
     return v;
   }
 
@@ -926,6 +941,7 @@ class GameSim {
     const fast = this.possLive && this.t - this.possStart < 7;
     this.cnt.shotTimeSum += this.t - this.possStart;
     this.cnt.shotTimeN++;
+    this.fga[h.i]++;
     this.ball.holder = -1;
     this.misc = null;
 
@@ -1648,7 +1664,12 @@ class GameSim {
       const by = my + uy * sag;
       const helpX = lerp(this.ball.x, H.x, 0.55);
       const helpY = lerp(this.ball.y, H.y, 0.55);
-      const w = clamp((db - 5) / 9, 0, 0.45) * (0.65 + p.pl.r.helpD / 200);
+      let w = clamp((db - 5) / 9, 0, 0.45) * (0.65 + p.pl.r.helpD / 200);
+      // 코너 슈터와 좋은 슈터한테서는 멀리 떨어지지 않는다
+      const Lman = this.loc(off, mx, my);
+      if (Lman.u < 3.2 && Math.abs(Lman.v) > 5.5) w *= 0.55;
+      if (m.pl.r.three >= 60) w *= 0.7;
+      else if (m.pl.r.three < 42) w = Math.min(0.6, w * 1.3 + 0.1);
       gx = lerp(bx, helpX, w);
       gy = lerp(by, helpY, w);
     }
