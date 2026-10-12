@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createCareer, type CreateSpec } from '../src/career/career';
+import { createCareer, SAVE_VERSION, type CreateSpec } from '../src/career/career';
 
 import { resolveEvent } from '../src/career/events';
 import { createLeague, PRO_WEEKS, standings, offseason, draftClass, scheduleSeason } from '../src/career/league';
@@ -47,10 +47,13 @@ describe('프로 리그 (W6, W7)', () => {
     expect(L.games.length).toBe(135);
     for (const t of L.teams) expect(L.games.filter((g) => g.a === t.info.id || g.b === t.info.id).length).toBe(27);
     // 한 주에 팀당 한 경기
-    for (let w = PRO_WEEKS.seasonStart; w < PRO_WEEKS.seasonStart + 27; w++) {
+    for (let w = PRO_WEEKS.seasonStart; w <= PRO_WEEKS.seasonStart + 27; w++) {
       const ids = L.games.filter((g) => g.week === w).flatMap((g) => [g.a, g.b]);
       expect(new Set(ids).size).toBe(ids.length);
     }
+    // 올스타 주간은 비어 있다
+    expect(L.games.some((g) => g.week === PRO_WEEKS.seasonStart + PRO_WEEKS.allStarBreak)).toBe(false);
+    expect(Math.max(...L.games.map((g) => g.week))).toBeLessThan(PRO_WEEKS.playoffs[0].weeks[0]);
   });
 
   it('비시즌: 나이를 먹고, 은퇴하고, 신인으로 12명 이상 채운다', () => {
@@ -132,7 +135,7 @@ describe('세이브 v2 → v3', () => {
     raw.career.v = 2;
     for (const k of ['pro', 'league', 'gameQueue', 'draft', 'contractPending', 'money', 'items', 'popularity', 'sns', 'yearOf']) delete raw.career[k];
     const back = importCareer(JSON.stringify(raw));
-    expect(back.v).toBe(3);
+    expect(back.v).toBe(SAVE_VERSION);
     expect(back.money).toBe(0);
     expect(back.pro).toBeNull();
     expect(back.yearOf).toBe(0);

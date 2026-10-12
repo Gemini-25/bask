@@ -12,13 +12,16 @@ import { dunkList } from '../data/dunks';
 import type { DunkStyle } from '../sim/types';
 import { emptyStats, startAbilities, type CareerStats } from './abilities';
 import { has, houseMult, houseRest } from './money';
+import type { AllStarWeekend, NationalCamp } from './allstar';
+import type { SeasonAwards } from './awards';
+import type { LegacyBonus, RetireSummary } from './legacy';
 import type { DraftResult } from './draft';
 import type { PendingEvent } from './events';
 import type { SnsPost } from './fans';
 import type { League } from './league';
 import type { Season } from './season';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const WEEKS_PER_YEAR = 48;
 export const MAX_RATING = 99;
 /** 선수 만들 때 자유 포인트로 올릴 수 있는 최대치 */
@@ -98,6 +101,8 @@ export interface PendingGame {
   /** '춘계 연맹전 4강' 같은 이름 */
   label: string;
   home: boolean;
+  /** 올스타전, 국가대표 경기 */
+  special?: 'allstar' | 'national';
 }
 
 export interface GameRecord {
@@ -183,6 +188,28 @@ export interface Career {
   sns: SnsPost[];
   /** 마지막으로 해 넘김을 처리한 해 */
   yearOf: number;
+  /** 받은 상과 우승 */
+  trophies: string[];
+  /** 아직 안 본 시상식 */
+  ceremony: SeasonAwards | null;
+  /** 해외 리그에서 뛰는 중 (그동안 국내 리그는 homeLeague에 둔다) */
+  overseas: boolean;
+  homeLeague: League | null;
+  /** 해외에서 돌아오면 해외 리그는 여기 둔다 (다시 갈 수 있다) */
+  abroadLeague: League | null;
+  /** 이번 시즌 올스타 위크엔드 */
+  allStar: AllStarWeekend | null;
+  /** 이번 비시즌 국가대표 */
+  national: NationalCamp | null;
+  /** 거쳐 간 팀 (영구결번 판정) */
+  teamHistory: { team: string; name: string; season: number }[];
+  /** 가장 높았던 종합 능력치 */
+  peakOvr: number;
+  /** 은퇴 결정을 기다린다 (나이가 차면 무조건) */
+  retirePending: 'choice' | 'forced' | null;
+  retired: RetireSummary | null;
+  /** 2세 커리어면 부모 정보 */
+  legacy: LegacyBonus | null;
   counts: Partial<Record<ActionId, number>>;
 }
 
@@ -230,6 +257,8 @@ export interface CreateSpec {
   /** 자유 포인트 배분 */
   alloc: Partial<Record<RatingKey, number>>;
   school: string;
+  /** 2세면 부모가 물려준 보너스 */
+  legacy?: LegacyBonus;
 }
 
 export const HEIGHT_RANGE = 8;
@@ -286,7 +315,7 @@ export function applyAlloc(base: Ratings, alloc: Partial<Record<RatingKey, numbe
 export function createCareer(spec: CreateSpec, seed: number): Career {
   const rng = new Rng(seed);
   const { r: base, body, bg } = creationBase(spec);
-  const { r } = applyAlloc(base, spec.alloc, bg.freePoints);
+  const { r } = applyAlloc(base, spec.alloc, bg.freePoints + (spec.legacy?.points ?? 0));
   const me: Player = { id: 'me', name: spec.name.trim() || '이름없음', number: spec.number, pos: spec.prefPos, body, r, look: spec.look, abilities: startAbilities(spec.background), age: 16 };
   const finalHeight = Math.max(body.heightCm, Math.round(body.heightCm + bg.growth + rng.normal(0, 2)));
   const school = schoolById(spec.school);
@@ -300,7 +329,7 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     gender: spec.gender,
     background: spec.background,
     growth: spec.growth,
-    potential: bg.potential,
+    potential: Math.min(99, bg.potential + (spec.legacy?.potential ?? 0)),
     prefPos: spec.prefPos,
     finalHeight,
     week: 0,
@@ -329,11 +358,23 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     gameQueue: [],
     draft: null,
     contractPending: false,
-    money: 0,
+    money: spec.legacy?.money ?? 0,
     items: [],
     popularity: 0,
     sns: [],
     yearOf: 0,
+    trophies: [],
+    ceremony: null,
+    overseas: false,
+    homeLeague: null,
+    abroadLeague: null,
+    allStar: null,
+    national: null,
+    teamHistory: [],
+    peakOvr: 0,
+    retirePending: null,
+    retired: null,
+    legacy: spec.legacy ?? null,
     counts: {},
   };
   c.rival = createRival(c, rng.fork(11));

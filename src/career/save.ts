@@ -6,6 +6,12 @@ import { dunkList } from '../data/dunks';
 import { emptyStats, startAbilities } from './abilities';
 import { coachName, createMentor, createRival } from './people';
 import { schoolById } from './schools';
+import { leagueTeam, type League } from './league';
+
+const teamTitle = (L: League, id: string) => {
+  const t = leagueTeam(L, id)?.info;
+  return t ? `${t.city} ${t.name}` : id;
+};
 
 export const SLOTS = 3;
 const KEY = (slot: number) => `bask.save.${slot}`;
@@ -134,6 +140,21 @@ export function migrate(raw: unknown): Career {
     c.popularity ??= 0;
     c.sns ??= [];
     c.me.age ??= 16 + y;
+  }
+  if (c.v < 4) {
+    // v3 → v4: 시상, 올스타, 국가대표, 해외 리그, 은퇴, 2세
+    c.trophies ??= [];
+    c.ceremony ??= null;
+    c.overseas ??= false;
+    c.homeLeague ??= null;
+    c.abroadLeague ??= null;
+    c.allStar ??= null;
+    c.national ??= null;
+    c.teamHistory ??= c.pro && c.league ? [{ team: c.pro.team, name: teamTitle(c.league, c.pro.team), season: 0 }] : [];
+    c.peakOvr ??= 0;
+    c.retirePending ??= null;
+    c.retired ??= null;
+    c.legacy ??= null;
   }
   c.v = SAVE_VERSION;
   return c;

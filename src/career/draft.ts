@@ -70,12 +70,15 @@ export function runDraft(c: Career): DraftResult {
       }
     }
   const myNo = picks.find((p) => p.me)!.no;
+  L.rookies = [...others.map((p) => p.id), 'me', 'rival'];
+  L.stats = {};
   // 내 등번호가 겹치면 남는 번호로
   const t = leagueTeam(L, myTeam);
   if (t.players.some((p) => p.number === c.me.number)) c.me.number = freeNumber(t, rng);
   const salary = rookieSalary(myNo);
   c.league = L;
   c.pro = { team: myTeam, salary, years: 2, pickNo: myNo, season: 0 };
+  c.teamHistory = [{ team: myTeam, name: `${t.info.city} ${t.info.name}`, season: 0 }];
   c.trust = 35;
   c.coach = coachName((c.seed ^ myTeam.charCodeAt(0) * 7919) >>> 0);
   c.friends = Object.fromEntries(t.players.map((p) => [p.id, 25]));

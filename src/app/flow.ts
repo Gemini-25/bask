@@ -5,12 +5,14 @@ import type { InterviewChoice } from '../career/fans';
 import { effectHint, eventById, fill, resolveEvent } from '../career/events';
 import { leagueTeam } from '../career/league';
 import { moneyText } from '../career/money';
-import { contractOffers, signContract, teamName, type Offer } from '../career/pro';
-import { myTeam, type GameReport, type MatchSetup } from '../career/match';
+import { contractOffers, signContract, type Offer } from '../career/pro';
+import { mySideId, myTeam, teamInfoOf, type GameReport, type MatchSetup } from '../career/match';
 import { schoolById } from '../career/schools';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
-import { $, esc, modal } from './dom';
+import { $, closeModal, esc, modal } from './dom';
+import { hofScore, HOF_SCORE, type RetireSummary } from '../career/legacy';
+import { DUNK_LABEL } from '../sim/types';
 import { sound } from '../view/sound';
 import { trainingScene } from './scenes';
 import { fatigueColor, pointsHtml } from './home';
@@ -36,8 +38,8 @@ function changeHtml(label: string, before: string, after: string, good: boolean 
 }
 
 export function weekModal(c: Career, r: WeekResult, onOk: () => void) {
-  sound.play(r.notes.some((n) => n.startsWith('특수능력') || n.startsWith('덩크 해금')) ? 'fanfare' : 'jingle');
-  const school = schoolById(c.school);
+  sound.play(r.notes.some((n) => n.startsWith('특수능력') || n.startsWith('덩크 해금') || n.includes('뽑혔다')) ? 'fanfare' : 'jingle');
+  const school = teamInfoOf(c, c.pro ? c.pro.team : c.school);
   const focus = r.action.id === 'solo' ? FOCUS.find((f) => f.id === r.focus) : undefined;
   const title = `${r.action.label}${focus ? ` · ${focus.label}` : ''}`;
   modal(
@@ -50,7 +52,7 @@ export function weekModal(c: Career, r: WeekResult, onOk: () => void) {
       ${changeHtml('컨디션', CONDITION_LABEL[r.conditionBefore], CONDITION_LABEL[r.conditionAfter], r.conditionAfter > r.conditionBefore)}
     </div>
     ${r.notes.filter((n) => !/ \+\d+$/.test(n)).map((n) => `<p class="note ${r.injured ? 'bad' : ''}">${esc(n)}</p>`).join('')}
-    ${r.game ? `<p class="note hot">이번 주말은 ${esc(schoolById(r.game.opponent).name)}와(과) ${esc(r.game.label)}!</p>` : ''}
+    ${r.game ? `<p class="note hot">이번 주말은 ${esc(teamInfoOf(c, r.game.opponent).full)}와(과) ${esc(r.game.label)}!</p>` : ''}
     <div class="mbtn"><button type="button" class="primary" data-close>${r.event ? '다음 ▶' : r.game ? '경기 준비 ▶' : '확인'}</button></div>`,
     { onClose: onOk },
   );
@@ -87,22 +89,22 @@ export function eventModal(c: Career, onDone: () => void) {
 export function preGameModal(c: Career, onWatch: () => void, onSkip: () => void) {
   const pg = c.pendingGame!;
   const pro = c.pro && c.league;
-  const opp = pro ? { ...leagueTeam(c.league!, pg.opponent).info, blurb: '프로 팀' } : schoolById(pg.opponent);
-  const mine = pro ? leagueTeam(c.league!, c.pro!.team).info : schoolById(c.school);
-  const { team, meIndex } = myTeam(c, pg.kind === 'official');
+  const opp = { ...teamInfoOf(c, pg.opponent), blurb: pg.special === 'allstar' ? '별들의 잔치' : pg.special === 'national' ? '국가대표 경기' : pro ? (c.overseas ? '해외 리그 · 쿼터 12분 · 6반칙 퇴장' : '프로 팀') : schoolById(pg.opponent).blurb };
+  const mine = teamInfoOf(c, mySideId(c, pg.special));
+  const { team, meIndex } = myTeam(c, pg.kind === 'official', pg.special);
   const role = meIndex < 0 ? (c.injury ? '부상으로 결장' : '명단 제외') : meIndex < 5 ? `주전 (${team.players[meIndex].pos})` : meIndex === 5 ? '식스맨' : '벤치 (교체 대기)';
   const home = pg.home;
   const rival = c.rival && c.rival.school === pg.opponent && !pro ? `<p class="note hot center">라이벌 ${esc(c.rival.player.name)}이(가) 나온다! (맞대결 ${c.rival.w}승 ${c.rival.l}패)</p>` : '';
   const box = modal(
     `<h2>${esc(pg.label)}</h2>
     <div class="vs"><span><i class="sw" style="background:${mine.color}"></i>${esc(mine.name)}</span><b>vs</b><span><i class="sw" style="background:${opp.color}"></i>${esc(opp.name)}</span></div>
-    <p class="muted center">${pro ? (home ? '홈 경기' : `${esc(opp.city)} 원정`) : pg.kind === 'official' ? '공식전' : home ? '우리 학교 체육관' : `${esc(opp.city)} 원정`} · ${esc(opp.blurb)}</p>
+    <p class="muted center">${pg.special ? (pg.special === 'allstar' ? '올스타 위크엔드' : '아시아컵') : pro ? (home ? '홈 경기' : `${esc(opp.city)} 원정`) : pg.kind === 'official' ? '공식전' : home ? '우리 학교 체육관' : `${esc(opp.city)} 원정`} · ${esc(opp.blurb)}</p>
     ${rival}
     <div class="chgs">
       <div class="chg"><span>감독 결정</span><b>${role}</b></div>
       <div class="chg"><span>컨디션</span><b>${CONDITION_LABEL[c.condition]}</b></div>
       <div class="chg"><span>피로</span><b style="color:${fatigueColor(c.fatigue)}">${Math.round(c.fatigue)}</b>${c.fatigue > 20 ? '<small>체력이 덜 찬 채로 시작</small>' : ''}</div>
-      ${pg.kind === 'official' ? `<div class="chg"><span>감독 신뢰</span><b>${Math.round(c.trust)}</b><small>공식전은 출전 시간 보장 없음</small></div>` : ''}
+      ${pg.kind === 'official' && !pg.special ? `<div class="chg"><span>감독 신뢰</span><b>${Math.round(c.trust)}</b><small>공식전은 출전 시간 보장 없음</small></div>` : ''}
     </div>
     <div class="mbtn"><button type="button" id="pgSkip">결과만 보기</button><button type="button" class="primary" id="pgWatch">경기 보기 ▶</button></div>`,
   );
@@ -134,9 +136,10 @@ function applyInterview(c: Career, ch: InterviewChoice) {
 
 export function renderResult(c: Career, m: MatchSetup, rep: GameReport, ovrBefore: number, act: ResultActions) {
   if (rep.abilityNotes.length || rep.tourNote) sound.play('fanfare');
-  const pro = m.pro && c.league && c.pro;
-  const mine = pro ? { ...leagueTeam(c.league!, c.pro!.team).info, name: teamName(c.league!, c.pro!.team) } : schoolById(c.school);
-  const opp = pro ? { ...leagueTeam(c.league!, m.opponent).info, name: teamName(c.league!, m.opponent) } : schoolById(m.opponent);
+  const mi = teamInfoOf(c, mySideId(c, m.special));
+  const oi = teamInfoOf(c, m.opponent);
+  const mine = { ...mi, name: mi.full };
+  const opp = { ...oi, name: oi.full };
   const l = rep.line;
   const statRow = l
     ? `<table class="ttable rline"><tr><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>스틸</th><th>블록</th><th>실책</th><th>파울</th><th>야투</th><th>3점</th><th>자유투</th></tr>
@@ -263,19 +266,20 @@ export function draftModal(c: Career, onDone: () => void) {
   c.draft = null;
 }
 
-/** 재계약: 지금 팀 제안을 받거나, 더 달라고 하거나, 다른 팀(FA)으로 */
+/** 재계약: 지금 팀 제안을 받거나, 더 달라고 하거나, 다른 팀(FA)으로, 해외로 */
 export function contractModal(c: Career, onDone: () => void) {
-  const L = c.league!;
-  const { mine, others } = contractOffers(c);
+  const { mine, others, abroad } = contractOffers(c);
   const row = (o: Offer, label: string, i: number) => {
-    const t = leagueTeam(L, o.team).info;
-    return `<button type="button" class="choice" data-o="${i}"><b><i class="sw" style="background:${t.color}"></i>${esc(t.city)} ${esc(t.name)} · ${moneyText(o.salary)} × ${o.years}시즌</b><small>${label}</small></button>`;
+    const t = teamInfoOf(c, o.team);
+    return `<button type="button" class="choice${o.abroad ? ' abroad' : ''}" data-o="${i}"><b><i class="sw" style="background:${t.color}"></i>${esc(t.full)} · ${moneyText(o.salary)} × ${o.years}시즌</b><small>${label}</small></button>`;
   };
-  const offers = [mine, ...others];
+  const offers = [mine, ...others, ...abroad];
+  const age = c.me.age ?? 0;
   const box = modal(
     `<h2>계약이 끝났다</h2>
-    <p>지금 연봉 ${moneyText(c.pro!.salary)}. 에이전트가 제안을 모아 왔다.</p>
+    <p>지금 연봉 ${moneyText(c.pro!.salary)}. 에이전트가 제안을 모아 왔다.${age >= 30 ? ` <span class="muted">(${age}살, 계약 기간이 짧아졌다)</span>` : ''}</p>
     <div class="choices">${row(mine, '지금 팀과 재계약', 0)}${others.map((o, i) => row(o, 'FA 이적 (감독 신뢰는 처음부터)', i + 1)).join('')}
+      ${abroad.map((o, i) => row(o, o.abroad ? '✈ 해외 진출! 더 센 리그 · 쿼터 12분 · 6반칙 퇴장 · 연봉 대폭 상승' : '국내 복귀 (팬들이 기다린다)', i + 1 + others.length)).join('')}
       <button type="button" class="choice" data-o="more"><b>지금 팀에 더 달라고 한다</b><small>성공하면 +20%, 실패하면 제안 그대로에 감독 신뢰 -5</small></button></div>`,
   );
   box.querySelectorAll<HTMLElement>('[data-o]').forEach(
@@ -294,8 +298,179 @@ export function contractModal(c: Career, onDone: () => void) {
           }
         } else o = offers[Number(b.dataset.o)];
         signContract(c, o);
-        const t = leagueTeam(L, o.team).info;
-        modal(`<h2>계약 완료</h2>${note ? `<p>${esc(note)}</p>` : ''}<p>${esc(t.city)} ${esc(t.name)} · ${moneyText(o.salary)} × ${o.years}시즌</p><div class="mbtn"><button type="button" class="primary" data-close>확인</button></div>`, { onClose: onDone });
+        if (o.abroad) note = '해외 리그로 간다! 새 동료들은 말이 잘 안 통하지만, 농구는 똑같다.';
+        if (o.home) note = '고향 리그로 돌아왔다!';
+        const t = teamInfoOf(c, o.team);
+        if (o.abroad || o.home) sound.play('fanfare');
+        modal(`<h2>계약 완료</h2>${note ? `<p>${esc(note)}</p>` : ''}<p>${esc(t.full)} · ${moneyText(o.salary)} × ${o.years}시즌</p><div class="mbtn"><button type="button" class="primary" data-close>확인</button></div>`, { onClose: onDone });
       }),
   );
+}
+
+/** 시즌 시상식 (L6) */
+export function awardsModal(c: Career, onDone: () => void) {
+  const a = c.ceremony!;
+  c.ceremony = null;
+  const L = c.league!;
+  const mine = a.awards.filter((x) => x.id === 'me');
+  sound.play(mine.length ? 'fanfare' : 'jingle');
+  const team = (id: string) => (L.teams.some((t) => t.info.id === id) ? teamInfoOf(c, id).name : id);
+  const main = a.awards.filter((x) => x.key !== 'best5');
+  const best = a.awards.filter((x) => x.key === 'best5');
+  modal(
+    `<h2>${esc(a.league)} ${a.season + 1}시즌 시상식</h2>
+    ${mine.length ? `<p class="note hot center">🏆 ${mine.map((x) => esc(x.label)).join(' · ')} 수상!</p>` : ''}
+    <table class="ttable aw">${main.map((x) => `<tr class="${x.id === 'me' ? 'me' : ''}"><td class="nm"><b>${esc(x.label)}</b></td><td class="nm">${esc(x.name)} <small class="muted">${esc(team(x.team))}</small></td><td>${esc(x.value)}</td></tr>`).join('')}</table>
+    <h4 class="sub">베스트 5</h4><div class="b5">${best.map((x) => `<span class="${x.id === 'me' ? 'me' : ''}">${esc(x.name)} <small>${esc(team(x.team))}</small></span>`).join('')}</div>
+    <div class="mbtn"><button type="button" class="primary" data-close>새 시즌으로 ▶</button></div>`,
+    { onClose: onDone, wide: true },
+  );
+}
+
+// ───────────── 올스타 위크엔드 (L6, L8) ─────────────
+
+const sleep = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms));
+
+/** 3점 콘테스트와 덩크 콘테스트를 한 명씩 보여준다 */
+export function allStarModal(c: Career, onDone: () => void) {
+  const w = c.allStar!;
+  w.unseen = false;
+  sound.play('jingle');
+  const team = (id: string) => teamInfoOf(c, id);
+  const box = modal(
+    `<h2>${c.overseas ? '해외 리그' : 'BASK'} 올스타 위크엔드</h2>
+    ${w.mySide >= 0 ? `<p class="note hot center">${esc(w.notes[0])}</p>` : '<p class="muted center">이번엔 올스타에 못 뽑혔다. 관중석에서 본다. 내년엔 저 무대에!</p>'}
+    <div class="contest" id="cst3"><h4>🏀 3점 슛 콘테스트</h4><div class="crows"></div></div>
+    <div class="contest" id="cstD"><h4>💥 덩크 콘테스트</h4><div class="crows"></div></div>
+    <div class="mbtn"><button type="button" id="asSkip">바로 보기</button><button type="button" class="primary" id="asOk" disabled>${w.mySide >= 0 ? '올스타전으로 ▶' : '확인'}</button></div>`,
+    { wide: true, onClose: onDone },
+  );
+  let fast = false;
+  const wait = (ms: number) => (fast ? Promise.resolve() : sleep(ms));
+  const okBtn = box.querySelector('#asOk') as HTMLButtonElement;
+  okBtn.onclick = () => closeModal();
+  (box.querySelector('#asSkip') as HTMLElement).onclick = () => (fast = true);
+  const rowHtml = (r: { id: string; name: string; team: string }) => `<div class="crow${r.id === 'me' ? ' me' : ''}"><span class="cn"><i class="sw" style="background:${team(r.team).color}"></i>${esc(r.name)}</span><span class="cv"></span><b class="cs"></b></div>`;
+  const run = async () => {
+    // 3점: 예선 6명 → 결승 3명
+    const t3 = box.querySelector('#cst3 .crows') as HTMLElement;
+    for (const [round, label] of [
+      [0, '예선'],
+      [1, '결승'],
+    ] as const) {
+      const rows = w.three.filter((r) => r.rounds[round]);
+      t3.insertAdjacentHTML('beforeend', `<div class="cround">${label}</div>`);
+      for (const r of rows) {
+        t3.insertAdjacentHTML('beforeend', rowHtml(r));
+        const el = t3.lastElementChild as HTMLElement;
+        el.scrollIntoView({ block: 'nearest' });
+        const v = el.querySelector('.cv') as HTMLElement;
+        const sc = el.querySelector('.cs') as HTMLElement;
+        let total = 0;
+        for (const ch of r.rounds[round].shots ?? '') {
+          v.insertAdjacentHTML('beforeend', `<i class="ball b${ch}"></i>`);
+          if (ch !== '0') {
+            total += ch === '2' ? 2 : 1;
+            if (!fast) sound.play('swish');
+          }
+          sc.textContent = String(total);
+          await wait(r.id === 'me' ? 120 : 45);
+        }
+        await wait(250);
+      }
+    }
+    const win3 = w.three.find((r) => r.name === w.threeWinner && r.rounds.length === 2);
+    t3.insertAdjacentHTML('beforeend', `<p class="cwin">우승 ${esc(w.threeWinner)}${win3?.id === 'me' ? ' 🏆' : ''}</p>`);
+    // 덩크: 1·2차 → 결승
+    const td = box.querySelector('#cstD .crows') as HTMLElement;
+    for (const [round, label] of [
+      [0, '1차 시기'],
+      [1, '2차 시기'],
+      [2, '결승'],
+    ] as const) {
+      const rows = w.dunk.filter((r) => r.rounds[round]);
+      td.insertAdjacentHTML('beforeend', `<div class="cround">${label}</div>`);
+      for (const r of rows) {
+        const d = r.rounds[round];
+        td.insertAdjacentHTML('beforeend', rowHtml(r));
+        const el = td.lastElementChild as HTMLElement;
+        el.scrollIntoView({ block: 'nearest' });
+        const v = el.querySelector('.cv') as HTMLElement;
+        v.innerHTML = `<em>${esc(DUNK_LABEL[d.dunk!])}</em>`;
+        await wait(r.id === 'me' ? 700 : 350);
+        if (!fast) sound.play(d.score >= 45 ? 'dunk' : 'clank');
+        for (const j of d.judges ?? []) {
+          v.insertAdjacentHTML('beforeend', `<i class="card j${j >= 9 ? 'hi' : j <= 6 ? 'lo' : ''}">${j}</i>`);
+          await wait(110);
+        }
+        (el.querySelector('.cs') as HTMLElement).textContent = String(d.score);
+        await wait(300);
+      }
+    }
+    const winD = w.dunk.find((r) => r.name === w.dunkWinner && r.rounds.length === 3);
+    td.insertAdjacentHTML('beforeend', `<p class="cwin">우승 ${esc(w.dunkWinner)}${winD?.id === 'me' ? ' 🏆' : ''}</p>`);
+    if (win3?.id === 'me' || winD?.id === 'me') sound.play('fanfare');
+    // 결과는 다 보여준 뒤에
+    for (const n of w.notes.filter((x) => x.includes('콘테스트'))) box.querySelector('.mbtn')!.insertAdjacentHTML('beforebegin', `<p class="note hot center">${esc(n)}</p>`);
+    okBtn.disabled = false;
+    okBtn.focus();
+  };
+  void run();
+}
+
+// ───────────── 은퇴 (L10~L12) ─────────────
+
+export interface RetireActions {
+  /** 은퇴하고 요약을 본다 */
+  retire(): RetireSummary;
+  /** 1년 더 뛴다 (선택 은퇴일 때만) */
+  keepGoing(): void;
+  /** 2세 커리어 */
+  legacy(s: RetireSummary): void;
+  /** 타이틀로 */
+  toTitle(): void;
+}
+
+export function retireModal(c: Career, act: RetireActions) {
+  const forced = c.retirePending === 'forced';
+  const box = modal(
+    `<h2>${forced ? '이제 코트를 떠날 때' : '은퇴를 결심할까?'}</h2>
+    <p>${c.me.age}살. ${forced ? '몸이 더는 따라 주지 않는다. 마지막 시즌이 끝났다.' : '아직 뛸 수는 있다. 하지만 박수 칠 때 떠나는 것도 멋지다.'}</p>
+    <div class="chgs">
+      <div class="chg"><span>명예의 전당 점수</span><b>${hofScore(c)}</b><small>${HOF_SCORE}점 이상이면 헌액</small></div>
+      <div class="chg"><span>트로피</span><b>${c.trophies.length}개</b></div>
+    </div>
+    <div class="mbtn">${forced ? '' : '<button type="button" id="rtKeep">한 시즌 더!</button>'}<button type="button" class="primary" id="rtGo">은퇴식 ▶</button></div>`,
+  );
+  box.querySelector<HTMLElement>('#rtKeep')?.addEventListener('click', () => {
+    c.retirePending = null;
+    closeModal();
+    act.keepGoing();
+  });
+  (box.querySelector('#rtGo') as HTMLElement).onclick = () => retireSummaryModal(act.retire(), act);
+}
+
+export function retireSummaryModal(s: RetireSummary, act: Pick<RetireActions, 'legacy' | 'toTitle'>) {
+  sound.play('fanfare');
+  const ppg = (v: number) => (s.games ? (v / s.games).toFixed(1) : '0.0');
+  const box = modal(
+    `<h2>${esc(s.name)} 은퇴식</h2>
+    <canvas class="px train" id="rtCanvas"></canvas>
+    ${s.hof ? '<p class="note hot center">🏛 명예의 전당 헌액!</p>' : ''}
+    ${s.retiredBy ? `<p class="note hot center">#${s.number} 영구결번 · ${esc(s.retiredBy)}</p>` : ''}
+    <div class="chgs">
+      <div class="chg"><span>프로</span><b>${s.seasons}시즌 · ${s.games}경기</b><small>${esc(s.teams.join(' → '))}</small></div>
+      <div class="chg"><span>통산</span><b>${s.pts.toLocaleString()}점 ${s.reb.toLocaleString()}리바 ${s.ast.toLocaleString()}어시</b></div>
+      <div class="chg"><span>경기당</span><b>${ppg(s.pts)}점 ${ppg(s.reb)}리바 ${ppg(s.ast)}어시</b></div>
+      <div class="chg"><span>최고 종합</span><b>${s.peakOvr}</b></div>
+      <div class="chg"><span>명예의 전당 점수</span><b>${s.hofScore}</b></div>
+      <div class="chg"><span>모은 돈</span><b>${moneyText(s.money)}</b></div>
+    </div>
+    ${s.trophies.length ? `<div class="troph scroll">${s.trophies.map((t) => `<span>🏆 ${esc(t)}</span>`).join('')}</div>` : '<p class="muted">트로피는 없지만, 끝까지 코트에 섰다.</p>'}
+    <div class="mbtn"><button type="button" id="rtTitle">타이틀로</button><button type="button" class="primary" id="rtLegacy">2세로 이어 하기 ▶</button></div>`,
+    { wide: true },
+  );
+  trainingScene($('rtCanvas') as HTMLCanvasElement, { scene: 'title', pl: s.player, kit: { jersey: s.color, trim: numberColorFor(s.color) } });
+  (box.querySelector('#rtTitle') as HTMLElement).onclick = act.toTitle;
+  (box.querySelector('#rtLegacy') as HTMLElement).onclick = () => act.legacy(s);
 }

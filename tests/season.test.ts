@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkAbilities } from '../src/career/abilities';
-import { createCareer, type CreateSpec } from '../src/career/career';
+import { createCareer, SAVE_VERSION, type CreateSpec } from '../src/career/career';
 import { EVENTS, fill, resolveEvent, rollEvent } from '../src/career/events';
 import { applyMatch, playMatch } from '../src/career/match';
 import { exportCareer, importCareer } from '../src/career/save';
@@ -176,7 +176,7 @@ describe('세이브 변환 (K4)', () => {
     }
     delete old.me.abilities;
     const back = importCareer(JSON.stringify(v1));
-    expect(back.v).toBe(3);
+    expect(back.v).toBe(SAVE_VERSION);
     expect(back.pendingGame).toEqual({ kind: 'practice', opponent: 'HANB', label: '연습경기', home: expect.any(Boolean) });
     expect(back.trust).toBe(40);
     expect(back.rival).toBeTruthy();

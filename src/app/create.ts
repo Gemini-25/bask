@@ -4,6 +4,8 @@ import { koreanName, type Gender } from '../data/names';
 import { overall, POSITION_LABEL, POSITIONS, type Look, type Player, type Position } from '../data/player';
 import { grade, RATING_GROUPS, RATING_KEYS, type RatingKey } from '../data/ratings';
 import { BACKGROUNDS, backgroundById, GROWTH_TYPES } from '../career/backgrounds';
+import type { LegacyBonus } from '../career/legacy';
+import { moneyText } from '../career/money';
 import { applyAlloc, baseHeight, BUILD_LABEL, CREATE_CAP, creationBase, HEIGHT_RANGE, type Build, type CreateSpec } from '../career/career';
 import { SCHOOLS, schoolById } from '../career/schools';
 import { HAIR, SHOE, SKIN } from '../view/character';
@@ -24,9 +26,11 @@ function stars(strength: number) {
   return '★'.repeat(n) + '☆'.repeat(5 - n);
 }
 
-export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, onCancel: () => void) {
+export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, onCancel: () => void, legacy?: LegacyBonus) {
   const rng = new Rng(randomSeed());
-  let autoName = koreanName(rng, 'M');
+  // 2세는 부모 성을 물려받는다
+  const nameFor = (g: Gender) => (legacy ? legacy.parent[0] + koreanName(rng, g).slice(1) : koreanName(rng, g));
+  let autoName = nameFor('M');
   const st: CreateSpec = {
     name: autoName,
     number: 7,
@@ -39,13 +43,16 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
     look: { skin: 0, hair: 0, hairColor: 0, shoe: 2, headband: false, sleeve: false },
     alloc: {},
     school: 'HANB',
+    legacy,
   };
+  const free = (b: { bg: { freePoints: number } }): number => b.bg.freePoints + (legacy?.points ?? 0);
 
   const root = $('scr-create');
   const opt = (group: string, value: string, label: string, sub = '') => `<button type="button" class="opt" data-g="${group}" data-v="${value}">${label}${sub ? `<small>${sub}</small>` : ''}</button>`;
   root.innerHTML = `
   <div class="create">
     <div class="cform">
+      ${legacy ? `<section class="csec legacy"><h2>${legacy.generation}대째 농구 가문</h2><p>${esc(legacy.parent)}의 피를 이어받았다. 자유 포인트 <b>+${legacy.points}</b> · 잠재력 <b>+${legacy.potential}</b>${legacy.money ? ` · 용돈 <b>${moneyText(legacy.money)} 원</b>` : ''}</p></section>` : ''}
       <section class="csec"><h2>1. 기본</h2>
         <div class="row"><label for="cName">이름</label><input id="cName" maxlength="8" value="${esc(st.name)}" /><button type="button" id="cNameRnd" title="다른 이름">🎲</button>
           <label for="cNum">등번호</label><input id="cNum" type="number" min="0" max="99" value="${st.number}" class="num" /></div>
@@ -87,7 +94,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
   const base = () => creationBase(st);
   const preview = (): Player => {
     const b = base();
-    const { r } = applyAlloc(b.r, st.alloc, b.bg.freePoints);
+    const { r } = applyAlloc(b.r, st.alloc, free(b));
     return { id: 'me', name: st.name, number: st.number, pos: st.prefPos, body: b.body, r, look: st.look };
   };
   const kit = () => {
@@ -98,7 +105,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
   /** 배경·몸이 바뀌어 상한이나 총량이 줄면 배분을 줄인다 */
   const normalize = () => {
     const b = base();
-    let left = b.bg.freePoints;
+    let left = free(b);
     for (const k of RATING_KEYS) {
       const room = Math.max(0, CREATE_CAP - b.r[k]);
       const v = Math.min(st.alloc[k] ?? 0, room, left);
@@ -145,10 +152,10 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
       <div class="kv"><span>키 / 윙스팬</span><b>${p.body.heightCm} / ${p.body.wingspanCm}cm</b></div>
       <div class="kv"><span>체중</span><b>${p.body.weightKg}kg</b></div>
       <div class="kv"><span>고교 동안 클 키</span><b>+${b.bg.growth}cm 안팎</b></div>
-      <div class="kv"><span>잠재력</span><b>${b.bg.potential}</b><small>넘으면 비싸진다</small></div>
+      <div class="kv"><span>잠재력</span><b>${Math.min(99, b.bg.potential + (legacy?.potential ?? 0))}</b><small>넘으면 비싸진다</small></div>
       <div class="kv"><span>성장 타입</span><b>${gt.label}</b></div>`;
-    const left = b.bg.freePoints - used();
-    $('cLeft').textContent = genius ? '천재: 전부 99' : `남은 포인트 ${left} / ${b.bg.freePoints}`;
+    const left = free(b) - used();
+    $('cLeft').textContent = genius ? '천재: 전부 99' : `남은 포인트 ${left} / ${free(b)}`;
     $('cAlloc').innerHTML = genius
       ? '<p class="hint">천재는 모든 능력치가 99로 시작한다. 자유 포인트는 필요 없다.</p>'
       : RATING_GROUPS.map(
@@ -174,7 +181,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
         case 'gender':
           st.gender = v as Gender;
           if (st.name === autoName) {
-            autoName = koreanName(rng, st.gender);
+            autoName = nameFor(st.gender);
             st.name = autoName;
             ($('cName') as HTMLInputElement).value = st.name;
           }
@@ -215,7 +222,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
       const k = ab.dataset.k as RatingKey;
       const step = Number(ab.dataset.d) * ((e as MouseEvent).shiftKey ? 5 : 1);
       const b = base();
-      const left = b.bg.freePoints - used();
+      const left = free(b) - used();
       const cur = st.alloc[k] ?? 0;
       const next = Math.max(0, Math.min(cur + Math.min(step, left), CREATE_CAP - b.r[k]));
       st.alloc[k] = next;
@@ -227,7 +234,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
     refresh();
   };
   $('cNameRnd').onclick = () => {
-    autoName = koreanName(rng, st.gender);
+    autoName = nameFor(st.gender);
     st.name = autoName;
     ($('cName') as HTMLInputElement).value = st.name;
     refresh();
@@ -246,7 +253,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
     const b = base();
     st.alloc = {};
     const p = preview();
-    for (let left = b.bg.freePoints; left > 0; left--) {
+    for (let left = free(b); left > 0; left--) {
       let best: RatingKey | null = null;
       let bv = -1;
       for (const k of RATING_KEYS) {

@@ -1,6 +1,6 @@
 // 한 주 진행 묶음: 행동 → 남의 경기 → 내 주말 경기 정하기 → 달마다 팀원 성장 → 해가 바뀌면 진급·졸업
 import { Rng } from '../core/rng';
-import { generatePlayer, type Position } from '../data/player';
+import { generatePlayer, overall, type Position } from '../data/player';
 import { RATING_KEYS } from '../data/ratings';
 import { dateOf, doWeek, WEEKS_PER_YEAR, type ActionId, type Career, type FocusId, type PendingGame, type WeekResult } from './career';
 import { hsHeightAdj, schoolById } from './schools';
@@ -9,7 +9,8 @@ import { rollEvent } from './events';
 import { runDraft } from './draft';
 import { popularityDecay } from './fans';
 import { rivalGrow } from './people';
-import { proNewYear, proWeek } from './pro';
+import { proNewYear, proWeek, seasonBase } from './pro';
+import { ALLSTAR_WEEK, allStarGame, callUp, NATIONAL_CALL, nationalGames, runAllStar } from './allstar';
 import { catchUp, createSeason, gameFor, playOthers } from './season';
 
 /** 올해 시즌이 없으면 만든다 (새 커리어, 새 학년, 예전 세이브) */
@@ -41,7 +42,23 @@ export function playWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
     // 연봉은 매주 나눠서 들어온다
     c.money += Math.round(c.pro.salary / WEEKS_PER_YEAR);
     popularityDecay(c);
-    c.gameQueue = proWeek(c, w, rng);
+    const base = seasonBase({ ...c, week: w } as Career);
+    // 비시즌 국가대표 소집
+    if (w - base === NATIONAL_CALL && c.national?.season !== c.league!.season) {
+      const camp = callUp(c, base, rng);
+      if (camp) {
+        c.national = camp;
+        r.notes.push('국가대표에 뽑혔다! 아시아컵에 나간다.');
+      }
+    }
+    c.gameQueue = [...nationalGames(c, w), ...proWeek(c, w, rng)];
+    // 올스타 위크엔드
+    if (w - base === ALLSTAR_WEEK && c.allStar?.season !== c.league!.season + 1) {
+      c.allStar = runAllStar(c, rng);
+      r.notes.push(...c.allStar.notes);
+      const ag = allStarGame(c);
+      if (ag) c.gameQueue.unshift(ag);
+    }
     g = c.gameQueue.shift() ?? null;
   } else {
     playOthers(c, w, rng);
@@ -54,6 +71,7 @@ export function playWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   }
   // 능력치가 올라 조건을 채운 특수능력 (친밀도·부상 회복 등)
   r.notes.push(...checkAbilities(c));
+  c.peakOvr = Math.max(c.peakOvr ?? 0, Math.round(overall(c.me, c.prefPos)));
   c.pendingGame = g;
   r.game = g;
   c.rng = rng.state;

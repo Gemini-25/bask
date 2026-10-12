@@ -29,7 +29,7 @@ import { ABILITIES, abilityDef, FX, stars, type AbilityId } from '../data/abilit
 import { DUNKS, dunkUnlocked } from '../data/dunks';
 import { DUNK_LABEL } from '../sim/types';
 import { abilityProgress } from '../career/abilities';
-import { myTeam, trustBonus } from '../career/match';
+import { myTeam, teamInfoOf, trustBonus } from '../career/match';
 import { avgFriendship } from '../career/people';
 import { schoolById } from '../career/schools';
 import { groupStandings, nextGame, PRACTICE_WEEKS, roundLabel, type Tour } from '../career/season';
@@ -37,6 +37,7 @@ import { placeOf, TownMap, type PlaceId } from './townmap';
 import { leagueTeam, PRO_WEEKS, standings } from '../career/league';
 import { buy, has, itemDef, ITEMS, moneyText } from '../career/money';
 import { leagueTeamName, nextProGame, teamName } from '../career/pro';
+import { canRetire, hofScore, HOF_SCORE, RETIRE_FORCE_AGE, RETIRE_MIN_AGE } from '../career/legacy';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, toast } from './dom';
@@ -48,6 +49,8 @@ export interface HomeActions {
   save(silent?: boolean): void;
   exportFile(): void;
   toTitle(): void;
+  /** 은퇴 선언 */
+  retire(): void;
 }
 
 type Tab = 'week' | 'stats' | 'team' | 'schedule' | 'abilities' | 'life' | 'records';
@@ -130,7 +133,7 @@ export class Home {
   private nextText(c: Career) {
     if (c.pendingGame) return `<b class="hot">이번 주말 ${esc(c.pendingGame.label)}!</b>`;
     const n = c.pro ? nextProGame(c) : nextGame(c);
-    const nameOf = (id: string) => (c.pro && c.league ? teamName(c.league, id) : schoolById(id).name);
+    const nameOf = (id: string) => teamInfoOf(c, id).full;
     if (!n) return '<span class="muted">남은 경기 없음</span>';
     const w = n.week - c.week + 1;
     const opp = n.opponent ? ` vs ${esc(nameOf(n.opponent))}` : '';
@@ -139,7 +142,7 @@ export class Home {
 
   private renderCard() {
     const c = this.c!;
-    const school = c.pro && c.league ? { color: leagueTeam(c.league, c.pro.team).info.color } : schoolById(c.school);
+    const school = teamInfoOf(c, c.pro ? c.pro.team : c.school);
     const team = myTeam(c);
     const me = team.meIndex;
     const role = me < 0 ? '부상 결장' : me < 5 ? `주전 ${team.team.players[me].pos}` : me === 5 ? '식스맨' : '벤치';
@@ -178,7 +181,7 @@ export class Home {
   private rivalHtml() {
     const r = this.c!.rival;
     if (!r) return '';
-    const where = this.c!.pro && this.c!.league ? teamName(this.c!.league, r.school) : schoolById(r.school).name;
+    const where = teamInfoOf(this.c!, r.school).full;
     return `<div class="rival"><h4>라이벌</h4><div><b>${esc(r.player.name)}</b> <span class="muted">${esc(where)} · ${r.player.pos}</span></div>
       <div class="muted">종합 <b class="ink">${overall(r.player, r.player.pos).toFixed(0)}</b> · 맞대결 ${r.w}승 ${r.l}패</div></div>`;
   }
@@ -216,10 +219,18 @@ export class Home {
           })
           .join('')}</div>`
       : '<p class="muted">정규시즌 상위 6팀이 플레이오프에 나간다 (1·2위는 4강 직행).</p>';
-    const hist = L.history.map((h) => `<li><span>${h.season + 1}시즌</span>우승 ${esc(teamName(L, h.champion))} · 내 팀 <b>${esc(h.myFinish)}</b></li>`).join('');
+    const hist = L.history.map((h) => `<li><span>${h.season + 1}시즌</span>우승 ${esc(teamInfoOf(c, h.champion).full)} · 내 팀 <b>${esc(h.myFinish)}</b></li>`).join('');
+    const camp = c.national;
+    const nat = camp
+      ? `<h4 class="sub">국가대표 · 아시아컵 ${camp.result ? `<b class="fin">${esc(camp.result)}</b>` : ''}</h4><ul class="plist one">${camp.games
+          .map((g) => `<li><span>${dateText(g.week)}</span>${g.final ? '결승' : '조별'} vs ${esc(teamInfoOf(c, g.opp).full)} ${g.score ? `<b class="${g.score[0] > g.score[1] ? 'win' : 'loss'}">${g.score[0]}:${g.score[1]}</b>` : '<span class="muted">예정</span>'}</li>`)
+          .join('')}</ul>`
+      : '';
+    const as = c.allStar;
+    const star = as ? `<h4 class="sub">올스타 위크엔드</h4><ul class="plist one"><li>${as.mySide >= 0 ? '<b class="fin">올스타 선정</b>' : '<span class="muted">선정 안 됨</span>'}${as.game ? ` · 올스타전 ${as.game.score[0]}:${as.game.score[1]} · MVP ${esc(as.game.mvp)}` : ''}</li><li>3점 콘테스트 우승 ${esc(as.threeWinner)}</li><li>덩크 콘테스트 우승 ${esc(as.dunkWinner)}</li></ul>` : '';
     return `<div class="grps"><div><h4 class="sub">정규시즌 순위</h4><table class="ttable"><tr><th></th><th class="nm">팀</th><th>승</th><th>패</th><th>득실</th></tr>${rows}</table></div>
-      <div><h4 class="sub">다음 경기</h4><ul class="plist one">${upcoming || '<li class="muted">남은 경기 없음</li>'}</ul><h4 class="sub">플레이오프</h4>${series}${hist ? `<h4 class="sub">역대 시즌</h4><ul class="plist one">${hist}</ul>` : ''}</div></div>
-      <p class="hint">정규시즌 27경기 (9팀과 3번씩) → 6강 (3전 2선승) → 4강 (5전 3선승) → 챔피언 결정전 (7전 4선승). 플레이오프는 한 주에 경기가 여러 번.</p>`;
+      <div><h4 class="sub">다음 경기</h4><ul class="plist one">${upcoming || '<li class="muted">남은 경기 없음</li>'}</ul><h4 class="sub">플레이오프</h4>${series}${nat}${star}${hist ? `<h4 class="sub">역대 시즌</h4><ul class="plist one">${hist}</ul>` : ''}</div></div>
+      <p class="hint">정규시즌 27경기 (9팀과 3번씩, 중간에 올스타 주간) → 6강 (3전 2선승) → 4강 (5전 3선승) → 챔피언 결정전 (7전 4선승). 플레이오프는 한 주에 경기가 여러 번.${c.overseas ? ' 해외 리그는 쿼터 12분, 6반칙 퇴장.' : ''} 비시즌 4월엔 국가대표 아시아컵.</p>`;
   }
 
   private lifeHtml() {
@@ -240,7 +251,8 @@ export class Home {
     return `${contract}
       <h4 class="sub">장비 <small class="muted">경기 중 능력치 보너스</small></h4><div class="items">${shop('gear')}</div>
       <h4 class="sub">집 꾸미기 <small class="muted">훈련·휴식 효과</small></h4><div class="items">${shop('house')}</div>
-      <h4 class="sub">SNS 반응</h4><ul class="sns">${sns || '<li class="muted">아직 조용하다. 경기에서 활약하면 반응이 생긴다.</li>'}</ul>`;
+      <h4 class="sub">SNS 반응</h4><ul class="sns">${sns || '<li class="muted">아직 조용하다. 경기에서 활약하면 반응이 생긴다.</li>'}</ul>
+      ${c.pro ? `<h4 class="sub">은퇴</h4>${canRetire(c) ? `<p class="hint">명예의 전당 점수 ${hofScore(c)} / ${HOF_SCORE}. 은퇴하면 이 커리어는 끝나고 2세로 이어 할 수 있다.</p><button type="button" data-retire>은퇴 선언</button>` : `<p class="hint">${RETIRE_MIN_AGE}살부터 스스로 은퇴할 수 있다. ${RETIRE_FORCE_AGE}살이 되면 무조건 은퇴. (지금 명예의 전당 점수 ${hofScore(c)} / ${HOF_SCORE})</p>`}` : ''}`;
   }
 
   private scheduleHtml() {
@@ -318,8 +330,8 @@ export class Home {
   private weekHtml() {
     const c = this.c!;
     if (c.pendingGame) {
-      const opp = schoolById(c.pendingGame.opponent);
-      return `<div class="act gamecard"><div class="ah"><b>${esc(c.pendingGame.label)}</b></div><p>${esc(opp.city)} ${esc(opp.name)} · ${esc(opp.blurb)}</p><button type="button" class="primary big" data-a="game">경기장으로 ▶</button></div>`;
+      const opp = teamInfoOf(c, c.pendingGame.opponent);
+      return `<div class="act gamecard"><div class="ah"><b>${esc(c.pendingGame.label)}</b></div><p>vs ${esc(opp.full)}</p><button type="button" class="primary big" data-a="game">경기장으로 ▶</button></div>`;
     }
     const cards = ACTIONS.filter((a) => (!a.injuredOnly || c.injury) && (a.id !== 'mentor' || c.mentor.met) && (!a.proOnly || c.pro))
       .map((a) => {
@@ -438,9 +450,9 @@ export class Home {
       .slice()
       .reverse()
       .map((g) => {
-        const opp = schoolById(g.opponent);
+        const opp = teamInfoOf(c, g.opponent);
         const l = g.line;
-        return `<tr><td>${dateText(g.week)}</td><td class="nm">${esc(g.label ?? '연습경기')}</td><td class="nm">${g.home ? 'vs' : '@'} ${esc(opp.name)}</td><td class="${g.won ? 'win' : 'loss'}">${g.won ? '승' : '패'} ${g.score[0]}:${g.score[1]}</td>${
+        return `<tr><td>${dateText(g.week)}</td><td class="nm">${esc(g.label ?? '연습경기')}</td><td class="nm">${g.home ? 'vs' : '@'} ${esc(opp.full)}</td><td class="${g.won ? 'win' : 'loss'}">${g.won ? '승' : '패'} ${g.score[0]}:${g.score[1]}</td>${
           l
             ? `<td>${minutesText(l.sec)}</td><td>${l.pts}</td><td>${l.reb}</td><td>${l.ast}</td><td>${l.fgm}/${l.fga}</td><td>${l.tpm}/${l.tpa}</td><td class="grd g${g.grade}">${g.grade}</td>`
             : '<td colspan="7" class="muted">결장</td>'
@@ -452,7 +464,23 @@ export class Home {
       .reverse()
       .map((w) => `<li><span class="t">${dateText(w.week)}</span><b>${esc(ACTIONS.find((a) => a.id === w.action)!.label)}${w.focus && w.action === 'solo' ? ` (${FOCUS.find((f) => f.id === w.focus)!.label})` : ''}</b>${pointsHtml(w.gained, true)}${w.notes.length ? `<small>${w.notes.map(esc).join(' · ')}</small>` : ''}</li>`)
       .join('');
-    return `${avg}${rows ? `<div class="tablewrap"><table class="ttable"><tr><th>날짜</th><th class="nm">경기</th><th class="nm">상대</th><th>결과</th><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>야투</th><th>3점</th><th>평가</th></tr>${rows}</table></div>` : ''}
+    // 해마다 (고교 1~3학년, 프로 시즌)
+    const years = new Map<number, typeof played>();
+    for (const g of played) {
+      const y = Math.floor(g.week / 48);
+      years.set(y, [...(years.get(y) ?? []), g]);
+    }
+    const yrows = [...years.entries()]
+      .map(([y, gs]) => {
+        const s = (f: (l: NonNullable<(typeof gs)[number]['line']>) => number) => gs.reduce((a, g) => a + f(g.line!), 0) / gs.length;
+        const label = y < 3 ? `고교 ${y + 1}학년` : `프로 ${y - 2}시즌`;
+        return `<tr><td class="nm">${label}</td><td>${gs.length}</td><td>${minutesText(s((l) => l.sec))}</td><td>${s((l) => l.pts).toFixed(1)}</td><td>${s((l) => l.reb).toFixed(1)}</td><td>${s((l) => l.ast).toFixed(1)}</td><td>${s((l) => l.stl).toFixed(1)}</td><td>${s((l) => l.blk).toFixed(1)}</td></tr>`;
+      })
+      .join('');
+    const trophies = (c.trophies ?? []).length ? `<div class="troph">${c.trophies.map((t) => `<span>🏆 ${esc(t)}</span>`).join('')}</div>` : '<p class="muted">아직 트로피가 없다.</p>';
+    return `<h4 class="sub">트로피</h4>${trophies}
+      ${yrows ? `<h4 class="sub">시즌별 기록</h4><div class="tablewrap"><table class="ttable"><tr><th class="nm">시즌</th><th>경기</th><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>스틸</th><th>블록</th></tr>${yrows}</table></div>` : ''}
+      <h4 class="sub">경기</h4>${avg}${rows ? `<div class="tablewrap"><table class="ttable"><tr><th>날짜</th><th class="nm">경기</th><th class="nm">상대</th><th>결과</th><th>출전</th><th>득점</th><th>리바</th><th>어시</th><th>야투</th><th>3점</th><th>평가</th></tr>${rows}</table></div>` : ''}
       <h4 class="sub">최근 훈련</h4><ul class="wlog">${log || '<li class="muted">아직 없다</li>'}</ul>`;
   }
 
@@ -487,6 +515,10 @@ export class Home {
       const go = () => this.act.doWeek(id, this.focus);
       if (this.map) this.map.walkTo(placeOf(id).id, go);
       else go();
+      return;
+    }
+    if (t.closest('[data-retire]')) {
+      if (confirm('정말 은퇴할까? 은퇴식을 하면 되돌릴 수 없어')) this.act.retire();
       return;
     }
     const by = t.closest('[data-buy]') as HTMLButtonElement | null;

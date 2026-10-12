@@ -4,7 +4,10 @@ import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
 import { $, closeModal, download, modal, onScreen, pickFile, show, toast } from './app/dom';
 import { sound } from './view/sound';
-import { contractModal, draftModal, eventModal, preGameModal, renderResult, weekModal } from './app/flow';
+import { allStarModal, awardsModal, contractModal, draftModal, eventModal, preGameModal, renderResult, retireModal, retireSummaryModal, weekModal } from './app/flow';
+import { checkAchievements, enshrine, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
+import { teamInfoOf } from './career/match';
+import { moneyText } from './career/money';
 import { Home } from './app/home';
 import { renderTitle } from './app/title';
 import { createCareer, dateOf, dateText, myOverall, type Career } from './career/career';
@@ -207,6 +210,11 @@ const home = new Home({
   playGame() {
     preGame();
   },
+  retire() {
+    const c = career!;
+    c.retirePending = 'choice';
+    retireFlow(c);
+  },
   toTitle() {
     if (home.hasPending() && !confirm('확정하지 않은 능력치 투자가 있어. 그냥 나갈까?')) return;
     toTitle();
@@ -214,8 +222,58 @@ const home = new Home({
 });
 
 /** 한 주가 끝난 뒤: 드래프트·계약 → 이벤트 → 주말 경기 */
+/** 새로 딴 업적은 토스트로 알린다 */
+function achievements() {
+  if (!career) return;
+  const got = checkAchievements(career);
+  if (got.length > 2) toast(`🏅 업적 ${got.length}개 달성: ${got.map((a) => a.label).join(', ')}`);
+  else got.forEach((a, i) => window.setTimeout(() => toast(`🏅 업적 달성: ${a.label}`), i * 1400));
+}
+
+function retireFlow(c: Career) {
+  retireModal(c, {
+    retire() {
+      const s = retire(
+        c,
+        (id) => teamInfoOf(c, id).full,
+        (id) => teamInfoOf(c, id).color,
+      );
+      c.retirePending = null;
+      enshrine(s);
+      save();
+      achievements();
+      return s;
+    },
+    keepGoing() {
+      save();
+      home.render(c);
+      afterWeek();
+    },
+    legacy: (s) => startLegacy(s),
+    toTitle: () => toTitle(),
+  });
+}
+
+function startLegacy(s: RetireSummary) {
+  closeModal();
+  startCareer(slot, legacyBonus(s, career?.legacy?.generation ?? 1));
+}
+
 function afterWeek() {
   const c = career!;
+  achievements();
+  if (c.retired) {
+    retireSummaryModal(c.retired, { legacy: (s) => startLegacy(s), toTitle: () => toTitle() });
+    return;
+  }
+  if (c.ceremony) {
+    awardsModal(c, () => {
+      save();
+      home.render(c);
+      afterWeek();
+    });
+    return;
+  }
   if (c.draft) {
     draftModal(c, () => {
       save();
@@ -223,8 +281,20 @@ function afterWeek() {
     });
     return;
   }
+  if (c.retirePending && c.pro) {
+    retireFlow(c);
+    return;
+  }
   if (c.contractPending && c.pro) {
     contractModal(c, () => {
+      save();
+      home.render(c);
+      afterWeek();
+    });
+    return;
+  }
+  if (c.allStar?.unseen) {
+    allStarModal(c, () => {
       save();
       home.render(c);
       afterWeek();
@@ -281,7 +351,7 @@ function watchMatch() {
   const me = m.myPid >= 0 ? m.game.players[m.myPid] : null;
   const banner = `<b>${m.label}</b> · ${dateText(c.week - 1)} · ${me ? `내 선수 <b>#${me.number} ${me.name}</b> (노란 화살표 · 박스스코어 '나')` : '부상으로 결장'}`;
   // 연습경기는 학교 체육관, 공식전은 대회장, 결승·왕중왕전은 큰 무대
-  const tier = m.pro ? (m.label.includes('챔피언') || m.label.includes('4강 플레이오프') ? 2 : 1) : m.kind === 'practice' ? 0 : m.label.includes('결승') || m.tour === 'kings' ? 2 : 1;
+  const tier = m.special ? (m.special === 'allstar' || m.label.includes('결승') ? 2 : 1) : m.pro ? (m.label.includes('챔피언') || m.label.includes('4강 플레이오프') ? 2 : 1) : m.kind === 'practice' ? 0 : m.label.includes('결승') || m.tour === 'kings' ? 2 : 1;
   const gym = m.pro ? '' : `${schoolById(m.home ? c.school : m.opponent).name} 농구부 파이팅`;
   watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch, tier, gym });
 }
@@ -295,6 +365,7 @@ function finishMatch() {
     const notes = afterGame(c);
     if (notes.length) report.abilityNotes.push(...notes);
     save();
+    achievements();
   }
   renderResult(c, m, report, ovrBefore, {
     save,
@@ -310,16 +381,18 @@ function finishMatch() {
   show('result', '경기 결과');
 }
 
-function startCareer(s: number) {
+function startCareer(s: number, legacy?: LegacyBonus) {
   slot = s;
-  show('create', '선수 만들기');
+  show('create', legacy ? `${legacy.parent}의 2세 만들기` : '선수 만들기');
   renderCreate(
     (spec, seed) => {
       career = createCareer(spec, seed);
       save();
       toHome();
+      achievements();
       modal(
         `<h2>입학을 축하해!</h2>
+        ${legacy ? `<p class="note hot">${legacy.parent}의 2세! 보너스 자유 포인트 +${legacy.points}, 잠재력 +${legacy.potential}${legacy.money ? `, 용돈 ${moneyText(legacy.money)} 원` : ''}</p>` : ''}
         <p>${schoolById(career.school).name} 농구부에 들어왔다. 매주 할 일을 하나 고르면 포인트가 쌓이고, 그 포인트로 능력치를 올린다.</p>
         <p>4주마다 연습경기가 있다. 경기에서 실제로 한 플레이는 그 능력치 경험치가 된다.</p>
         <p class="muted">피로가 쌓이면 다치기 쉽다. 가끔은 쉬자.</p>
@@ -327,6 +400,7 @@ function startCareer(s: number) {
       );
     },
     () => toTitle(),
+    legacy,
   );
 }
 
@@ -343,6 +417,7 @@ function toTitle() {
       slot = s;
       career = c;
       toHome();
+      if (c.retired) retireSummaryModal(c.retired, { legacy: (x) => startLegacy(x), toTitle: () => toTitle() });
     },
     newCareer(s) {
       startCareer(s);

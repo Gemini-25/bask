@@ -2,6 +2,7 @@
 import { Rng } from '../core/rng';
 import { generatePlayer } from '../data/player';
 import { slotInfo, SLOTS } from '../career/save';
+import { ACHIEVEMENTS, hallOfFame, unlockedAchievements } from '../career/legacy';
 import { $, esc } from './dom';
 import { trainingScene } from './scenes';
 
@@ -43,6 +44,7 @@ export function renderTitle(act: TitleActions) {
           )
           .join('')}
       </div>
+      ${legacyHtml()}
       <div class="tfoot">
         <button type="button" data-act="exhibition">프로 리그 경기 관람 (데모)</button>
         <p class="hint">저장은 이 브라우저 안에 된다. 다른 컴퓨터로 옮기거나 백업하려면 홈 화면의 '파일로 내보내기'를 써. 새 버전 파일은 같은 폴더에 같은 이름으로 덮어쓰면 저장이 그대로 이어진다.</p>
@@ -68,4 +70,26 @@ export function renderTitle(act: TitleActions) {
   const pl = generatePlayer(new Rng(23), 'SG', 10, 23);
   pl.look = { skin: 1, hair: 3, hairColor: 0, shoe: 2, headband: true, sleeve: false };
   trainingScene($('titleCanvas') as HTMLCanvasElement, { scene: 'title', pl, kit: { jersey: '#ffb545', trim: '#1d1406' } });
+}
+
+/** 명예의 전당과 업적 (브라우저 전체, 슬롯과 상관없이 남는다) */
+function legacyHtml() {
+  const hall = hallOfFame()
+    .slice()
+    .reverse();
+  const got = unlockedAchievements();
+  const n = ACHIEVEMENTS.filter((a) => got[a.id]).length;
+  const hallRows = hall.length
+    ? hall
+        .slice(0, 12)
+        .map(
+          (h) =>
+            `<li class="${h.hof ? 'hof' : ''}"><b>${h.hof ? '🏛 ' : ''}#${h.number} ${esc(h.name)}</b><span>${h.seasons}시즌 · ${h.games ? (h.pts / h.games).toFixed(1) : '0.0'}점 · 트로피 ${h.trophies.length}개${h.retiredBy ? ` · ${esc(h.retiredBy)} 영구결번` : ''}</span></li>`,
+        )
+        .join('')
+    : '<li class="muted">아직 은퇴한 선수가 없다.</li>';
+  return `<div class="legacy-box">
+    <section><h3>명예의 전당</h3><ul class="hall">${hallRows}</ul></section>
+    <section><h3>업적 <small>${n} / ${ACHIEVEMENTS.length}</small></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<span class="ach ${got[a.id] ? 'on' : ''}" title="${esc(a.desc)}">${got[a.id] ? '🏅' : '🔒'} ${esc(a.label)}</span>`).join('')}</div></section>
+  </div>`;
 }

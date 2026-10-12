@@ -53,6 +53,8 @@ export interface SimOptions {
   favor?: Record<number, number>;
   /** 최소 출전 시간 (분). 그만큼 못 뛰었으면 감독이 먼저 넣고 덜 뺀다 */
   minMinutes?: Record<number, number>;
+  /** 몇 반칙에 퇴장 (기본 5, 해외 리그 6) */
+  foulOut?: number;
 }
 
 export function simulateGame(a: Team, b: Team, seed: number, opts: SimOptions = {}): GameResult {
@@ -272,6 +274,7 @@ class GameSim {
   private doubleFor = -1;
   private misc: { at: number; kind: TurnoverKind } | null = null;
   private quarter = 1;
+  private foulOut = 5;
   private clock: number;
   private shotClock = 24;
   private clockRunning = false;
@@ -352,6 +355,7 @@ class GameSim {
     this.fxr = new Rng(seed ^ 0x5eed5);
     this.teams = [a, b];
     this.qLen = (opts.quarterMinutes ?? 10) * 60;
+    this.foulOut = opts.foulOut ?? 5;
     this.otLen = (opts.overtimeMinutes ?? 5) * 60;
     this.clock = this.qLen;
     this.players = [...a.players, ...b.players];
@@ -992,7 +996,8 @@ class GameSim {
   /** 반칙이 쌓이면 조심해서 수비한다 */
   private foulCare(pid: number) {
     const pf = this.pf[pid];
-    return pf >= 4 ? 0.3 : pf === 3 ? 0.75 : 1;
+    const d = pf - (this.foulOut - 5);
+    return d >= 4 ? 0.3 : d === 3 ? 0.75 : 1;
   }
 
   private inBonus(team: Side) {
@@ -1027,7 +1032,7 @@ class GameSim {
       text: `${f.pl.name} ${FOUL_TEXT[kind]} (${this.pf[f.pid]}반칙)${tag}`,
     });
     if (offensive) this.emit({ type: 'turnover', team: f.team, player: fouler, other: -1, pts: 0, tov: 'offFoul', text: `${f.pl.name} 공격자 파울` });
-    if (this.pf[f.pid] >= 5) this.disqualify(f, '5반칙 퇴장');
+    if (this.pf[f.pid] >= this.foulOut) this.disqualify(f, `${this.foulOut}반칙 퇴장`);
 
     // 흥분해서 항의하다 테크니컬
     const r = f.pl.r;
@@ -1051,7 +1056,7 @@ class GameSim {
       this.cnt.techs++;
       this.teamFouls[f.team]++;
       this.emit({ type: 'foul', team: f.team, player: fouler, other: -1, pts: 0, foul: 'technical', fta: 1, pf: this.pf[f.pid], teamFouls: this.teamFouls[f.team], text: `${f.pl.name} 테크니컬 파울! 심판에게 항의` });
-      if ((this.tech[f.pid] >= 2 || this.pf[f.pid] >= 5) && !this.out[f.pid]) this.disqualify(f, this.tech[f.pid] >= 2 ? '테크니컬 2개 퇴장' : '5반칙 퇴장');
+      if ((this.tech[f.pid] >= 2 || this.pf[f.pid] >= this.foulOut) && !this.out[f.pid]) this.disqualify(f, this.tech[f.pid] >= 2 ? '테크니컬 2개 퇴장' : `${this.foulOut}반칙 퇴장`);
       const after = next;
       next = () => this.startTechFT(ftTeam, after);
     }
@@ -1171,7 +1176,8 @@ class GameSim {
     const pf = this.pf[pid];
     const q = this.quarter;
     if (q >= 4 && this.clock < 300) return false;
-    return (q === 1 && pf >= 2) || (q === 2 && pf >= 3) || (q >= 3 && pf >= 4);
+    const x = this.foulOut - 5;
+    return (q === 1 && pf >= 2 + x) || (q === 2 && pf >= 3 + x) || (q >= 3 && pf >= 4 + x);
   }
 
   /** 감독 교체 판단. 데드볼, 타임아웃, 쿼터 사이에 부른다. */
@@ -1511,7 +1517,7 @@ class GameSim {
       if (play?.k === 'iso' && play.star === h.i) ev += 0.04;
       if (L.u > 9.6 && tLeft > 3) ev -= 0.1; // 너무 먼 슛은 꺼린다
       // 많이 쐈으면 동료를 찾는다. 팀 슛의 3분의 1을 넘기면 훨씬 강하게
-      ev -= clamp((this.share(h.pid) - 0.22) * 1.4, 0, 0.3) + clamp((this.share(h.pid) - 0.32) * 3, 0, 0.5);
+      ev -= clamp((this.share(h.pid) - 0.22) * 1.4, 0, 0.3) + clamp((this.share(h.pid) - 0.3) * 4, 0, 0.8);
       if (doubled) ev -= 0.1;
       opts.push({ v: ev, go: () => this.startGather(h, post), label: 'shot-' + si.kind + '@' + c.toFixed(2) });
     }
@@ -1663,7 +1669,7 @@ class GameSim {
       }
     }
     // 슛을 많이 쏘는 선수는 수비가 집중해서 막는다
-    const focus = clamp((this.share(s.pid) - 0.22) * 1.6, 0, 0.35) + clamp((this.share(s.pid) - 0.3) * 1.2, 0, 0.25);
+    const focus = clamp((this.share(s.pid) - 0.22) * 1.6, 0, 0.35) + clamp((this.share(s.pid) - 0.28) * 1.5, 0, 0.3);
     return { c: clamp(c1 + 0.3 * c2 + focus, 0, 1), blocker: bi, c1 };
   }
 
@@ -2080,7 +2086,7 @@ class GameSim {
         const offFoul = this.rng.chance(0.55);
         const pool = offFoul ? offs : defs;
         const f = pool[this.rng.weighted(pool.map((c) => this.foulCare(c.p.pid) ** 2))].p;
-        if (this.pf[f.pid] >= 4 && this.rng.chance(0.7)) {
+        if (this.pf[f.pid] >= this.foulOut - 1 && this.rng.chance(0.7)) {
           this.rebound(cands[this.rng.weighted(cands.map((c) => c.w))].p, ph.shotTeam);
           return;
         }

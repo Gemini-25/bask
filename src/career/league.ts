@@ -5,6 +5,7 @@ import { generatePlayer, overall, POSITIONS, type Player, type Position } from '
 import { RATING_GROUPS } from '../data/ratings';
 import { generateTeam, TEAM_INFOS, type Team, type TeamInfo } from '../data/teams';
 import { expectedMargin, MARGIN_SD } from '../sim/winprob';
+import type { SeasonAwards, SeasonLine } from './awards';
 
 export const PRO_WEEKS = {
   /** 연습경기 */
@@ -12,6 +13,8 @@ export const PRO_WEEKS = {
   /** 정규시즌 첫 주 (1주에 1경기, 27주) */
   seasonStart: 13,
   games: 27,
+  /** 정규시즌 몇 번째 경기 뒤에 올스타 주간 (시즌 시작 +27주) */
+  allStarBreak: 14,
   /** 플레이오프: 6강(3전 2선승) → 4강(5전 3선승) → 결승(7전 4선승). 한 주에 여러 경기 */
   playoffs: [
     { name: '6강 플레이오프', wins: 2, weeks: [41, 41, 42] },
@@ -55,6 +58,12 @@ export interface League {
   /** 역대 우승 */
   history: { season: number; champion: string; myFinish: string }[];
   myFinish?: string;
+  /** 이번 시즌 선수 기록 (정규시즌) */
+  stats?: Record<string, SeasonLine>;
+  /** 이번 시즌 신인 */
+  rookies?: string[];
+  /** 역대 시상 */
+  awards?: SeasonAwards[];
 }
 
 const PRO_STRENGTH: Record<string, number> = { SEO: 2, BUS: 1, INC: 0, DAE: -1, GWA: 1, DJN: -2, ULS: 0, SUW: -1, CHW: 1, JEJ: -2 };
@@ -104,7 +113,9 @@ export function scheduleSeason(L: League, base: number) {
   L.games = [];
   for (let k = 0; k < 3; k++)
     rounds.forEach((pairs, r) => {
-      const week = base + PRO_WEEKS.seasonStart + k * 9 + r;
+      // 올스타 주간은 비운다
+      const n = k * 9 + r;
+      const week = base + PRO_WEEKS.seasonStart + n + (n >= PRO_WEEKS.allStarBreak ? 1 : 0);
       for (const [a, b] of pairs) L.games.push(k === 1 ? { week, a: b, b: a } : { week, a, b });
     });
   L.series = [];
@@ -266,6 +277,7 @@ export function offseason(L: League, rng: Rng, rookies: Player[]): string[] {
     if (before - t.players.length >= 2) notes.push(`${t.info.city} ${t.info.name}: 베테랑 ${before - t.players.length}명 은퇴`);
   }
   // 드래프트: 지난 시즌 꼴찌부터 한 명씩 (2라운드)
+  L.rookies = rookies.map((p) => p.id);
   const pool = [...rookies].sort((a, b) => overall(b) - overall(a));
   for (let round = 0; round < 2; round++)
     for (const id of L.lastOrder) {

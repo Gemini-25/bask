@@ -18,10 +18,14 @@ export function canDunk(p: Player, dist: number): boolean {
 }
 
 /** 공격 방향 기준 좌표 (u, v)에서 이 선수가 던지는 슛 */
+/** 아주 높은 능력치는 효과가 줄어든다 (75를 넘으면 절반씩). 99짜리가 노마크 3점을 60% 넣지 않게 */
+const soft = (v: number) => (v <= 75 ? v : 75 + (v - 75) * 0.5);
+
 export function shotInfo(p: Player, u: number, v: number, post = false, contest = 0): ShotInfo {
   const dist = Math.hypot(u - COURT.hoopFromBaseline, v);
   const three = isThreeLocal(u, v);
-  const r = p.r;
+  const raw = p.r;
+  const r = { dunk: soft(raw.dunk), layup: soft(raw.layup), postUp: soft(raw.postUp), floater: soft(raw.floater), midRange: soft(raw.midRange), three: soft(raw.three) };
   let kind: ShotKind;
   let pOpen: number;
   if (dist < 1.7) {

@@ -5,7 +5,6 @@ import { Rng } from '../core/rng';
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
 import { addXp, dateOf, teammates, type Career } from './career';
 import { avgFriendship } from './people';
-import { leagueTeam } from './league';
 import { signContract } from './pro';
 import { schoolById } from './schools';
 
@@ -394,7 +393,7 @@ export function fill(c: Career, text: string, mate?: string) {
     .replace(/\{me\}/g, c.me.name)
     .replace(/\{coach\}/g, c.coach)
     .replace(/\{rival\}/g, c.rival?.player.name ?? '라이벌')
-    .replace(/\{rivalSchool\}/g, c.rival ? (c.pro && c.league ? leagueTeam(c.league, c.rival.school).info.name : schoolById(c.rival.school).name) : '')
+    .replace(/\{rivalSchool\}/g, c.rival ? rivalWhere(c) : '')
     .replace(/\{mate\}/g, mateName)
     .replace(/\{mentor\}/g, c.mentor.name)
     .replace(/\{school\}/g, schoolById(c.school).name);
@@ -453,4 +452,14 @@ export function effectHint(e: Effect): string {
   if (e.trade) parts.push('다른 팀으로');
   if (e.xp) parts.push(Object.keys(e.xp).map((k) => `${RATING_LABEL[k as RatingKey]} 경험치`).join(', '));
   return parts.join(' · ');
+}
+
+/** 라이벌이 뛰는 곳 (해외에 나가 있으면 국내 리그에서 찾는다) */
+function rivalWhere(c: Career) {
+  const id = c.rival!.school;
+  for (const L of [c.league, c.homeLeague, c.abroadLeague]) {
+    const t = L?.teams.find((x) => x.info.id === id);
+    if (t) return t.info.name;
+  }
+  return schoolById(id).name;
 }

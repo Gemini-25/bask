@@ -21,7 +21,12 @@ for (let w = 0; w < weeks; w++) {
     afterGame(c);
   }
   if (c.draft && w < weeks - 1) c.draft = null;
-  if (c.contractPending) signContract(c, contractOffers(c).mine);
+  if (c.contractPending) {
+    const o = contractOffers(c);
+    signContract(c, process.argv.includes('abroad') && o.abroad[0] ? o.abroad[0] : o.mine);
+  }
+  c.retirePending = null;
+  if (c.allStar) c.allStar.unseen = false;
   for (let g = 0; g < 200; g++) {
     let best: (typeof RATING_KEYS)[number] | null = null;
     let bv = 0;
@@ -41,4 +46,4 @@ for (let w = 0; w < weeks; w++) {
   }
 }
 writeFileSync(out, exportCareer(c));
-console.log('week', c.week, 'pro', !!c.pro, 'ovr', overall(c.me, c.prefPos).toFixed(1));
+console.log('week', c.week, 'pro', !!c.pro, 'ovr', overall(c.me, c.prefPos).toFixed(1), 'overseas', c.overseas, c.pro?.team);

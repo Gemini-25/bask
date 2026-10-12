@@ -1391,3 +1391,187 @@ ol.picks li.rv {
 .iv p {
   margin: 4px 0;
 }
+
+/* M8: 시상, 트로피 */
+.ttable.aw td {
+  padding: 5px 8px;
+}
+.b5 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.b5 span {
+  background: var(--panel2);
+  padding: 3px 8px;
+}
+.b5 span.me {
+  background: #3a3220;
+  box-shadow: 0 0 0 1px var(--led);
+}
+.b5 small {
+  color: var(--muted);
+}
+.troph {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.troph span {
+  background: #3a3220;
+  box-shadow: 0 0 0 1px #6b4a1a;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+/* M8: 올스타 위크엔드 콘테스트 */
+.contest {
+  margin: 8px 0;
+}
+.contest h4 {
+  margin: 6px 0;
+  color: var(--led);
+}
+.crows {
+  display: grid;
+  gap: 3px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cround {
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 6px;
+}
+.crow {
+  display: grid;
+  grid-template-columns: 9em minmax(0, 1fr) 2.5em;
+  gap: 8px;
+  align-items: center;
+  background: var(--panel2);
+  padding: 3px 8px;
+}
+.crow.me {
+  background: #3a3220;
+  box-shadow: 0 0 0 1px var(--led);
+}
+.crow .cn {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crow .cv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: center;
+  min-width: 0;
+}
+.crow .cv em {
+  font-style: normal;
+  color: #ffb545;
+  margin-right: 6px;
+}
+.crow .cs {
+  text-align: right;
+  color: var(--led);
+}
+.ball {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a4f5c;
+  display: inline-block;
+}
+.ball.b1 {
+  background: #ff8a1f;
+}
+.ball.b2 {
+  background: #ffd23f;
+  box-shadow: 0 0 0 1px #fff;
+}
+.cv .ball:nth-child(5n) {
+  margin-right: 5px;
+}
+.cv i.card {
+  font-style: normal;
+  background: #e9ecf3;
+  color: #1b1f2a;
+  padding: 0 4px;
+  font-size: 11px;
+}
+.cv i.card.jhi {
+  background: #ffd23f;
+}
+.cv i.card.jlo {
+  background: #9aa7b8;
+}
+.cwin {
+  margin: 6px 0 0;
+  color: var(--led);
+  font-weight: 700;
+}
+.choice.abroad {
+  box-shadow: 0 0 0 2px #5fb4ff;
+}
+.csec.legacy {
+  background: #3a3220;
+  box-shadow: 0 0 0 2px var(--led);
+}
+
+/* M8: 명예의 전당, 업적 (타이틀) */
+.legacy-box {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.legacy-box section {
+  background: var(--panel);
+  box-shadow: 0 0 0 2px var(--line);
+  padding: 10px 14px;
+}
+.legacy-box h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.legacy-box h3 small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.hall {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.hall li {
+  display: grid;
+}
+.hall li span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.hall li.hof b {
+  color: var(--led);
+}
+.achs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ach {
+  font-size: 12px;
+  padding: 2px 7px;
+  background: var(--panel2);
+  color: var(--muted);
+}
+.ach.on {
+  background: #3a3220;
+  color: var(--ink, #f2f4f8);
+  box-shadow: 0 0 0 1px #6b4a1a;
+}
+.troph.scroll {
+  max-height: 150px;
+  overflow-y: auto;
+}
