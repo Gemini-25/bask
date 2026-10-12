@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import galmuri11 from 'galmuri/dist/Galmuri11.woff2?url';
 import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
-import { $, closeModal, download, modal, pickFile, show, toast } from './app/dom';
+import { $, closeModal, download, modal, onScreen, pickFile, show, toast } from './app/dom';
+import { sound } from './view/sound';
 import { eventModal, preGameModal, renderResult, weekModal } from './app/flow';
 import { Home } from './app/home';
 import { renderTitle } from './app/title';
@@ -119,8 +120,10 @@ function setMode(m: PlayMode) {
   ui.setMode(m, hint);
 }
 
-function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exhibition' | 'career'; focus?: number; banner?: string; done?: () => void }) {
+function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exhibition' | 'career'; focus?: number; banner?: string; done?: () => void; tier?: number; gym?: string }) {
   const pb = new Playback(game);
+  host.tier = opts.tier ?? 1;
+  host.banner = opts.gym;
   paused = false;
   pb.speed = speed;
   pb.paused = paused;
@@ -261,7 +264,10 @@ function watchMatch() {
   const m = match!;
   const me = m.myPid >= 0 ? m.game.players[m.myPid] : null;
   const banner = `<b>${m.label}</b> · ${dateText(c.week - 1)} · ${me ? `내 선수 <b>#${me.number} ${me.name}</b> (노란 화살표 · 박스스코어 '나')` : '부상으로 결장'}`;
-  watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch });
+  // 연습경기는 학교 체육관, 공식전은 대회장, 결승·왕중왕전은 큰 무대
+  const tier = m.kind === 'practice' ? 0 : m.label.includes('결승') || m.tour === 'kings' ? 2 : 1;
+  const gymSchool = schoolById(m.home ? c.school : m.opponent);
+  watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch, tier, gym: `${gymSchool.name} 농구부 파이팅` });
 }
 
 function finishMatch() {
@@ -370,6 +376,25 @@ async function boot() {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
 });
+
+// 소리: 버튼 누를 때 짧은 소리, 경기 화면 밖에선 칩튠 음악
+function soundButtons() {
+  $('btnSfx').classList.toggle('on', sound.sfxOn);
+  $('btnBgm').classList.toggle('on', sound.bgmOn);
+}
+$('btnSfx').onclick = () => {
+  sound.setSfx(!sound.sfxOn);
+  soundButtons();
+};
+$('btnBgm').onclick = () => {
+  sound.setBgm(!sound.bgmOn);
+  soundButtons();
+};
+soundButtons();
+document.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('button')) sound.play('click');
+});
+onScreen((s) => sound.music(s !== 'game'));
 
 boot();
 

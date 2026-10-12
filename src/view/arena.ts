@@ -12,6 +12,49 @@ function canvas(w: number, h: number) {
   return { c, ctx };
 }
 
+/** 학교 체육관: 밝은 벽, 높은 창문, 나무 관람석 두 줄, 현수막 */
+function drawGymWall(ctx: CanvasRenderingContext2D, look: ArenaLook) {
+  ctx.fillStyle = '#b9b2a2';
+  ctx.fillRect(0, 0, VIEW_W, 88);
+  ctx.fillStyle = '#a49c8b';
+  for (let x = 0; x < VIEW_W; x += 32) ctx.fillRect(x, 0, 1, 52);
+  // 높은 창문
+  for (let x = 18; x < VIEW_W; x += 64) {
+    ctx.fillStyle = '#6f8fb0';
+    ctx.fillRect(x, 6, 30, 16);
+    ctx.fillStyle = '#9fc0de';
+    ctx.fillRect(x + 1, 7, 13, 6);
+    ctx.fillStyle = '#e9ecf3';
+    ctx.fillRect(x + 14, 6, 1, 16);
+    ctx.fillRect(x, 14, 30, 1);
+  }
+  // 현수막
+  ctx.fillStyle = shade(look.home, -0.1);
+  ctx.fillRect(VIEW_W / 2 - 150, 26, 120, 12);
+  ctx.fillRect(VIEW_W / 2 + 30, 26, 120, 12);
+  ctx.fillStyle = '#f7f2e8';
+  ctx.font = '11px Galmuri11, monospace';
+  ctx.textBaseline = 'top';
+  const text = look.banner ?? '농구부 파이팅';
+  const tw = ctx.measureText(text).width;
+  ctx.fillText(text, Math.round(VIEW_W / 2 - 90 - tw / 2), 26);
+  const t2 = '투지! 끈기! 승리!';
+  ctx.fillText(t2, Math.round(VIEW_W / 2 + 90 - ctx.measureText(t2).width / 2), 26);
+  // 나무 관람석 두 줄
+  for (let r = 0; r < 2; r++) {
+    const y = 54 + r * 13;
+    ctx.fillStyle = r === 0 ? '#9a6a3c' : '#8a5c32';
+    ctx.fillRect(0, y, VIEW_W, 13);
+    ctx.fillStyle = '#6b4526';
+    ctx.fillRect(0, y + 11, VIEW_W, 2);
+  }
+  // 벽 아래 보호대
+  ctx.fillStyle = shade(look.home, -0.35);
+  ctx.fillRect(0, 80, VIEW_W, 8);
+  ctx.fillStyle = shade(look.home, -0.15);
+  ctx.fillRect(0, 80, VIEW_W, 1);
+}
+
 /** 코트 위 점들을 이어 찍는다 (원, 호를 쿼터뷰로) */
 function plotWorld(ctx: CanvasRenderingContext2D, pts: [number, number][], color: string) {
   ctx.fillStyle = color;
@@ -45,29 +88,39 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number): [number
 export interface ArenaLook {
   home: string;
   away: string;
-  /** 경기장 크기 단계 (0 = 고교 체육관, 1 = 프로 아레나) */
+  /** 경기장 단계 (0 = 학교 체육관, 1 = 대회장·프로 아레나, 2 = 결승 무대) */
   tier: number;
+  /** 체육관 현수막 글 */
+  banner?: string;
 }
 
 /** 움직이지 않는 배경 */
 export function drawArena(look: ArenaLook): HTMLCanvasElement {
   const { c, ctx } = canvas(VIEW_W, VIEW_H);
-  // 벽과 관중석 바탕
-  ctx.fillStyle = '#151a26';
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  for (let r = 0; r < 5; r++) {
-    const y = 14 + r * 13;
-    ctx.fillStyle = r % 2 === 0 ? '#232a3b' : '#1e2433';
-    ctx.fillRect(0, y, VIEW_W, 13);
-    ctx.fillStyle = '#2c3448';
-    ctx.fillRect(0, y + 11, VIEW_W, 1);
-  }
-  // 광고판 띠
-  ctx.fillStyle = '#0c0f16';
-  ctx.fillRect(0, 80, VIEW_W, 8);
-  for (let x = 0; x < VIEW_W; x += 80) {
-    ctx.fillStyle = x % 160 === 0 ? shade(look.home, -0.2) : '#2b3550';
-    ctx.fillRect(x + 2, 81, 76, 6);
+  if (look.tier === 0) drawGymWall(ctx, look);
+  else {
+    // 벽과 관중석 바탕
+    ctx.fillStyle = '#151a26';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    for (let r = 0; r < 5; r++) {
+      const y = 14 + r * 13;
+      ctx.fillStyle = r % 2 === 0 ? '#232a3b' : '#1e2433';
+      ctx.fillRect(0, y, VIEW_W, 13);
+      ctx.fillStyle = '#2c3448';
+      ctx.fillRect(0, y + 11, VIEW_W, 1);
+    }
+    // 광고판 띠 (결승 무대는 금색 테두리)
+    ctx.fillStyle = look.tier >= 2 ? '#6b4a1a' : '#0c0f16';
+    ctx.fillRect(0, 80, VIEW_W, 8);
+    for (let x = 0; x < VIEW_W; x += 80) {
+      ctx.fillStyle = x % 160 === 0 ? shade(look.home, -0.2) : look.tier >= 2 ? '#3a2f1a' : '#2b3550';
+      ctx.fillRect(x + 2, 81, 76, 6);
+    }
+    if (look.tier >= 2) {
+      ctx.fillStyle = '#ffb545';
+      ctx.fillRect(0, 80, VIEW_W, 1);
+      ctx.fillRect(0, 87, VIEW_W, 1);
+    }
   }
   // 바닥 (코트 바깥)
   ctx.fillStyle = '#3a2f2a';
@@ -253,7 +306,7 @@ interface Fan {
   front: boolean;
 }
 
-export function makeCrowd(home: string, away: string, seed: number): Fan[] {
+export function makeCrowd(home: string, away: string, seed: number, tier = 1): Fan[] {
   let h = seed >>> 0 || 1;
   const r = () => {
     h = Math.imul(h ^ (h >>> 15), 2246822507);
@@ -265,17 +318,20 @@ export function makeCrowd(home: string, away: string, seed: number): Fan[] {
   const hairs = ['#1c1714', '#4a2f1e', '#8a5a2b', '#d9b25a', '#6b6b6b'];
   const neutral = ['#d9d4c7', '#5b6478', '#8b4a4a', '#4a7a5b', '#c9b48a', '#3e4a66'];
   const fans: Fan[] = [];
-  for (let row = 0; row < 5; row++) {
-    const y = 24 + row * 13;
+  // 학교 체육관은 관람석 두 줄에 친구들 몇 명, 결승은 꽉 찬다
+  const rows = tier === 0 ? [3, 4] : [0, 1, 2, 3, 4];
+  const empty = tier === 0 ? 0.6 : tier >= 2 ? 0.03 : 0.12;
+  for (const row of rows) {
+    const y = 24 + row * 13 + (tier === 0 ? 3 : 0);
     for (let x = 4 + (row % 2) * 4; x < VIEW_W - 4; x += 8) {
-      if (r() < 0.12) continue; // 빈자리
+      if (r() < empty) continue; // 빈자리
       const isHome = r() < 0.7;
       const shirt = r() < 0.55 ? (isHome ? home : away) : neutral[Math.floor(r() * neutral.length)];
       fans.push({ x: x + Math.floor(r() * 3), y, shirt, skin: skins[Math.floor(r() * skins.length)], hair: hairs[Math.floor(r() * hairs.length)], home: isHome, phase: r() * 10, front: false });
     }
   }
-  // 코트 앞쪽 (카메라 쪽) 앞줄 관중: 머리만 보인다
-  for (let x = 2; x < VIEW_W; x += 9) {
+  // 코트 앞쪽 (카메라 쪽) 앞줄 관중: 머리만 보인다 (체육관엔 없다)
+  for (let x = 2; x < VIEW_W && tier > 0; x += 9) {
     if (r() < 0.25) continue;
     const isHome = r() < 0.7;
     fans.push({ x: x + Math.floor(r() * 3), y: VIEW_H - 4, shirt: isHome ? home : neutral[Math.floor(r() * neutral.length)], skin: skins[Math.floor(r() * skins.length)], hair: hairs[Math.floor(r() * hairs.length)], home: isHome, phase: r() * 10, front: true });

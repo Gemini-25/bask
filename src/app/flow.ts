@@ -7,7 +7,8 @@ import { schoolById } from '../career/schools';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, modal } from './dom';
-import { trainingCanvas } from './figure';
+import { sound } from '../view/sound';
+import { trainingScene } from './scenes';
 import { fatigueColor, pointsHtml } from './home';
 
 function upsHtml(ups: Partial<Record<RatingKey, number>>) {
@@ -31,9 +32,9 @@ function changeHtml(label: string, before: string, after: string, good: boolean 
 }
 
 export function weekModal(c: Career, r: WeekResult, onOk: () => void) {
+  sound.play(r.notes.some((n) => n.startsWith('특수능력') || n.startsWith('덩크 해금')) ? 'fanfare' : 'jingle');
   const school = schoolById(c.school);
   const focus = r.action.id === 'solo' ? FOCUS.find((f) => f.id === r.focus) : undefined;
-  const pose = focus ? focus.pose : r.action.pose;
   const title = `${r.action.label}${focus ? ` · ${focus.label}` : ''}`;
   modal(
     `<h2>${dateText(c.week - 1)} · ${esc(title)}</h2>
@@ -49,11 +50,12 @@ export function weekModal(c: Career, r: WeekResult, onOk: () => void) {
     <div class="mbtn"><button type="button" class="primary" data-close>${r.event ? '다음 ▶' : r.game ? '경기 준비 ▶' : '확인'}</button></div>`,
     { onClose: onOk },
   );
-  trainingCanvas($('trainCanvas') as HTMLCanvasElement, c.me, { jersey: school.color, trim: numberColorFor(school.color) }, pose, '');
+  trainingScene($('trainCanvas') as HTMLCanvasElement, { scene: r.action.id, focus: r.focus, pl: c.me, kit: { jersey: school.color, trim: numberColorFor(school.color) }, gained: r.gained });
 }
 
 /** 이벤트: 선택지를 고르면 결과를 보여주고 onDone */
 export function eventModal(c: Career, onDone: () => void) {
+  sound.play('pop');
   const ev = c.pendingEvent!;
   const def = eventById(ev.id);
   if (!def) {
@@ -116,6 +118,7 @@ export interface ResultActions {
 }
 
 export function renderResult(c: Career, m: MatchSetup, rep: GameReport, ovrBefore: number, act: ResultActions) {
+  if (rep.abilityNotes.length || rep.tourNote) sound.play('fanfare');
   const mine = schoolById(c.school);
   const opp = schoolById(m.opponent);
   const l = rep.line;

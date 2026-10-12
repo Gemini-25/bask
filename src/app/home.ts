@@ -26,6 +26,8 @@ import {
   type Points,
 } from '../career/career';
 import { ABILITIES, abilityDef, FX, stars, type AbilityId } from '../data/abilities';
+import { DUNKS, dunkUnlocked } from '../data/dunks';
+import { DUNK_LABEL } from '../sim/types';
 import { abilityProgress } from '../career/abilities';
 import { myTeam, trustBonus } from '../career/match';
 import { avgFriendship } from '../career/people';
@@ -243,7 +245,14 @@ export class Home {
       return `<div class="abrow ${n ? 'have' : ''}"><div><b>${a.label}</b> <span class="st">${n ? stars(n) : '☆'}</span>${fx && n ? ` <small class="muted">효과 ${fx[n] < 1 ? `${Math.round(fx[n] * 100)}%` : `×${fx[n]}`}</small>` : ''}</div><p>${esc(a.desc)}</p>${need}</div>`;
     });
     const bad = ABILITIES.filter((a) => a.bad && ab[a.id]).map((a) => `<div class="abrow bad"><div><b>${a.label}</b></div><p>${esc(a.desc)}</p></div>`);
-    return `<div class="abgrid">${good.join('')}</div>${bad.length ? `<h4 class="sub">나쁜 버릇</h4><div class="abgrid">${bad.join('')}</div><p class="hint">관련 능력치를 올리고 기록이 좋아지면 사라진다.</p>` : ''}
+    const dunks = DUNKS.map((d) => {
+      const ok = dunkUnlocked(c.me, d);
+      const need = Object.entries(d.need)
+        .map(([k, v]) => `${RATING_LABEL[k as RatingKey]} ${c.me.r[k as RatingKey]}/${v}`)
+        .join(' · ');
+      return `<div class="dk ${ok ? 'have' : ''}"><b>${DUNK_LABEL[d.id]}</b><small>${ok ? '열림' : need}</small></div>`;
+    }).join('');
+    return `<h4 class="sub">덩크 레퍼토리</h4><div class="dks">${dunks}</div><p class="hint">열린 덩크 중에서 노마크·속공일수록 화려한 덩크를 한다.</p><h4 class="sub">특수능력</h4><div class="abgrid">${good.join('')}</div>${bad.length ? `<h4 class="sub">나쁜 버릇</h4><div class="abgrid">${bad.join('')}</div><p class="hint">관련 능력치를 올리고 기록이 좋아지면 사라진다.</p>` : ''}
       <p class="hint">특수능력은 경기 기록과 능력치가 조건을 채우면 저절로 생기고, ★3까지 진화한다.</p>`;
   }
 

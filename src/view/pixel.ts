@@ -12,6 +12,8 @@ const DIGITS: Record<string, string[]> = {
   '7': ['###', '..#', '.#.', '.#.', '.#.'],
   '8': ['###', '#.#', '###', '#.#', '###'],
   '9': ['###', '#.#', '###', '..#', '###'],
+  '+': ['...', '.#.', '###', '.#.', '...'],
+  '-': ['...', '...', '###', '...', '...'],
 };
 
 export function drawDigits(ctx: CanvasRenderingContext2D, text: string, cx: number, top: number, color: string) {

@@ -1,5 +1,7 @@
 // 특수능력 얻기·진화·잃기 (S8). 경기 기록과 능력치가 조건을 채우면 자동으로.
 import { abilityDef, stars, type AbilityId } from '../data/abilities';
+import { dunkList } from '../data/dunks';
+import { DUNK_LABEL } from '../sim/types';
 import type { RatingKey } from '../data/ratings';
 import type { BackgroundId } from './backgrounds';
 import type { Career } from './career';
@@ -96,6 +98,10 @@ export function checkAbilities(c: Career): string[] {
   bad('glass', s.injuries >= 3 && c.me.r.recovery < 50, c.me.r.recovery >= 60 && c.week - s.lastInjury >= 24);
   bad('chicken', s.clutchMiss >= 4 && s.clutchMade * 4 <= s.clutchMiss && c.me.r.composure < 40, c.me.r.composure >= 50);
   bad('ftPhobia', s.fta >= 20 && s.ftm / s.fta < 0.5 && !ab.ftPhobia && s.ftAfter.a === 0, c.me.r.freeThrow >= 55 && s.ftAfter.a >= 10 && s.ftAfter.m / s.ftAfter.a >= 0.6);
+  // 덩크 해금
+  const now = dunkList(c.me);
+  for (const d of now) if (!(c.dunks ??= []).includes(d)) out.push(`덩크 해금: ${DUNK_LABEL[d]}!`);
+  c.dunks = now;
   bad('foulProne', s.foulOuts >= 2 && s.recentPf.length >= 3 && s.recentPf.slice(-3).some((p) => p >= 5), s.recentPf.length >= 5 && s.recentPf.slice(-5).every((p) => p <= 2));
   return out;
 }

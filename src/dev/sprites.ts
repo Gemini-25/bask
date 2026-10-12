@@ -26,8 +26,9 @@ acts.forEach(([name, act], k) => {
     const pl = players[(k + fi) % 3];
     const x = 14 + col * 52 + fi * 11;
     const y = 50 + row * 70 + (fi % 2) * 4;
-    const lift = act === ACT.SHOOT || act === ACT.LAYUP || act === ACT.DUNK || act === ACT.REBOUND || act === ACT.BLOCK || act === ACT.HANG ? 8 : 0;
-    drawFigure(ctx, x, y, { pl, kit: { jersey: fi % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing, flip, act, speed: act === ACT.IDLE && fi === 0 ? 4 : 0, lift, time: 0.3, seed: k, tired: false });
+    const air: number[] = [ACT.SHOOT, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.HANG, ACT.DUNK2, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360];
+    const lift = air.includes(act) ? 8 : 0;
+    drawFigure(ctx, x, y, { pl, kit: { jersey: fi % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing, flip, act, speed: (act === ACT.IDLE && fi === 0) || (act === ACT.STANCE && fi === 1) ? 4 : 0, lift, time: 0.3, seed: k, tired: false });
   });
   ctx.fillStyle = '#1b1f2a';
   ctx.font = '8px monospace';

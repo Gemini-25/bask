@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import { COURT } from '../sim/court';
-import { ACT, FLAG_STUN, type GameEvent } from '../sim/types';
+import { ACT, DUNK_LABEL, FLAG_STUN, type GameEvent } from '../sim/types';
 import { drawArena, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type CrowdMood } from './arena';
 import { drawBenchFigure, drawFigure, type Facing, type Kit } from './character';
 import { sx, sy, szy, VIEW_H, VIEW_W, ZH } from './iso';
 import type { Playback } from './playback';
 import { shade } from './pixel';
+import { sound } from './sound';
 
 export interface TeamLook {
   fill: string;
@@ -23,7 +24,77 @@ export interface SceneHost {
   onFrame(): void;
   /** 큰 장면 연출 (컷인)이 필요할 때 */
   onBigPlay?(e: GameEvent): void;
+  /** 경기장 단계 (0 학교 체육관, 1 대회장, 2 결승 무대) */
+  tier?: number;
+  /** 체육관 현수막 */
+  banner?: string;
 }
+
+type Emote = 'note' | 'bang' | 'anger' | 'dots';
+
+/** 머리 위 감정 아이콘 (AN4) */
+function drawEmote(ctx: CanvasRenderingContext2D, x: number, y: number, k: Emote, t: number) {
+  const yy = y - (Math.floor(t * 4) % 2);
+  const px = (dx: number, dy: number, w = 1, h = 1) => ctx.fillRect(x + dx, yy + dy, w, h);
+  if (k === 'note') {
+    ctx.fillStyle = '#1b1f2a';
+    px(-2, -9, 7, 10);
+    ctx.fillStyle = '#ffe066';
+    px(1, -8, 1, 6);
+    px(2, -8, 2, 1);
+    px(3, -7, 1, 1);
+    px(-1, -3, 3, 2);
+  } else if (k === 'bang' || k === 'dots') {
+    ctx.fillStyle = '#1b1f2a';
+    px(-4, -10, 9, 9);
+    ctx.fillStyle = '#f7f2e8';
+    px(-3, -9, 7, 7);
+    px(-1, -2, 2, 1);
+    ctx.fillStyle = k === 'bang' ? '#e0473d' : '#1b1f2a';
+    if (k === 'bang') {
+      px(0, -8, 1, 3);
+      px(0, -4, 1, 1);
+    } else {
+      px(-2, -5, 1, 1);
+      px(0, -5, 1, 1);
+      px(2, -5, 1, 1);
+    }
+  } else {
+    ctx.fillStyle = '#e0473d';
+    for (const [dx, dy] of [
+      [-3, -8],
+      [-2, -7],
+      [2, -7],
+      [3, -8],
+      [-3, -3],
+      [-2, -4],
+      [2, -4],
+      [3, -3],
+    ])
+      px(dx, dy);
+  }
+}
+
+interface Walker {
+  slot: number;
+  pidIn: number;
+  pidOut: number;
+  t0: number;
+  inFrom: { x: number; y: number };
+  outFrom: { x: number; y: number };
+  outTo: { x: number; y: number };
+}
+
+interface Confetto {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  c: string;
+  life: number;
+}
+
+const WALK_TICKS = 16;
 
 const FONT = 'Galmuri11, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif';
 
@@ -52,6 +123,10 @@ export class CourtScene extends Phaser.Scene {
   private lastCutIn = -9999;
   private slowLabel!: Phaser.GameObjects.Text;
   private modeLabel!: Phaser.GameObjects.Text;
+  private emotes = new Map<number, { k: Emote; until: number }>();
+  private walkers: Walker[] = [];
+  private prevLineup: number[] | null = null;
+  private confetti: Confetto[] = [];
   private seenCuts = 0;
   /** 확대되지 않는 화면 연출용 카메라 (배너, 컷인) */
   private uiCam!: Phaser.Cameras.Scene2D.Camera;
@@ -107,10 +182,15 @@ export class CourtScene extends Phaser.Scene {
     const key = `arena${id}`;
     if (this.textures.exists(key)) this.textures.remove(key);
     const [ph, pa] = paintColors(looks[0].fill, looks[1].fill);
-    this.textures.addCanvas(key, drawArena({ home: ph, away: pa, tier: 1 }));
+    const tier = this.host.tier ?? 1;
+    this.textures.addCanvas(key, drawArena({ home: ph, away: pa, tier, banner: this.host.banner }));
     if (this.bg) this.bg.setTexture(key);
     else this.bg = this.world(this.add.image(0, 0, key).setOrigin(0).setDepth(0));
-    this.fans = makeCrowd(looks[0].fill, looks[1].fill, pb.game.seed);
+    this.fans = makeCrowd(looks[0].fill, looks[1].fill, pb.game.seed, tier);
+    this.emotes.clear();
+    this.walkers = [];
+    this.prevLineup = null;
+    this.confetti = [];
     this.mood = { homeCheer: 0, awayCheer: 0, wave: -1 };
     this.lastTick = pb.cur;
     this.seenCuts = pb.cuts;
@@ -143,12 +223,53 @@ export class CourtScene extends Phaser.Scene {
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
     drawCrowd(ctx, this.fans, this.mood, this.clock);
 
+    // 교체: 들어오는 선수는 벤치에서 걸어 나오고, 나가는 선수는 벤치로 간다
+    const benchSpot = (pid: number, pids: number[]) => {
+      const team = pb.game.teamOf[pid];
+      const list = pb.game.players.map((_, q) => q).filter((q) => pb.game.teamOf[q] === team && !pids.includes(q));
+      const k = Math.max(0, list.indexOf(pid));
+      return { x: (team === 0 ? 7.9 : 15.3) + k * 0.72, y: -0.55 };
+    };
+    const jumpT = pb.cur - this.lastTick;
+    if (this.prevLineup && jumpT > 0 && jumpT < 30) {
+      for (let i = 0; i < 10; i++) {
+        const pin = lineup.pids[i];
+        const pout = this.prevLineup[i];
+        if (pin === pout) continue;
+        this.walkers = this.walkers.filter((w) => w.slot !== i);
+        this.walkers.push({ slot: i, pidIn: pin, pidOut: pout, t0: pb.cur, inFrom: benchSpot(pin, this.prevLineup), outFrom: { x: fr.px[i * 2], y: fr.px[i * 2 + 1] }, outTo: benchSpot(pout, lineup.pids) });
+      }
+    }
+    if (jumpT < 0 || jumpT >= 30) this.walkers = [];
+    this.walkers = this.walkers.filter((w) => pb.cur - w.t0 < WALK_TICKS);
+    this.prevLineup = [...lineup.pids];
+    const walking = new Set(this.walkers.flatMap((w) => [w.pidIn, w.pidOut]));
+
     // 벤치 선수
     const onCourt = new Set(lineup.pids);
     for (const team of [0, 1] as const) {
       const bench = pb.game.players.map((p, pid) => ({ p, pid })).filter(({ pid }) => pb.game.teamOf[pid] === team && !onCourt.has(pid));
       const x0 = team === 0 ? 7.9 : 15.3;
-      bench.forEach(({ p }, k) => drawBenchFigure(ctx, Math.round(sx(x0 + k * 0.72)), Math.round(sy(-0.55)) - 1, p, this.kit(team), this.benchCheer[team] > 0, this.clock));
+      bench.forEach(({ p, pid }, k) => {
+        if (walking.has(pid)) return;
+        drawBenchFigure(ctx, Math.round(sx(x0 + k * 0.72)), Math.round(sy(-0.55)) - 1, p, this.kit(team), this.benchCheer[team] > 0, this.clock);
+      });
+    }
+    // 결승 무대 조명
+    if ((this.host.tier ?? 1) >= 2) {
+      ctx.save();
+      ctx.globalAlpha = 0.07;
+      ctx.fillStyle = '#fff3c4';
+      for (const ph of [0, 2.2]) {
+        const cx = VIEW_W / 2 + Math.sin(this.clock * 0.5 + ph) * 220;
+        ctx.beginPath();
+        ctx.moveTo(VIEW_W / 2 + (ph ? 140 : -140), 0);
+        ctx.lineTo(cx - 40, VIEW_H);
+        ctx.lineTo(cx + 40, VIEW_H);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     const items: Drawable[] = [];
@@ -162,10 +283,24 @@ export class CourtScene extends Phaser.Scene {
       const pid = lineup.pids[i];
       const pl = pb.game.players[pid];
       const team = pb.game.teamOf[pid];
-      const x = fr.px[i * 2];
-      const y = fr.px[i * 2 + 1];
-      const vx = (rec.pos[f1 * 20 + i * 2] - rec.pos[f0 * 20 + i * 2]) / pb.game.dt;
-      const vy = (rec.pos[f1 * 20 + i * 2 + 1] - rec.pos[f0 * 20 + i * 2 + 1]) / pb.game.dt;
+      let x = fr.px[i * 2];
+      let y = fr.px[i * 2 + 1];
+      let vx = (rec.pos[f1 * 20 + i * 2] - rec.pos[f0 * 20 + i * 2]) / pb.game.dt;
+      let vy = (rec.pos[f1 * 20 + i * 2 + 1] - rec.pos[f0 * 20 + i * 2 + 1]) / pb.game.dt;
+      const wk = this.walkers.find((w) => w.slot === i);
+      if (wk) {
+        const k = Math.min(1, (pb.cur - wk.t0) / WALK_TICKS);
+        const e = k * k * (3 - 2 * k);
+        vx = x - wk.inFrom.x;
+        vy = y - wk.inFrom.y;
+        x = wk.inFrom.x + (x - wk.inFrom.x) * e;
+        y = wk.inFrom.y + (y - wk.inFrom.y) * e;
+        if (k < 1) {
+          const n = Math.hypot(vx, vy) || 1;
+          vx = (vx / n) * 3;
+          vy = (vy / n) * 3;
+        }
+      }
       const speed = Math.hypot(vx, vy);
       const act = rec.act[f0 * 10 + i];
       const lift = ((rec.pz[f0 * 10 + i] * (1 - (pb.cur - f0)) + rec.pz[f1 * 10 + i] * (pb.cur - f0)) / 50) * ZH;
@@ -215,6 +350,8 @@ export class CourtScene extends Phaser.Scene {
               ctx.fillRect(px + Math.round(Math.cos(a) * 5), top - 2 + Math.round(Math.sin(a) * 2), 1, 1);
             }
           }
+          const em = this.emotes.get(pid);
+          if (em && this.clock < em.until) drawEmote(ctx, px, top - 3, em.k, this.clock);
           if (energy < 70) {
             ctx.fillStyle = 'rgba(11,13,18,0.85)';
             ctx.fillRect(px - 6, py + 4, 13, 3);
@@ -222,6 +359,27 @@ export class CourtScene extends Phaser.Scene {
             ctx.fillRect(px - 5, py + 5, Math.max(1, Math.round((11 * energy) / 100)), 1);
           }
           if (pid === this.host.focus) focusRef.v = { x: px, y: top };
+        },
+      });
+    }
+
+    // 벤치로 나가는 선수
+    for (const w of this.walkers) {
+      const k = Math.min(1, (pb.cur - w.t0) / WALK_TICKS);
+      const e = k * k * (3 - 2 * k);
+      const wx = w.outFrom.x + (w.outTo.x - w.outFrom.x) * e;
+      const wy = w.outFrom.y + (w.outTo.y - w.outFrom.y) * e;
+      const pl = pb.game.players[w.pidOut];
+      const team = pb.game.teamOf[w.pidOut];
+      const dx = w.outTo.x - w.outFrom.x;
+      items.push({
+        depth: wy,
+        draw: () => {
+          const px = Math.round(sx(wx));
+          const py = Math.round(sy(wy));
+          ctx.fillStyle = 'rgba(30,18,8,0.32)';
+          ctx.fillRect(px - 4, py, 8, 2);
+          drawFigure(ctx, px, py, { pl, kit: this.kit(team), facing: Math.abs(dx) > Math.abs(w.outTo.y - w.outFrom.y) ? 'side' : 'back', flip: dx < 0, act: ACT.IDLE, speed: 2.4, lift: 0, time: this.clock, seed: w.slot, tired: true });
         },
       });
     }
@@ -246,6 +404,19 @@ export class CourtScene extends Phaser.Scene {
     });
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) it.draw();
+
+    // 꽃가루
+    if (this.confetti.length) {
+      for (const c of this.confetti) {
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
+        c.vx += Math.sin(this.clock * 3 + c.y * 0.05) * 4 * dt;
+        c.life -= dt;
+        ctx.fillStyle = c.c;
+        ctx.fillRect(Math.round(c.x), Math.round(c.y), Math.sin(this.clock * 12 + c.x) > 0 ? 2 : 1, 2);
+      }
+      this.confetti = this.confetti.filter((c) => c.life > 0 && c.y < VIEW_H);
+    }
 
     if (focusRef.v) {
       const { x, y } = focusRef.v;
@@ -273,7 +444,10 @@ export class CourtScene extends Phaser.Scene {
       this.resetZoom();
     }
     this.lastTick = pb.cur;
-    if (pb.ended) this.showBanner('경기 종료', Infinity);
+    if (pb.ended) {
+      const w = pb.game.final[0] > pb.game.final[1] ? 0 : 1;
+      this.showBanner(`경기 종료 · ${pb.game.teams[w].name} 승리!`, Infinity, VIEW_H * 0.24);
+    }
     else if (time > this.bannerUntil) this.banner.setVisible(false);
     if (this.zoomUntil && time > this.zoomUntil) this.resetZoom();
     this.slowLabel.setVisible(pb.slowNow && Math.floor(time / 400) % 2 === 0);
@@ -308,8 +482,9 @@ export class CourtScene extends Phaser.Scene {
     this.zoomUntil = this.time.now + 1300;
   }
 
-  private showBanner(text: string, ms: number) {
-    this.bannerText.setText(text);
+  private showBanner(text: string, ms: number, y = VIEW_H / 2) {
+    if (this.bannerText.text !== text) this.bannerText.setText(text);
+    this.banner.setY(y);
     this.banner.setVisible(true);
     this.bannerUntil = this.time.now + ms;
   }
@@ -392,12 +567,17 @@ export class CourtScene extends Phaser.Scene {
       return { x: sx(fr.px[slot * 2]), y: sy(fr.px[slot * 2 + 1]) - 30 };
     };
     const calm = speed <= 4;
+    const loud = speed <= 8;
     switch (e.type) {
       case 'made': {
         const p = at(e.player);
         const col = shade(looks[e.team].fill, 0.4);
-        const label = e.alleyOop ? '앨리웁!' : e.andOne ? '앤드원!' : e.shot === 'dunk' ? '덩크!' : e.pts === 3 ? '3점!' : '+2';
+        const dunkName = e.dunk && e.dunk !== 'one' ? `${DUNK_LABEL[e.dunk]}!` : '덩크!';
+        const label = e.alleyOop ? '앨리웁!' : e.andOne ? '앤드원!' : e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2';
         const big = e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3;
+        if (big) this.emote(e.player, 'note');
+        if (loud) sound.play(e.shot === 'dunk' ? 'dunk' : 'swish');
+        if (loud && big && calm) sound.play('cheer');
         this.popText(p.x, p.y, label, col, big);
         const side = this.hoopSide(e.team, e.quarter);
         this.swish[side] = 0.5;
@@ -426,7 +606,10 @@ export class CourtScene extends Phaser.Scene {
         break;
       }
       case 'miss':
+        if (loud) sound.play(e.blocked ? 'block' : 'clank');
         if (e.blocked && e.other >= 0) {
+          this.emote(e.other, 'bang');
+          this.emote(e.player, 'dots');
           const p = at(e.other);
           this.popText(p.x, p.y, '블록!', '#9fd8ff', true);
           this.cheer((1 - e.team) as 0 | 1, 0.8);
@@ -436,6 +619,8 @@ export class CourtScene extends Phaser.Scene {
         break;
       case 'turnover':
         if (e.tov === 'offFoul') break; // 파울 팝업이 대신한다
+        if (e.player >= 0) this.emote(e.player, 'dots');
+        if (e.other >= 0) this.emote(e.other, 'bang');
         if (e.other >= 0) {
           const p = at(e.other);
           this.popText(p.x, p.y, '스틸!', '#b9f6a4', true);
@@ -447,6 +632,8 @@ export class CourtScene extends Phaser.Scene {
         }
         break;
       case 'foul': {
+        if (loud) sound.play('whistle');
+        this.emote(e.player, 'anger', e.foul === 'technical' ? 2.2 : 1.2);
         const p = at(e.player);
         if (e.foul === 'technical') {
           this.popText(p.x, p.y, '테크니컬!', '#ff6a5a', true);
@@ -467,6 +654,7 @@ export class CourtScene extends Phaser.Scene {
         }
         break;
       case 'ankle': {
+        this.emote(e.player, 'note');
         const p = at(e.other);
         this.popText(p.x, p.y, '휘청!', '#ffe066', true);
         this.cheer(e.team as 0 | 1, 0.7);
@@ -492,14 +680,30 @@ export class CourtScene extends Phaser.Scene {
         }
         break;
       case 'ejected': {
+        this.emote(e.player, 'anger', 2.5);
         const p = at(e.player);
         this.popText(p.x, p.y, '퇴장', '#ff6a5a', true);
         break;
       }
       case 'timeout':
+        if (loud) sound.play('whistle');
         this.showBanner(`타임아웃 · ${teams[e.team].city} ${teams[e.team].name}`, 1600);
         break;
+      case 'gameEnd': {
+        sound.play('buzzer');
+        sound.play('cheer');
+        this.showBanner(`경기 종료 · ${teams[e.team].name} 승리!`, 3800, VIEW_H * 0.24);
+        this.cheer(e.team as 0 | 1, 1);
+        const lu = pb.lineupAt(e.tick).pids;
+        lu.forEach((pid, k) => this.emote(pid, (k < 5 ? 0 : 1) === e.team ? 'note' : 'dots', 3.5));
+        // 이긴 팀 색 꽃가루 (체육관은 조금, 결승은 잔뜩)
+        const n = [30, 90, 180][this.host.tier ?? 1];
+        const cols = [looks[e.team].fill, looks[e.team].num, '#ffd23f', '#f7f2e8'];
+        for (let i = 0; i < n; i++) this.confetti.push({ x: Math.random() * VIEW_W, y: -Math.random() * 120, vx: (Math.random() - 0.5) * 20, vy: 30 + Math.random() * 40, c: cols[i % cols.length], life: 6 });
+        break;
+      }
       case 'quarterEnd': {
+        if (!(e.quarter >= 4 && e.score[0] !== e.score[1])) sound.play('buzzer');
         const q = e.quarter;
         const label = q === 2 ? '전반 종료' : q <= 4 ? `${q}쿼터 종료` : `연장 ${q - 4}차 종료`;
         this.showBanner(label, 1800);
@@ -508,6 +712,11 @@ export class CourtScene extends Phaser.Scene {
       default:
         break;
     }
+  }
+
+  private emote(pid: number, k: Emote, dur = 1.3) {
+    if (pid < 0) return;
+    this.emotes.set(pid, { k, until: this.clock + dur });
   }
 
   /** 그 쿼터에 이 팀이 공격하는 골대 (0 = 왼쪽, 1 = 오른쪽) */

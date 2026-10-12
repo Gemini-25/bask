@@ -2,6 +2,7 @@
 // 버전 번호를 넣어서 나중 버전에서도 예전 세이브를 읽을 수 있게 한다.
 import { Rng } from '../core/rng';
 import { dateText, SAVE_VERSION, type Career } from './career';
+import { dunkList } from '../data/dunks';
 import { emptyStats, startAbilities } from './abilities';
 import { coachName, createMentor, createRival } from './people';
 import { schoolById } from './schools';
@@ -116,6 +117,7 @@ export function migrate(raw: unknown): Career {
     c.seenEvents ??= {};
     c.pendingEvent ??= null;
     c.stats ??= emptyStats();
+    c.dunks ??= dunkList(c.me);
     c.me.abilities ??= startAbilities(c.background);
   }
   c.v = SAVE_VERSION;

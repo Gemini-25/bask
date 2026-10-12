@@ -66,6 +66,8 @@ export interface GameEvent {
   made?: boolean;
   scheme?: DefScheme;
   switched?: boolean;
+  /** 덩크 종류 */
+  dunk?: DunkStyle;
   quarter: number;
   clock: number;
   score: [number, number];
@@ -91,7 +93,24 @@ export const ACT = {
   FT: 14,
   POST: 15,
   HANG: 16,
+  STEAL: 17,
+  BOXOUT: 18,
+  FALL: 19,
+  HIGHFIVE: 20,
+  DEJECT: 21,
+  INJURED: 22,
+  DUNK2: 23,
+  TOMAHAWK: 24,
+  REVERSE: 25,
+  WINDMILL: 26,
+  D360: 27,
+  BOUNCE: 28,
+  LOB: 29,
 } as const;
+
+export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360';
+export const DUNK_LABEL: Record<DunkStyle, string> = { one: '원핸드 덩크', two: '투핸드 덩크', tomahawk: '토마호크 덩크', reverse: '리버스 덩크', windmill: '윈드밀 덩크', d360: '360 덩크' };
+export const DUNK_ACT: Record<DunkStyle, number> = { one: ACT.DUNK, two: ACT.DUNK2, tomahawk: ACT.TOMAHAWK, reverse: ACT.REVERSE, windmill: ACT.WINDMILL, d360: ACT.D360 };
 
 export const FLAG_STUN = 1;
 export const FLAG_SHOOT = 2;

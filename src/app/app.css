@@ -1250,3 +1250,47 @@ td.hrt {
   margin: 0;
   font-size: 12px;
 }
+
+/* 덩크 레퍼토리 */
+.dks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.dk {
+  background: var(--panel2);
+  padding: 6px 8px;
+  display: grid;
+  gap: 2px;
+  opacity: 0.6;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.dk.have {
+  opacity: 1;
+  box-shadow: 0 0 0 1px #6b4a1a;
+}
+.dk.have b {
+  color: var(--led);
+}
+.dk small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hright {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.snd {
+  display: flex;
+  gap: 4px;
+}
+.snd button {
+  padding: 2px 8px;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.snd button.on {
+  opacity: 1;
+}

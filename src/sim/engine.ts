@@ -8,6 +8,7 @@
 import { clamp, dist, lerp, segDist, sigmoid } from '../core/math';
 import { Rng } from '../core/rng';
 import { FX, lv } from '../data/abilities';
+import { DUNKS, dunkUnlocked } from '../data/dunks';
 import { overall, POS_GROUP, type Player } from '../data/player';
 import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
@@ -26,6 +27,9 @@ import {
   type Lineup,
   type Side,
   type TurnoverKind,
+  DUNK_ACT,
+  DUNK_LABEL,
+  type DunkStyle,
 } from './types';
 
 export const DT = 0.1;
@@ -115,6 +119,7 @@ type Phase =
       fast: boolean;
       fouler: number;
       alley: boolean;
+      dunk?: DunkStyle;
     }
   | {
       k: 'pass';
@@ -130,6 +135,7 @@ type Phase =
       oob: boolean;
       inbound: boolean;
       lob: boolean;
+      bounce?: boolean;
     }
   | { k: 'reb'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; z0: number; peak: number; shotTeam: Side; ft: boolean; jumped?: boolean }
   | { k: 'loose'; t: number; vx: number; vy: number; shotTeam: Side }
@@ -148,6 +154,7 @@ type Phase =
       tech: boolean;
     }
   | { k: 'break'; t: number; dur: number; sx: number; sy: number }
+  | { k: 'outro'; t: number; winner: Side }
   | { k: 'end' };
 
 type Play =
@@ -242,6 +249,8 @@ const MINUTES_PLAN = [32, 30, 30, 30, 30, 22, 17, 12, 8, 4, 2, 2];
 
 class GameSim {
   private rng: Rng;
+  /** 화면 연출용 난수 (경기 결과에 쓰는 rng와 따로라서 연출을 바꿔도 결과는 그대로) */
+  private fxr: Rng;
   private teams: [Team, Team];
   private players: Player[];
   private teamOf: Side[];
@@ -340,6 +349,7 @@ class GameSim {
     opts: SimOptions,
   ) {
     this.rng = new Rng(seed);
+    this.fxr = new Rng(seed ^ 0x5eed5);
     this.teams = [a, b];
     this.qLen = (opts.quarterMinutes ?? 10) * 60;
     this.otLen = (opts.overtimeMinutes ?? 5) * 60;
@@ -584,6 +594,11 @@ class GameSim {
       }
       return ACT.HOLD;
     }
+    // 슛이 날아가는 동안 골밑 수비는 박스아웃
+    if (ph.k === 'shot' && p.team !== this.off) {
+      const H = this.hoop(this.off);
+      if (dist(p.x, p.y, H.x, H.y) < 5 && this.P.some((o) => o.team === this.off && dist(o.x, o.y, p.x, p.y) < 1.6)) return ACT.BOXOUT;
+    }
     if (ph.k === 'live' || ph.k === 'pass') {
       const play = this.play;
       if (play?.k === 'pnr' && play.scr === p.i && (play.stage === 'set' || play.stage === 'use')) return ACT.SCREEN;
@@ -657,6 +672,9 @@ class GameSim {
       case 'break':
         if (t - ph.t >= ph.dur) this.startQuarter();
         break;
+      case 'outro':
+        if (t - ph.t >= 4) this.ph = { k: 'end' };
+        break;
       case 'end':
         break;
     }
@@ -671,7 +689,7 @@ class GameSim {
 
   private updateClocks() {
     const k = this.ph.k;
-    const stopped = k === 'dead' || k === 'break' || k === 'end' || k === 'timeout' || k === 'ft';
+    const stopped = k === 'dead' || k === 'break' || k === 'end' || k === 'timeout' || k === 'ft' || k === 'outro';
     if (this.clockRunning && !stopped) {
       this.clock -= DT;
       this.elapsed += DT;
@@ -758,8 +776,11 @@ class GameSim {
     const qName = q <= 4 ? `${q}쿼터` : `연장 ${q - 4}차`;
     this.emit({ type: 'quarterEnd', team: 0, player: -1, other: -1, pts: 0, text: `${qName} 종료 ${this.score[0]} : ${this.score[1]}` });
     if (q >= 4 && this.score[0] !== this.score[1]) {
-      this.emit({ type: 'gameEnd', team: this.score[0] > this.score[1] ? 0 : 1, player: -1, other: -1, pts: 0, text: '경기 종료' });
-      this.ph = { k: 'end' };
+      const winner: Side = this.score[0] > this.score[1] ? 0 : 1;
+      this.emit({ type: 'gameEnd', team: winner, player: -1, other: -1, pts: 0, text: '경기 종료' });
+      // 끝나고 4초: 이긴 팀은 모여서 환호, 진 팀은 고개를 숙인다
+      this.ph = { k: 'outro', t: this.t, winner };
+      for (const p of this.P) this.poseFx(p, p.team === winner ? ACT.CELEBRATE : ACT.DEJECT, 5);
       return;
     }
     this.quarter++;
@@ -953,6 +974,8 @@ class GameSim {
     if (kind === 'shotClock' || kind === 'eightSec') text = `${this.teamName(team)} ${TOV_TEXT[kind]}`;
     if (stealer >= 0) text = `${this.name(stealer)} 스틸! (${text})`;
     this.emit({ type: 'turnover', team, player, other: stealer, pts: 0, tov: kind, text });
+    if (player >= 0 && kind !== 'shotClock' && kind !== 'eightSec') this.poseFx(this.P[player], ACT.DEJECT, 0.6);
+    if (stealer >= 0) this.poseFx(this.P[stealer], ACT.STEAL, 0.45);
     if (stealer >= 0) {
       const s = this.P[stealer];
       this.ball.holder = s.i;
@@ -1855,6 +1878,7 @@ class GameSim {
       const speed = Math.hypot(d.vx, d.vy);
       if (speed < 1.5 && this.rng.chance(0.09 * (0.6 + d.pl.r.iq / 100))) {
         this.fga[h.pid]--;
+        this.poseFx(d, ACT.FALL, 1.1);
         this.callFoul(h.i, d.i, 'charge');
         return;
       }
@@ -1898,8 +1922,15 @@ class GameSim {
     }
     const made = this.rng.chance(p);
     if (DEBUG.shot) DEBUG.shot(si.kind, c, p, made, this.shotClock);
+    let dunk: DunkStyle | undefined;
+    if (si.kind === 'dunk') {
+      dunk = this.pickDunk(h, c, fast || ph.alley);
+      // 점프 중 동작을 덩크 종류에 맞춘다
+      h.fx = DUNK_ACT[dunk];
+    }
     this.ph = {
       k: 'shot',
+      dunk,
       shooter: h.i,
       t: this.t,
       dur: 0.55 + si.dist * 0.07,
@@ -1916,10 +1947,17 @@ class GameSim {
     };
   }
 
+  /** 덩크 종류: 노마크·속공일수록 화려하게 (열린 것 중에서) */
+  private pickDunk(h: SP, contest: number, open: boolean): DunkStyle {
+    const list = DUNKS.filter((d) => dunkUnlocked(h.pl, d));
+    const w = list.map((d) => (contest > 0.35 && d.flash > 1 ? 0.05 : open ? d.flash ** 2 : d.flash));
+    return list[this.fxr.weighted(w)].id;
+  }
+
   private shotArrive(ph: Extract<Phase, { k: 'shot' }>) {
     const h = this.P[ph.shooter];
     const si = ph.info;
-    const label = SHOT_LABEL[si.kind];
+    const label = ph.dunk && ph.dunk !== 'one' ? DUNK_LABEL[ph.dunk] : SHOT_LABEL[si.kind];
     const fouled = ph.fouler >= 0;
     this.streak[h.pid] = ph.made ? this.streak[h.pid] + 1 : 0;
     if (ph.made) {
@@ -1930,6 +1968,10 @@ class GameSim {
       if (ph.alley) this.cnt.alleyOops++;
       if (si.kind === 'dunk') this.jumpFx(h, 0.8, 0.45, ACT.HANG);
       else this.poseFx(h, ACT.CELEBRATE, si.pts === 3 ? 1.4 : 0.8);
+      // 가까운 팀원과 하이파이브
+      const mate = this.mates(h.team).filter((m) => m !== h && dist(m.x, m.y, h.x, h.y) < 4.5).sort((a, b) => dist(a.x, a.y, h.x, h.y) - dist(b.x, b.y, h.x, h.y))[0];
+      if (mate && this.fxr.chance(0.6)) this.poseFx(mate, ACT.HIGHFIVE, 0.7);
+      if (fouled && (si.kind === 'layup' || si.kind === 'dunk') && this.fxr.chance(0.3)) this.poseFx(this.P[ph.fouler], ACT.FALL, 0.9);
       this.emit({
         type: 'made',
         team: h.team,
@@ -1943,6 +1985,7 @@ class GameSim {
         fastBreak: ph.fast,
         andOne: fouled,
         alleyOop: ph.alley,
+        dunk: ph.dunk,
         text: `${h.pl.name} ${fb}${ao}${label} 성공${ast}${fouled ? ' + 앤드원!' : ''}`,
       });
       const H = this.hoop(h.team);
@@ -1965,6 +2008,7 @@ class GameSim {
     }
     if (fouled) {
       // 슛 실패 + 파울: 야투 시도로 안 치고 자유투 2개(3점이면 3개). 시간이 다 됐어도 자유투는 쏜다.
+      if ((si.kind === 'layup' || si.kind === 'dunk') && this.fxr.chance(0.4)) this.poseFx(h, ACT.FALL, 1.0);
       this.fga[h.pid]--;
       this.buzzer = false;
       this.callFoul(ph.fouler, h.i, 'shooting', si.pts);
@@ -1984,6 +2028,7 @@ class GameSim {
       text: `${h.pl.name} ${label} 실패`,
     });
     if (this.buzzer) {
+      this.poseFx(h, ACT.DEJECT, 1.6);
       this.endQuarter();
       return;
     }
@@ -2141,10 +2186,12 @@ class GameSim {
     }
     if (!inbound) this.cnt.passes++;
     if (intercept >= 0) this.cnt.intercepts++;
-    if (!from) this.poseFx(h, ACT.PASS, 0.3);
+    // 짧은 패스는 가끔 바운드로, 롭은 머리 위로
+    const bounce = !lob && !inbound && !handoff && dist(sx, sy, ex, ey) < 6.5 && this.fxr.chance(0.3);
+    if (!from) this.poseFx(h, lob ? ACT.LOB : bounce ? ACT.BOUNCE : ACT.PASS, 0.3);
     this.ball.holder = -1;
     this.act = { k: 'hold', u: 0, v: 0, t: this.t };
-    this.ph = { k: 'pass', from: h.i, to: m.i, t: this.t, dur, sx, sy, ex, ey, intercept, oob, inbound, lob };
+    this.ph = { k: 'pass', from: h.i, to: m.i, t: this.t, dur, sx, sy, ex, ey, intercept, oob, inbound, lob, bounce };
   }
 
   private passArrive(ph: Extract<Phase, { k: 'pass' }>) {
@@ -2455,6 +2502,15 @@ class GameSim {
     const ph = this.ph;
     if (ph.k === 'tip' || ph.k === 'end') {
       for (const p of this.P) this.setGoal(p, p.x, p.y, 0.3);
+      return;
+    }
+    if (ph.k === 'outro') {
+      for (const p of this.P) {
+        if (p.team === ph.winner) {
+          const a = (p.i % 5) * ((Math.PI * 2) / 5);
+          this.setGoal(p, 14 + Math.cos(a) * 1.1, MID_Y + Math.sin(a) * 0.9, 0.5);
+        } else this.setGoal(p, p.x + (p.team === 0 ? -0.8 : 0.8), p.y - 1.2, 0.25);
+      }
       return;
     }
     if (ph.k === 'break' || ph.k === 'timeout') {
@@ -3000,7 +3056,8 @@ class GameSim {
         const s = clamp((t - ph.t) / ph.dur, 0, 1);
         b.x = lerp(ph.sx, ph.ex, s);
         b.y = lerp(ph.sy, ph.ey, s);
-        b.z = (ph.lob ? 1.8 : 1.2) + Math.sin(Math.PI * s) * (ph.lob ? 1.6 : ph.inbound ? 0.7 : 0.35);
+        if (ph.bounce) b.z = s < 0.55 ? lerp(1.0, 0.05, s / 0.55) : lerp(0.05, 1.0, (s - 0.55) / 0.45);
+        else b.z = (ph.lob ? 1.8 : 1.2) + Math.sin(Math.PI * s) * (ph.lob ? 1.6 : ph.inbound ? 0.7 : 0.35);
         break;
       }
       case 'shot': {

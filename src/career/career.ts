@@ -8,6 +8,8 @@ import { ACT } from '../sim/types';
 import { backgroundById, GROWTH_TYPES, type BackgroundId, type GrowthType } from './backgrounds';
 import { generateSchoolRoster, hsHeightAdj, schoolById, type RosterEntry } from './schools';
 import { coachName, createMentor, createRival, type Mentor, type Rival } from './people';
+import { dunkList } from '../data/dunks';
+import type { DunkStyle } from '../sim/types';
 import { emptyStats, startAbilities, type CareerStats } from './abilities';
 import type { PendingEvent } from './events';
 import type { Season } from './season';
@@ -144,6 +146,8 @@ export interface Career {
   pendingEvent: PendingEvent | null;
   /** 커리어 통산 기록 (특수능력 조건) */
   stats: CareerStats;
+  /** 열린 덩크 (AN2) */
+  dunks: DunkStyle[];
   counts: Partial<Record<ActionId, number>>;
 }
 
@@ -274,9 +278,11 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     seenEvents: {},
     pendingEvent: null,
     stats: emptyStats(),
+    dunks: [],
     counts: {},
   };
   c.rival = createRival(c, rng.fork(11));
+  c.dunks = dunkList(me);
   c.rng = rng.state;
   return c;
 }

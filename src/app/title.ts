@@ -1,10 +1,9 @@
 // 타이틀: 저장 슬롯 3개 (K5), 세이브 파일 불러오기, 프로 경기 관람 데모
 import { Rng } from '../core/rng';
 import { generatePlayer } from '../data/player';
-import { ACT } from '../sim/types';
 import { slotInfo, SLOTS } from '../career/save';
 import { $, esc } from './dom';
-import { trainingCanvas } from './figure';
+import { trainingScene } from './scenes';
 
 export interface TitleActions {
   continueSlot(slot: number): void;
@@ -68,5 +67,5 @@ export function renderTitle(act: TitleActions) {
   };
   const pl = generatePlayer(new Rng(23), 'SG', 10, 23);
   pl.look = { skin: 1, hair: 3, hairColor: 0, shoe: 2, headband: true, sleeve: false };
-  trainingCanvas($('titleCanvas') as HTMLCanvasElement, pl, { jersey: '#ffb545', trim: '#1d1406' }, ACT.SHOOT, '');
+  trainingScene($('titleCanvas') as HTMLCanvasElement, { scene: 'title', pl, kit: { jersey: '#ffb545', trim: '#1d1406' } });
 }

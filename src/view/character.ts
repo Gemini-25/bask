@@ -50,7 +50,7 @@ interface Pose {
   crouch: number;
   lean: number;
   bob: number;
-  eyes: 'open' | 'dizzy' | 'happy' | 'focus';
+  eyes: 'open' | 'dizzy' | 'happy' | 'focus' | 'sad' | 'angry';
   /** 정면/뒷모습에서 팔을 몸 앞에 모은다 (스크린) */
   crossed?: boolean;
 }
@@ -68,11 +68,13 @@ function poseFor(f: Figure, leg: number): Pose {
   const run = f.speed > 0.5;
   const cyc = t * (5 + f.speed * 1.4);
   const sw = run ? Math.sin(cyc) * Math.min(0.8, 0.25 + f.speed * 0.1) : 0;
+  // 뒤로 차는 다리는 무릎이 굽어서 짧아 보인다
+  const knee = (a: number) => (run && a < -0.2 ? leg - 1 : leg);
   const base: Pose = {
     armF: { a: 0.15 - sw * 0.8, len: 5 },
     armB: { a: 0.1 + sw * 0.8, len: 5 },
-    legF: { a: sw, len: leg },
-    legB: { a: -sw, len: leg },
+    legF: { a: sw, len: knee(sw) },
+    legB: { a: -sw, len: knee(-sw) },
     crouch: 0,
     lean: run && f.speed > 3 ? 1 : 0,
     bob: run ? (Math.abs(Math.sin(cyc)) > 0.7 ? 1 : 0) : Math.sin(t * 2.2) > 0.6 ? 1 : 0,
@@ -151,12 +153,119 @@ function poseFor(f: Figure, leg: number): Pose {
       base.armF = { a: 2.85, len: 6 };
       base.armB = { a: 1.3, len: 4 };
       break;
-    case ACT.STANCE:
+    case ACT.STANCE: {
       base.armF = { a: 1.15, len: 5 };
       base.armB = { a: 0.95, len: 5 };
-      base.legF = { a: 0.45 + sw * 0.3, len: leg };
-      base.legB = { a: -0.45 - sw * 0.3, len: leg };
+      // 움직이면 옆걸음 (다리를 벌렸다 모았다)
+      const slide = run ? Math.abs(Math.sin(cyc * 0.8)) * 0.35 : 0;
+      base.legF = { a: 0.3 + slide, len: leg };
+      base.legB = { a: -0.3 - slide, len: leg };
       base.crouch = 2;
+      base.lean = 0;
+      base.bob = 0;
+      base.eyes = 'focus';
+      break;
+    }
+    case ACT.STEAL:
+      base.armF = { a: 1.5, len: 7 };
+      base.armB = { a: 0.6, len: 4 };
+      base.legF = { a: 0.9, len: leg };
+      base.legB = { a: -0.5, len: leg };
+      base.crouch = 2;
+      base.lean = 2;
+      base.eyes = 'focus';
+      break;
+    case ACT.BOXOUT:
+      base.armF = { a: 1.0, len: 5 };
+      base.armB = { a: 1.0, len: 5 };
+      base.legF = { a: 0.5, len: leg };
+      base.legB = { a: -0.5, len: leg };
+      base.crouch = 2;
+      base.lean = -1;
+      base.eyes = 'angry';
+      break;
+    case ACT.FALL:
+      base.armF = { a: 2.2, len: 5 };
+      base.armB = { a: 1.8, len: 5 };
+      base.legF = { a: 1.4, len: leg };
+      base.legB = { a: 1.1, len: leg };
+      base.crouch = Math.max(2, leg - 1);
+      base.lean = -2;
+      base.bob = 0;
+      base.eyes = 'dizzy';
+      break;
+    case ACT.HIGHFIVE:
+      base.armF = { a: 2.9, len: 6 };
+      base.armB = { a: 0.2, len: 5 };
+      base.bob = Math.abs(Math.sin(t * 9)) > 0.6 ? 1 : 0;
+      base.eyes = 'happy';
+      break;
+    case ACT.DEJECT:
+      base.armF = { a: 0.05, len: 5 };
+      base.armB = { a: 0.05, len: 5 };
+      base.lean = 1;
+      base.bob = 0;
+      base.crouch = 0;
+      base.eyes = 'sad';
+      break;
+    case ACT.INJURED:
+      base.armF = { a: 0.9, len: 4 };
+      base.armB = { a: 0.7, len: 4 };
+      base.legF = { a: 1.3, len: leg - 1 };
+      base.legB = { a: 0.1, len: leg };
+      base.crouch = 2;
+      base.lean = 1;
+      base.bob = 0;
+      base.eyes = 'sad';
+      break;
+    case ACT.BOUNCE:
+      base.armF = { a: 0.9, len: 6 };
+      base.armB = { a: 0.8, len: 5 };
+      base.lean = 1;
+      base.crouch = 1;
+      break;
+    case ACT.LOB:
+      base.armF = { a: 2.4, len: 6 };
+      base.armB = { a: 2.2, len: 5 };
+      break;
+    case ACT.DUNK2:
+      base.armF = { a: 3.05, len: 6 };
+      base.armB = { a: 3.0, len: 6 };
+      base.legF = { a: 0.8, len: leg - 1 };
+      base.legB = { a: 0.3, len: leg - 1 };
+      base.eyes = 'angry';
+      break;
+    case ACT.TOMAHAWK:
+      // 공을 머리 뒤로 젖혔다가 내리꽂는다
+      base.armF = { a: air && f.lift > 6 ? 3.6 : 2.9, len: 6 };
+      base.armB = { a: 1.2, len: 4 };
+      base.legF = { a: 1.0, len: leg - 1 };
+      base.legB = { a: 0.2, len: leg - 1 };
+      base.lean = -1;
+      base.eyes = 'angry';
+      break;
+    case ACT.REVERSE:
+      base.armF = { a: 3.1, len: 6 };
+      base.armB = { a: 3.0, len: 6 };
+      base.legF = { a: 0.6, len: leg - 1 };
+      base.legB = { a: -0.2, len: leg };
+      base.eyes = 'focus';
+      break;
+    case ACT.WINDMILL: {
+      // 팔을 크게 한 바퀴
+      const a = (t * 9) % (Math.PI * 2);
+      base.armF = { a: 0.2 + Math.abs(Math.sin(a / 2)) * 2.9, len: 6 };
+      base.armB = { a: 1.1, len: 4 };
+      base.legF = { a: 0.9, len: leg - 1 };
+      base.legB = { a: 0.4, len: leg - 1 };
+      base.eyes = 'focus';
+      break;
+    }
+    case ACT.D360:
+      base.armF = { a: 2.8, len: 6 };
+      base.armB = { a: 2.6, len: 5 };
+      base.legF = { a: 0.7, len: leg - 1 };
+      base.legB = { a: 0.5, len: leg - 1 };
       base.eyes = 'focus';
       break;
     case ACT.SCREEN:
@@ -208,7 +317,13 @@ function end(x: number, y: number, l: Limb, dir: number, facing: Facing, side: n
  * (x, y)는 발이 땅에 닿는 화면 좌표. 점프 높이는 f.lift.
  * 반환값: 머리 꼭대기 y (말풍선, 화살표 위치용)
  */
-export function drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, f: Figure): number {
+export function drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, f0: Figure): number {
+  let f = f0;
+  // 360 덩크는 공중에서 한 바퀴, 리버스 덩크는 등지고 넣는다
+  if (f.act === ACT.D360) {
+    const k = Math.floor(f.time * 10) % 4;
+    f = { ...f, facing: (['side', 'front', 'side', 'back'] as Facing[])[k], flip: k === 2 ? !f.flip : f.flip };
+  } else if (f.act === ACT.REVERSE) f = { ...f, facing: 'back' };
   const pl = f.pl;
   const { leg, torso, w } = sizes(pl);
   const pose = poseFor(f, leg);
@@ -314,6 +429,14 @@ export function drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, 
         ctx.fillRect(ex - 1, ey + 1, 1, 1);
         ctx.fillRect(ex, ey, 1, 1);
         ctx.fillRect(ex + 1, ey + 1, 1, 1);
+      } else if (pose.eyes === 'sad') {
+        // 처진 눈
+        ctx.fillRect(ex, ey + 1, 1, 1);
+        ctx.fillRect(ex + (ex < hx ? -1 : 1), ey, 1, 1);
+      } else if (pose.eyes === 'angry') {
+        // 치켜 올라간 눈썹
+        ctx.fillRect(ex, ey, 1, 2);
+        ctx.fillRect(ex + (ex < hx ? -1 : 1), ey - 1, 1, 1);
       } else ctx.fillRect(ex, ey, 1, pose.eyes === 'focus' ? 1 : 2);
     }
     // 볼터치
