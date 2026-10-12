@@ -188,6 +188,11 @@ export function migrate(raw: unknown): Career {
     st.euros ??= 0;
     st.andOnes ??= 0;
   }
+  if (c.v < 8) {
+    // v7 → v8: 자신감, 별명 (M19)
+    c.confidence ??= 50;
+    c.nickname ??= null;
+  }
   c.v = SAVE_VERSION;
   return c;
 }

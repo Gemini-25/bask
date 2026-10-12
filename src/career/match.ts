@@ -14,6 +14,7 @@ import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
 import { traitGameBoost, traitInjury, traitSocial, traitStyle, traitUsage } from './personality';
 import { comboOpts } from './combos';
+import { confidenceAfterGame, confidenceBoost } from './spirit';
 import { shotMove } from '../data/moves';
 import { afterGameFans, gainPopularity, interviewFor, type SnsPost } from './fans';
 import { leagueTeam } from './league';
@@ -138,7 +139,8 @@ export function gameMe(c: Career, official = c.pendingGame?.kind === 'official')
   const d = CONDITION_GAME[c.condition];
   const gear = gearBoost(c);
   const trait = traitGameBoost(c, official);
-  for (const k of RATING_KEYS) me.r[k] = Math.max(1, Math.min(MAX_RATING, me.r[k] + d + (gear[k] ?? 0) + (trait[k] ?? 0)));
+  const conf = confidenceBoost(c);
+  for (const k of RATING_KEYS) me.r[k] = Math.max(1, Math.min(MAX_RATING, me.r[k] + d + (gear[k] ?? 0) + (trait[k] ?? 0) + (conf[k] ?? 0)));
   return me;
 }
 
@@ -382,6 +384,8 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
   // 감독 신뢰도: 잘하면 오르고, 공식전일수록 크게 움직인다
   const trustBefore = c.trust;
   const dt = ({ S: 4, A: 3, B: 1.5, C: 0.5, D: -1, '-': 0 }[grade] ?? 0) + (won ? 0.5 : 0);
+  // 자신감 (M19): 올스타전은 빼고
+  if (m.special !== 'allstar') confidenceAfterGame(c, grade, won, m.myPid >= 0);
   const tMul = dt > 0 ? traitSocial(c).trust : 1;
   if (!m.special) c.trust = Math.max(0, Math.min(100, c.trust + trustStep(c.trust, dt * tMul * (m.kind === 'official' ? 0.8 : 0.5))));
 

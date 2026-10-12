@@ -1,5 +1,6 @@
 // 프로 시즌 진행: 한 주의 경기, 플레이오프, 시즌 끝, 재계약
 import { Rng } from '../core/rng';
+import { addConfidence } from './spirit';
 import { overall } from '../data/player';
 import { dateOf, WEEKS_PER_YEAR, type Career, type PendingGame } from './career';
 import { agePlayer, draftClass, finishOf, leagueTeam, offseason, PRO_WEEKS, quickPro, scheduleSeason, standings, startPlayoffs, updateSeries, type League, type ProGame } from './league';
@@ -131,7 +132,10 @@ export function proNewYear(c: Career): string[] {
   const mine = grantTrophies(c, aw, prefix);
   if (L.champion === c.pro!.team) c.trophies.push(`${prefix} 우승`);
   c.ceremony = aw;
-  if (mine.length) notes.push(`수상: ${mine.join(', ')}`);
+  if (mine.length) {
+    notes.push(`수상: ${mine.join(', ')}`);
+    addConfidence(c, 6 + mine.length * 2);
+  }
   L.stats = {};
   L.lastOrder = standings(L)
     .map((r) => r.id)

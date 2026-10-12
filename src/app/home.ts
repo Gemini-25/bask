@@ -43,6 +43,7 @@ import { yearLabel } from '../career/college';
 import { traitDef } from '../career/personality';
 import { COMBO_LABEL } from '../sim/engine';
 import { ROMANCE_LABEL, romanceOn } from '../career/romance';
+import { CONFIDENCE_LABEL, confidenceOf } from '../career/spirit';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, toast } from './dom';
@@ -56,6 +57,8 @@ export interface HomeActions {
   toTitle(): void;
   /** 은퇴 선언 */
   retire(): void;
+  /** 다른 팀 경기 보기 (M19, 기록에는 안 남는다) */
+  watchLeague(a: string, b: string): void;
 }
 
 type Tab = 'week' | 'stats' | 'team' | 'schedule' | 'abilities' | 'life' | 'records';
@@ -158,12 +161,14 @@ export class Home {
     $('pcard').innerHTML = `
       <div class="pfig"><canvas class="px" id="homeFig"></canvas></div>
       <div class="pname"><span class="no">${c.me.number}</span>${esc(c.me.name)}</div>
+      ${c.nickname ? `<div class="pnick">'${esc(c.nickname)}'</div>` : ''}
       <div class="psub">${c.pro ? `${c.me.age ?? ''}살 · ${c.pro.pickNo}순위 출신` : dateText(c.week).split(' ')[0]} · ${POSITION_LABEL[c.prefPos]} · ${esc(backgroundById(c.background).label)}</div>
       <div class="povr"><span>종합</span><b>${myOverall(c).toFixed(0)}</b><small>감독 평가: ${role}</small></div>
       ${inj}
       <div class="meter"><span>컨디션</span><b style="color:${COND_COLOR[c.condition]}">${CONDITION_LABEL[c.condition]}</b><span class="dots">${[0, 1, 2, 3, 4].map((i) => `<i class="${i <= c.condition ? 'on' : ''}" style="${i <= c.condition ? `background:${COND_COLOR[c.condition]}` : ''}"></i>`).join('')}</span></div>
       <div class="meter"><span>피로</span><b>${Math.round(c.fatigue)}</b><span class="bar"><i style="width:${c.fatigue}%;background:${fatigueColor(c.fatigue)}"></i></span></div>
       <div class="meter"><span>감독 신뢰</span><b>${Math.round(c.trust)}</b><span class="bar"><i style="width:${c.trust}%;background:#5fb4ff"></i></span></div>
+      <div class="meter" title="${CONFIDENCE_LABEL(confidenceOf(c))} · 경기 중 침착성·일관성·집중력·승부욕 ${Math.round((confidenceOf(c) - 50) / 10) >= 0 ? '+' : ''}${Math.round((confidenceOf(c) - 50) / 10)}"><span>자신감</span><b>${Math.round(confidenceOf(c))}</b><span class="bar"><i style="width:${confidenceOf(c)}%;background:#ffd23f"></i></span></div>
       <div class="meter"><span>팀 친밀도</span><b>${Math.round(avgFriendship(c))}</b><span class="bar"><i style="width:${avgFriendship(c)}%;background:#ff8ac0"></i></span></div>
       ${this.abilityChips()}
       <div class="kvs">
@@ -221,6 +226,12 @@ export class Home {
       .slice(0, 6)
       .map((g) => `<li><span>${dateText(g.week)}</span>${g.a === me ? 'vs' : '@'} ${esc(teamName(L, g.a === me ? g.b : g.a))}${g.series !== undefined ? ' <b class="fin">PO</b>' : ''}</li>`)
       .join('');
+    // 다른 팀 경기 (M19): 이번 주와 다음 주, 내 팀 경기는 빼고
+    const others = L.games
+      .filter((g) => !g.score && g.week >= c.week - 1 && g.week <= c.week + 1 && g.a !== me && g.b !== me)
+      .slice(0, 6)
+      .map((g) => `<li><span>${dateText(g.week)}</span>${esc(teamName(L, g.a))} vs ${esc(teamName(L, g.b))} <button type="button" class="mini" data-watchg="${g.a}|${g.b}">보기</button></li>`)
+      .join('');
     const series = L.series.length
       ? `<div class="rnds">${[0, 1, 2]
           .map((r) => {
@@ -240,7 +251,7 @@ export class Home {
     const as = c.allStar;
     const star = as ? `<h4 class="sub">올스타 위크엔드</h4><ul class="plist one"><li>${as.mySide >= 0 ? '<b class="fin">올스타 선정</b>' : '<span class="muted">선정 안 됨</span>'}${as.game ? ` · 올스타전 ${as.game.score[0]}:${as.game.score[1]} · MVP ${esc(as.game.mvp)}` : ''}</li><li>3점 콘테스트 우승 ${esc(as.threeWinner)}</li><li>덩크 콘테스트 우승 ${esc(as.dunkWinner)}</li></ul>` : '';
     return `<div class="grps"><div><h4 class="sub">정규시즌 순위</h4><table class="ttable"><tr><th></th><th class="nm">팀</th><th>승</th><th>패</th><th>득실</th></tr>${rows}</table></div>
-      <div><h4 class="sub">다음 경기</h4><ul class="plist one">${upcoming || '<li class="muted">남은 경기 없음</li>'}</ul><h4 class="sub">플레이오프</h4>${series}${nat}${star}${hist ? `<h4 class="sub">역대 시즌</h4><ul class="plist one">${hist}</ul>` : ''}</div></div>
+      <div><h4 class="sub">다음 경기</h4><ul class="plist one">${upcoming || '<li class="muted">남은 경기 없음</li>'}</ul>${others ? `<h4 class="sub">다른 팀 경기 <small class="muted">지금 선수단으로 미리 본다 (기록에는 안 남는다)</small></h4><ul class="plist one">${others}</ul>` : ''}<h4 class="sub">플레이오프</h4>${series}${nat}${star}${hist ? `<h4 class="sub">역대 시즌</h4><ul class="plist one">${hist}</ul>` : ''}</div></div>
       <p class="hint">정규시즌 27경기 (9팀과 3번씩, 중간에 올스타 주간) → 6강 (3전 2선승) → 4강 (5전 3선승) → 챔피언 결정전 (7전 4선승). 플레이오프는 한 주에 경기가 여러 번.${c.overseas ? ' 해외 리그는 쿼터 12분, 6반칙 퇴장.' : ''} 비시즌 4월엔 국가대표 아시아컵.</p>`;
   }
 
@@ -539,6 +550,11 @@ export class Home {
       if (this.map) this.map.walkTo(placeOf(id).id, go);
       else go();
       return;
+    }
+    const wg = t.closest('[data-watchg]') as HTMLElement | null;
+    if (wg) {
+      const [a, b] = wg.dataset.watchg!.split('|');
+      return this.act.watchLeague(a, b);
     }
     // 에디터 (개발자 패널을 연 동안만 ✏️가 보인다)
     const ed = t.closest('[data-edit]') as HTMLElement | null;

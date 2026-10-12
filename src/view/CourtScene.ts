@@ -129,6 +129,10 @@ export class CourtScene extends Phaser.Scene {
   private slowLabel!: Phaser.GameObjects.Text;
   private modeLabel!: Phaser.GameObjects.Text;
   private emotes = new Map<number, { k: Emote; until: number }>();
+  /** ON FIRE (M19): 연속 득점 수, 불붙은 선수 */
+  private streak = new Map<number, number>();
+  private fireStart: GameEvent | null = null;
+  private onFire = new Set<number>();
   /** 이름표 (이름 모드는 선명하게 보이게 글자 객체로) */
   private nameTags: Phaser.GameObjects.Text[] = [];
   private walkers: Walker[] = [];
@@ -177,6 +181,22 @@ export class CourtScene extends Phaser.Scene {
       .setOrigin(1, 1)
       .setDepth(310);
     this.ui(this.modeLabel);
+  }
+
+  private drawFire(ctx: CanvasRenderingContext2D, x: number, foot: number, top: number) {
+    const cols = ['#ff4b1f', '#ff8a1f', '#ffd23f'];
+    for (let k = 0; k < 7; k++) {
+      const ph = this.clock * 9 + k * 1.7;
+      const dx = Math.round(Math.sin(ph) * 4 + (k - 3) * 1.4);
+      const rise = (ph * 1.3) % 7;
+      ctx.fillStyle = cols[k % 3];
+      ctx.fillRect(x + dx, Math.round(top + 2 - rise), 1, Math.max(1, 3 - Math.floor(rise / 3)));
+    }
+    for (let k = 0; k < 4; k++) {
+      const ph = this.clock * 11 + k * 2.1;
+      ctx.fillStyle = cols[(k + 1) % 3];
+      ctx.fillRect(x - 4 + k * 3, foot - 1 - Math.round(Math.abs(Math.sin(ph)) * 2), 1, 2);
+    }
   }
 
   /** 등번호 이름표: 팀 색 바탕에 도트 숫자 */
@@ -230,6 +250,8 @@ export class CourtScene extends Phaser.Scene {
     this.jumboUntil = 0;
     this.nextChant = 0;
     this.emotes.clear();
+    this.streak.clear();
+    this.onFire.clear();
     this.walkers = [];
     this.prevLineup = null;
     this.confetti = [];
@@ -406,6 +428,8 @@ export class CourtScene extends Phaser.Scene {
               ctx.fillRect(px + Math.round(Math.cos(a) * 5), top - 2 + Math.round(Math.sin(a) * 2), 1, 1);
             }
           }
+          // ON FIRE: 머리 위와 발밑에 불꽃이 일렁인다
+          if (this.onFire.has(pid)) this.drawFire(ctx, px, py, top);
           const em = this.emotes.get(pid);
           const emoting = !!em && this.clock < em.until;
           if (emoting) drawEmote(ctx, px, top - 3, em!.k, this.clock);
@@ -683,6 +707,16 @@ export class CourtScene extends Phaser.Scene {
 
   private popEvent(e: GameEvent, speed: number) {
     const pb = this.host.pb!;
+    // ON FIRE (M19): 3번 연속 넣으면 불이 붙고, 놓치면 꺼진다
+    if ((e.type === 'made' || e.type === 'miss') && e.player >= 0) {
+      const n = e.type === 'made' ? (this.streak.get(e.player) ?? 0) + 1 : 0;
+      this.streak.set(e.player, n);
+      if (n === 0) this.onFire.delete(e.player);
+      else if (n >= 3 && !this.onFire.has(e.player)) {
+        this.onFire.add(e.player);
+        this.fireStart = e;
+      }
+    }
     const looks = this.host.looks;
     const teams = pb.game.teams;
     /** 선수 머리 위 위치 (벤치에 있으면 코트 가운데) */
@@ -713,6 +747,11 @@ export class CourtScene extends Phaser.Scene {
         if (loud) sound.play(e.shot === 'dunk' ? 'dunk' : 'swish');
         if (loud && big && calm) sound.play('cheer');
         this.popText(p.x, p.y, label, col, big);
+        if (this.fireStart === e) {
+          this.fireStart = null;
+          this.popText(p.x, p.y - 16, 'ON FIRE!', '#ff8a1f', true);
+          if (loud) sound.play('cheer');
+        }
         const side = this.hoopSide(e.team, e.quarter);
         this.swish[side] = 0.5;
         this.cheer(e.team as 0 | 1, big ? 1 : 0.6);

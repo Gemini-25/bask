@@ -2,11 +2,12 @@ import Phaser from 'phaser';
 import galmuri11 from 'galmuri/dist/Galmuri11.woff2?url';
 import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
-import { $, closeModal, download, modal, modalOpen, onScreen, pickFile, screen, show, toast, type ScreenId } from './app/dom';
+import { $, closeModal, download, esc, modal, modalOpen, onScreen, pickFile, screen, show, toast, type ScreenId } from './app/dom';
 import { DevPanel } from './app/dev';
 import { sound } from './view/sound';
 import type { SongId } from './view/music';
 import { campModal, minigameModal, miniFor, positionModal, streetModal } from './app/extras-ui';
+import { helpModal } from './app/help';
 import { allStarModal, awardsModal, contractModal, draftModal, eventModal, pathModal, preGameModal, renderResult, retireModal, retireSummaryModal, seasonCardModal, weekModal } from './app/flow';
 import { checkAchievements, enshrine, hallOfFame, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
 import { teamInfoOf } from './career/match';
@@ -16,6 +17,10 @@ import { renderTitle } from './app/title';
 import { createCareer, dateOf, dateText, myOverall, setCalendar, type Career } from './career/career';
 import { afterGame, ensureSeason, playWeek } from './career/turn';
 import { leagueTeamName } from './career/pro';
+import { leagueTeam } from './career/league';
+import { depthChart } from './career/match';
+import { withRival } from './career/people';
+import { OVERSEAS_RULES } from './career/overseas';
 import { applyMatch, playMatch, type GameReport, type MatchSetup } from './career/match';
 import { deleteSlot, exportCareer, importCareer, loadCareer, saveCareer, slotInfo } from './career/save';
 import { schoolById } from './career/schools';
@@ -128,7 +133,7 @@ function setMode(m: PlayMode) {
   ui.setMode(m, hint);
 }
 
-function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exhibition' | 'career'; focus?: number; banner?: string; done?: () => void; tier?: number; gym?: string; deco?: ArenaDeco }) {
+function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exhibition' | 'career'; focus?: number; banner?: string; done?: () => void; tier?: number; gym?: string; deco?: ArenaDeco; title?: string }) {
   const pb = new Playback(game);
   host.tier = opts.tier ?? 1;
   host.banner = opts.gym;
@@ -157,7 +162,7 @@ function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exh
   $('btnDone').hidden = !career;
   $('careerbar').hidden = !opts.banner;
   $('careerbar').innerHTML = opts.banner ?? '';
-  show('game', career ? (match?.label ?? '연습경기') : '프로 리그 관람 (데모)');
+  show('game', opts.title ?? (career ? (match?.label ?? '연습경기') : '프로 리그 관람 (데모)'));
   phaser?.scale.refresh();
 }
 
@@ -232,6 +237,20 @@ const home = new Home({
   toTitle() {
     if (home.hasPending() && !confirm('확정하지 않은 능력치 투자가 있어. 그냥 나갈까?')) return;
     toTitle();
+  },
+  watchLeague(aId, bId) {
+    const c = career!;
+    const L = c.league;
+    if (!L) return;
+    // 지금 선수단 그대로 (라이벌도), 결과는 리그 기록에 안 남는다
+    const mk = (id: string): Team => {
+      const t = leagueTeam(L, id);
+      return { ...t.info, players: depthChart(withRival(c, id, t.players)).slice(0, 12) };
+    };
+    const a = mk(aId);
+    const b = mk(bId);
+    const game = simulateGame(a, b, randomSeed(), c.overseas ? OVERSEAS_RULES : {});
+    watch(game, teamLooks(a, b), { kind: 'career', banner: `<b>리그 경기 관람</b> · ${esc(a.name)} vs ${esc(b.name)} · 미리 보기라 기록에는 안 남는다`, done: () => toHome(), tier: 1, title: `${a.city} ${a.name} vs ${b.city} ${b.name}` });
   },
 });
 
@@ -571,6 +590,8 @@ async function boot() {
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
 });
+// 도움말 (M19)
+$('btnHelp').onclick = () => helpModal();
 
 // 소리: 버튼 누를 때 짧은 소리, 경기 화면 밖에선 칩튠 음악
 function soundButtons() {

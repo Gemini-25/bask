@@ -6,6 +6,7 @@ import { dateOf, doWeek, WEEKS_PER_YEAR, type ActionId, type Career, type FocusI
 import { hsHeightAdj, schoolById } from './schools';
 import { checkAbilities } from './abilities';
 import { checkCombos } from './combos';
+import { checkNickname, confidenceDrift } from './spirit';
 import { campDue, checkPosition } from './extras';
 import { rollEvent } from './events';
 import { declareDraft } from './college';
@@ -75,6 +76,9 @@ export function playWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): W
   // 능력치가 올라 조건을 채운 특수능력 (친밀도·부상 회복 등)
   r.notes.push(...checkAbilities(c));
   r.notes.push(...checkCombos(c));
+  // 자신감은 50 쪽으로, 별명 (M19)
+  confidenceDrift(c);
+  r.notes.push(...checkNickname(c));
   // 비시즌 전지훈련, 감독의 포지션 전향 제안
   if (campDue(c, w)) c.campPending = true;
   checkPosition(c);

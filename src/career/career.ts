@@ -26,7 +26,7 @@ import { romanceMood } from './romance';
 import type { Combo } from './combos';
 import type { Romance } from './romance';
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const WEEKS_PER_YEAR = 48;
 export const MAX_RATING = 99;
 /** 선수 만들 때 자유 포인트로 올릴 수 있는 최대치 */
@@ -258,6 +258,10 @@ export interface Career {
   streetPending: boolean;
   /** 연애 (R4, M13) */
   romance: Romance | null;
+  /** 자신감 0~100 (M19, S10) */
+  confidence: number;
+  /** 별명 (M19, M7) */
+  nickname: string | null;
   /** 에디터로 고친 상대 학교 선수 (해마다 새로 만들어져서 사본을 둔다, 새해에 지운다) */
   overrides?: Record<string, Player>;
   /** 설정: 연애 이벤트, 훈련 미니게임 (T4) */
@@ -457,6 +461,8 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     streetPending: false,
     romance: null,
     settings: { romance: true, minigame: true },
+    confidence: 50,
+    nickname: null,
     counts: {},
   };
   c.rival = createRival(c, rng.fork(11));

@@ -18,9 +18,11 @@ const GOOD = ['오늘 {me} 미쳤다 ㄷㄷ', '{me} 이 정도면 국대감 아�
 const OK = ['{me} 오늘 무난했음', '{me} 꾸준한 게 제일 무섭다', '{pts}점이면 밥값은 했다', '다음 경기 기대한다 {me}'];
 const BAD = ['{me} 오늘 왜 저럼…', '{me} 슬럼프인가', '자유투 연습 좀 ㅠㅠ', '{me} 힘내라 다음엔 잘하겠지', '감독님 {me} 좀 쉬게 해줘라'];
 const BENCH = ['{me} 언제 뛰냐', '{me} 출전 시간 좀…', '벤치에서 박수 치는 {me} 귀엽다'];
+// 별명이 생기면 (M19)
+const NICK = ["'{nick}' 클래스 ㄷㄷ", "역시 '{nick}' {me}", "'{nick}' 별명 괜히 붙은 게 아니다", "오늘도 '{nick}' 했다"];
 
 function fill(t: string, c: Career, line: GameLine | null, team: string) {
-  return t.replace(/\{me\}/g, c.me.name).replace(/\{pts\}/g, String(line?.pts ?? 0)).replace(/\{team\}/g, team);
+  return t.replace(/\{me\}/g, c.me.name).replace(/\{nick\}/g, c.nickname ?? c.me.name).replace(/\{pts\}/g, String(line?.pts ?? 0)).replace(/\{team\}/g, team);
 }
 
 /** 경기 뒤 인기 변화와 SNS 글 */
@@ -30,7 +32,8 @@ export function afterGameFans(c: Career, grade: string, line: GameLine | null, w
   const raw = (g + (won ? 0.3 : 0) + (big ? 1.5 : 0)) * (c.pro ? 0.6 : 0.4);
   // 응원단이 있는 홈 경기는 더 오른다 (떨어질 땐 그대로)
   const dPop = gainPopularity(c, raw > 0 ? raw * boost : raw);
-  const pool = !line || line.sec < 120 ? BENCH : grade === 'S' || grade === 'A' ? GOOD : grade === 'B' || grade === 'C' ? OK : BAD;
+  const pool0 = !line || line.sec < 120 ? BENCH : grade === 'S' || grade === 'A' ? GOOD : grade === 'B' || grade === 'C' ? OK : BAD;
+  const pool = pool0 === GOOD && c.nickname ? [...GOOD, ...NICK] : pool0;
   const n = 1 + Math.round((c.popularity ?? 0) / 35) + (big ? 1 : 0);
   const posts: SnsPost[] = [];
   for (let i = 0; i < n; i++) {

@@ -2185,3 +2185,37 @@ body.devon .edpick {
   justify-self: start;
   width: auto;
 }
+
+/* M19: 별명 */
+.pnick {
+  color: var(--led);
+  font-size: 12px;
+  margin-top: -2px;
+}
+.plist button.mini {
+  padding: 0 6px;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+/* M19: 도움말 */
+.help h3 {
+  color: var(--led);
+  margin: 12px 0 4px;
+  font-size: 14px;
+}
+.help ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+}
+.help .keys kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  text-align: center;
+  padding: 0 4px;
+  background: var(--panel2);
+  box-shadow: 0 0 0 1px var(--line);
+  margin-right: 2px;
+}
