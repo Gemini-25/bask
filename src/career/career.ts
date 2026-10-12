@@ -258,6 +258,8 @@ export interface Career {
   streetPending: boolean;
   /** 연애 (R4, M13) */
   romance: Romance | null;
+  /** 에디터로 고친 상대 학교 선수 (해마다 새로 만들어져서 사본을 둔다, 새해에 지운다) */
+  overrides?: Record<string, Player>;
   /** 설정: 연애 이벤트, 훈련 미니게임 (T4) */
   settings: CareerSettings;
   counts: Partial<Record<ActionId, number>>;

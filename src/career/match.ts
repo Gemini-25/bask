@@ -92,7 +92,9 @@ export function opponentTeam(c: Career, id: string, me?: Player): Team {
   const info = schoolById(id);
   const year = dateOf(c.week).year;
   const roster = generateSchoolRoster(new Rng((c.seed ^ hashId(id) ^ Math.imul(year, 0x9e3779b1)) >>> 0), info, c.gender);
-  return { ...toTeamInfo(info), players: depthChart(withRival(c, id, roster.map((e) => e.player))).slice(0, 12) };
+  // 에디터로 고친 상대 학교 선수 (그해만)
+  const players = roster.map((e) => c.overrides?.[e.player.id] ?? e.player);
+  return { ...toTeamInfo(info), players: depthChart(withRival(c, id, players)).slice(0, 12) };
 }
 
 function toTeamInfo(s: SchoolInfo) {

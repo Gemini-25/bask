@@ -1612,7 +1612,7 @@ ol.picks li.rv {
 }
 .dvtabs {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 2px;
   padding: 6px;
 }
@@ -1980,4 +1980,208 @@ canvas.stage {
 .mg .mgres {
   min-height: 1.5em;
   color: var(--led);
+}
+
+/* M14: 인게임 에디터 */
+.edpick {
+  display: none;
+  padding: 0 4px;
+  margin-left: 6px;
+  font-size: 11px;
+  box-shadow: 0 0 0 1px #7df9ff88;
+  background: #1d3a44;
+}
+body.devon .edpick {
+  display: inline-block;
+}
+.devpanel input[type='text'] {
+  background: #1b202c;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font: inherit;
+  padding: 1px 4px;
+  width: 100%;
+}
+.edwin {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(5, 7, 12, 0.72);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+.edwin[hidden] {
+  display: none;
+}
+.edbox {
+  width: min(1040px, 100%);
+  background: #10131b;
+  box-shadow: 0 0 0 2px #7df9ff, 0 12px 40px rgba(0, 0, 0, 0.6);
+  font-size: 12px;
+}
+.edhead {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.edhead > button {
+  margin-left: auto;
+  align-self: flex-start;
+}
+.edfig {
+  width: 80px;
+  height: 88px;
+  background: #1b202c;
+  flex: none;
+}
+.edtitle {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.edtitle b {
+  color: #7df9ff;
+  font-size: 15px;
+}
+.edtitle small {
+  color: var(--muted);
+}
+.edovr {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.edovr span {
+  color: var(--muted);
+}
+.edovr span b {
+  color: var(--ink);
+}
+.edovr span.on b {
+  color: var(--led);
+}
+.edcols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 4px 18px;
+  padding: 6px 14px;
+}
+@media (max-width: 760px) {
+  .edcols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.edgrp {
+  margin: 6px 0 10px;
+}
+.edgrp h5 {
+  margin: 4px 0;
+  color: #7df9ff;
+  font-size: 12px;
+}
+.edf {
+  display: inline-grid;
+  grid-template-columns: 6.5em 7em;
+  gap: 4px;
+  align-items: center;
+  margin: 2px 10px 2px 0;
+}
+.edf span {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.edf span.bad {
+  color: var(--bad);
+}
+.edbox input[type='number'],
+.edbox input[type='text'],
+.edbox select {
+  background: #1b202c;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font: inherit;
+  padding: 1px 4px;
+  width: 100%;
+  min-width: 0;
+}
+.edr {
+  display: grid;
+  grid-template-columns: 6.5em minmax(0, 1fr) 3.6em 1.4em;
+  gap: 6px;
+  align-items: center;
+  margin: 1px 0;
+}
+.edr span {
+  color: var(--muted);
+}
+.edr input[type='range'] {
+  width: 100%;
+  accent-color: #7df9ff;
+}
+.edr b {
+  text-align: center;
+}
+.edr b.gS,
+.edr b.gA {
+  color: var(--led);
+}
+.edr b.gB,
+.edr b.gC {
+  color: var(--good);
+}
+.edr b.gF,
+.edr b.gG {
+  color: var(--bad);
+}
+.edrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin: 4px 0;
+}
+.edrow input {
+  width: 4.5em !important;
+}
+.edchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.eddunks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+}
+.eddunks span {
+  padding: 1px 6px;
+  background: #1b202c;
+  color: var(--muted);
+}
+.eddunks span.on {
+  color: var(--ink);
+  box-shadow: 0 0 0 1px var(--led);
+}
+.edfoot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+}
+.edfoot span {
+  margin-right: auto;
+}
+.edf input[type='checkbox'] {
+  justify-self: start;
+  width: auto;
 }

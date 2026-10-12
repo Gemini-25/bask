@@ -136,6 +136,8 @@ const NEW_POS: Position[] = ['PG', 'SG', 'SF', 'PF', 'C'];
 /** 3학년 졸업, 진급, 신입생 입학, 새 시즌 */
 export function newYear(c: Career): string[] {
   const notes: string[] = [];
+  // 상대 학교 선수는 새로 만들어지니 고친 사본도 지운다
+  delete c.overrides;
   const year = dateOf(c.week).year;
   const rng = Rng.fromState(c.rng);
   const school = schoolById(c.school);

@@ -431,12 +431,12 @@ export class Home {
         const me = p.id === 'me';
         const fr = me ? '' : this.heart(c.friends[p.id] ?? 0);
         const cb = c.combos?.find((x) => x.mate === p.id);
-        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${ageCol(p)}</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}${cb ? ` <b class="tagcb" title="${COMBO_LABEL[cb.kind]}">🤝</b>` : ''}</td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
+        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${ageCol(p)}</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}${cb ? ` <b class="tagcb" title="${COMBO_LABEL[cb.kind]}">🤝</b>` : ''}<button type="button" class="edpick" data-edit="${me ? 'me' : `mate:${p.id}`}" title="에디터로 고치기">✏️</button></td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
       })
       .join('');
     const out = c.roster
       .filter((e) => !inTeam.has(e.player.id))
-      .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}</td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td><td class="hrt">${this.heart(c.friends[e.player.id] ?? 0)}</td></tr>`)
+      .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}<button type="button" class="edpick" data-edit="mate:${e.player.id}" title="에디터로 고치기">✏️</button></td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td><td class="hrt">${this.heart(c.friends[e.player.id] ?? 0)}</td></tr>`)
       .join('');
     const meOut = c.injury ? `<tr class="me dim"><td>부상</td><td>${c.prefPos}</td><td></td><td class="nm"><span class="no">${c.me.number}</span>${esc(c.me.name)} <b class="tagme">나</b></td><td>${c.me.body.heightCm}</td><td>${myOverall(c).toFixed(0)}</td><td></td></tr>` : '';
     const combos = (c.combos ?? []).length
@@ -538,6 +538,12 @@ export class Home {
       const go = () => this.act.doWeek(id, this.focus);
       if (this.map) this.map.walkTo(placeOf(id).id, go);
       else go();
+      return;
+    }
+    // 에디터 (개발자 패널을 연 동안만 ✏️가 보인다)
+    const ed = t.closest('[data-edit]') as HTMLElement | null;
+    if (ed) {
+      window.dispatchEvent(new CustomEvent('bask-edit', { detail: ed.dataset.edit }));
       return;
     }
     const st = t.closest('[data-set]') as HTMLInputElement | null;

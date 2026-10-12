@@ -21,6 +21,8 @@ import type { Playback } from '../view/playback';
 import { DEV } from '../view/devflags';
 import type { ScreenId } from './dom';
 import { download, esc, toast } from './dom';
+import { Editor } from './editor';
+import { editGroups } from '../career/edit';
 
 export interface DevHost {
   career(): Career | null;
@@ -41,9 +43,10 @@ export interface DevHost {
   fastSpeeds(on: boolean): void;
 }
 
-type Tab = 'player' | 'time' | 'event' | 'game' | 'league' | 'save';
+type Tab = 'player' | 'edit' | 'time' | 'event' | 'game' | 'league' | 'save';
 const TABS: [Tab, string][] = [
   ['player', '선수'],
+  ['edit', '에디터'],
   ['time', '시간'],
   ['event', '이벤트'],
   ['game', '경기'],
@@ -82,6 +85,10 @@ export class DevPanel {
   private fast = false;
   /** 접으면 머리만 남는다 (경기 화면 볼 때) */
   private mini = false;
+  /** 인게임 에디터 (M14) */
+  private editor: Editor;
+  private edGroup = 'mate';
+  private edQuery = '';
 
   constructor(private host: DevHost) {
     this.el = document.createElement('aside');
@@ -90,6 +97,17 @@ export class DevPanel {
     document.body.appendChild(this.el);
     this.el.addEventListener('click', (e) => this.click(e));
     this.el.addEventListener('change', (e) => this.change(e));
+    this.el.addEventListener('input', (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.id !== 'dvEdQ') return;
+      this.edQuery = t.value;
+      const list = this.el.querySelector('#dvEdList');
+      const c = this.host.career();
+      if (list && c) list.innerHTML = this.editRows(c);
+    });
+    this.editor = new Editor({ career: () => this.host.career(), save: () => this.host.save(), refresh: () => this.host.refresh() });
+    // 화면 곳곳의 ✏️ (패널을 열었을 때만 보인다)
+    window.addEventListener('bask-edit', (e) => this.editor.open((e as CustomEvent<string>).detail));
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Backquote' && !(e.target instanceof HTMLInputElement)) {
         e.preventDefault();
@@ -112,6 +130,7 @@ export class DevPanel {
   toggle(force?: boolean) {
     const open = force ?? this.el.hidden;
     this.el.hidden = !open;
+    document.body.classList.toggle('devon', open);
     this.layout();
     if (open) {
       store()?.setItem(OPEN_KEY, '1');
@@ -159,6 +178,8 @@ export class DevPanel {
       switch (this.tab) {
         case 'player':
           return c ? this.playerHtml(c) : this.noCareer();
+        case 'edit':
+          return c ? this.editHtml(c) : this.noCareer();
         case 'time':
           return c ? this.timeHtml(c) : this.noCareer();
         case 'event':
@@ -213,6 +234,30 @@ export class DevPanel {
 
   private setRating(c: Career, k: RatingKey, v: number) {
     c.me.r[k] = Math.max(1, Math.min(MAX_RATING, Math.round(v)));
+  }
+
+  // ───────────── 에디터 (M14) ─────────────
+
+  private editHtml(c: Career) {
+    const groups = editGroups(c);
+    if (!groups.some((g) => g.id === this.edGroup)) this.edGroup = groups[0].id;
+    return `
+      <div class="dvrow"><button type="button" data-edit="me">✏️ 내 선수 고치기</button>${c.rival ? '<button type="button" data-edit="rival">✏️ 라이벌</button>' : ''}</div>
+      <label class="dvf wide"><span>묶음</span><select id="dvEdGroup">${groups.map((g) => `<option value="${esc(g.id)}" ${g.id === this.edGroup ? 'selected' : ''}>${esc(g.label)} (${g.entries.length})</option>`).join('')}</select></label>
+      <label class="dvf wide"><span>이름 찾기 (전체)</span><input type="text" id="dvEdQ" value="${esc(this.edQuery)}" placeholder="이름 일부" /></label>
+      <table class="ttable dvt"><tr><th>#</th><th class="nm">이름</th><th>포</th><th>나이</th><th>종합</th><th></th></tr><tbody id="dvEdList">${this.editRows(c)}</tbody></table>
+      <p class="hint">능력치 39개, 특수능력, 키·체중·포지션·나이, 겉모습까지. 내 선수는 성격(개수 제한 없음)·잠재력·연애, 팀원은 친밀도·콤비도. 팀 탭에서도 선수 옆 ✏️로 연다 (패널을 연 동안). 이름·등번호·겉모습만 고치면 🔧 표시가 안 남는다.</p>`;
+  }
+
+  private editRows(c: Career) {
+    const q = this.edQuery.trim();
+    const groups = editGroups(c);
+    const entries = q ? groups.flatMap((g) => g.entries).filter((e) => e.player.name.includes(q)) : (groups.find((g) => g.id === this.edGroup)?.entries ?? []);
+    if (!entries.length) return '<tr><td colspan="6" class="muted">없음</td></tr>';
+    return entries
+      .slice(0, 80)
+      .map((e) => `<tr><td>${e.player.number}</td><td class="nm">${esc(e.player.name)}</td><td>${e.player.pos}</td><td>${e.player.age ?? ''}</td><td>${overall(e.player).toFixed(0)}</td><td><button type="button" data-edit="${esc(e.key)}">✏️</button></td></tr>`)
+      .join('');
   }
 
   // ───────────── 시간 ─────────────
@@ -331,7 +376,7 @@ export class DevPanel {
         .map((p) => {
           const s = L?.stats?.[p.id];
           const ppg = s ? (s.pts / Math.max(1, s.g)).toFixed(1) : '-';
-          return `<tr class="${p.id === 'me' ? 'me' : ''}"><td>${p.number}</td><td class="nm">${esc(p.name)}</td><td>${p.pos}</td><td>${p.age ?? ''}</td><td>${overall(p).toFixed(0)}</td><td>${ppg}</td><td>${p.id === 'me' ? '' : `<button type="button" data-pl="${p.id}" data-t="${teamId}" data-d="5">+5</button><button type="button" data-pl="${p.id}" data-t="${teamId}" data-d="-5">-5</button>`}</td></tr>`;
+          return `<tr class="${p.id === 'me' ? 'me' : ''}"><td>${p.number}</td><td class="nm">${esc(p.name)}</td><td>${p.pos}</td><td>${p.age ?? ''}</td><td>${overall(p).toFixed(0)}</td><td>${ppg}</td><td>${p.id === 'me' ? '<button type="button" data-edit="me">✏️</button>' : `<button type="button" data-edit="${teamId === 'school' || teamId === c.pro?.team ? `mate:${p.id}` : `lg:${teamId}:${p.id}`}">✏️</button><button type="button" data-pl="${p.id}" data-t="${teamId}" data-d="5">+5</button><button type="button" data-pl="${p.id}" data-t="${teamId}" data-d="-5">-5</button>`}</td></tr>`;
         })
         .join('');
     let table = '';
@@ -401,6 +446,12 @@ export class DevPanel {
       this.leagueTeam = t.value;
       return this.render();
     }
+    if (t.id === 'dvEdGroup') {
+      this.edGroup = t.value;
+      this.edQuery = '';
+      return this.render();
+    }
+    if (t.id === 'dvEdQ') return;
     if (!c) return;
     const v = Number(t.value);
     if (t.dataset.r) {
@@ -439,6 +490,7 @@ export class DevPanel {
     const b = t.closest('button') as HTMLButtonElement | null;
     if (!b || b.disabled) return;
     const c = this.host.career();
+    if (b.dataset.edit) return this.editor.open(b.dataset.edit);
     if (b.dataset.stop) return void this.run(48 * 40, b.dataset.stop as StopAt);
     if (b.dataset.ev && c) {
       c.pendingEvent = forceEvent(c, b.dataset.ev, Rng.fromState(c.rng));
