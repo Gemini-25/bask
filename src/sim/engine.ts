@@ -33,6 +33,7 @@ import {
   MOVE_LABEL,
   type DunkStyle,
   type ShotMove,
+  type ShotCtx,
 } from './types';
 import { DUNK_MOVES, moveShotLabel, SHOT_MOVES, shotMove, type MoveWhen, type ShotMoveDef } from '../data/moves';
 import type { RatingKey } from '../data/ratings';
@@ -161,6 +162,10 @@ type Phase =
       combo?: boolean;
       move?: ShotMove;
       poster?: boolean;
+      ctx?: ShotCtx;
+      def?: number;
+      rim?: number;
+      passer?: number;
     }
   | {
       k: 'pass';
@@ -327,6 +332,8 @@ class GameSim {
   private styleOf: Record<number, MoveStyle> = {};
   /** 슈퍼스타 정도 (0~0.15): 종합이 같은 팀 다른 선수들보다 얼마나 높은가 */
   private star: number[] = [];
+  /** 분석 (M17) */
+  private adv: { drives: number[]; drivePass: number[]; driveTov: number[] } = { drives: [], drivePass: [], driveTov: [] };
   /** 연속 성공 (인 더 존) */
   private streak: number[] = [];
   private minMin: Record<number, number> = {};
@@ -414,6 +421,7 @@ class GameSim {
     this.favor = opts.favor ?? {};
     for (const cb of opts.combos ?? []) this.comboOf.set(`${Math.min(cb.a, cb.b)}-${Math.max(cb.a, cb.b)}`, cb.kind);
     this.styleOf = opts.style ?? {};
+    this.adv = { drives: this.players.map(() => 0), drivePass: this.players.map(() => 0), driveTov: this.players.map(() => 0) };
     // 같은 팀 상위 8명 (자기 빼고) 평균보다 종합이 15 넘게 높으면 공을 더 잡는다
     this.star = this.players.map((pl, k) => {
       const mates = this.players
@@ -523,6 +531,7 @@ class GameSim {
       quarters: this.quarter,
       quarterSeconds: this.qLen,
       counters: this.cnt,
+      adv: this.adv,
     };
   }
 
@@ -1057,6 +1066,7 @@ class GameSim {
 
   private turnover(player: number, kind: TurnoverKind, stealer = -1) {
     const team = this.off;
+    if (player >= 0 && this.act.k === 'drive') this.adv.driveTov[this.P[player].pid]++;
     let text = player >= 0 ? `${this.name(player)} ${TOV_TEXT[kind]}` : `${this.teamName(team)} ${TOV_TEXT[kind]}`;
     if (kind === 'shotClock' || kind === 'eightSec') text = `${this.teamName(team)} ${TOV_TEXT[kind]}`;
     if (stealer >= 0) text = `${this.name(stealer)} 스틸! (${text})`;
@@ -1556,10 +1566,10 @@ class GameSim {
     if (this.zoneOn(def) || this.mode !== 'set') return;
     const tac = this.teams[def].tactics;
     const post = this.act.k === 'post';
-    const star = this.play?.k === 'iso' && this.play.star === h.i && this.share(h.pid) > 0.27;
+    const star = (this.play?.k === 'iso' && this.play.star === h.i && this.share(h.pid) > 0.27) || this.star[h.pid] > 0.06;
     if (!post && !star) return;
     if (this.doubleFor === -2) return; // 이번 공격엔 안 가기로 했다
-    if (!this.rng.chance(tac.double * (post ? 1 : 0.6))) {
+    if (!this.rng.chance(Math.min(0.8, tac.double * (post ? 1 : 0.6) + (this.star[h.pid] / STAR_MAX) * 0.35))) {
       this.doubleFor = -2;
       return;
     }
@@ -1949,6 +1959,7 @@ class GameSim {
 
   private startDrive(h: SP) {
     this.cnt.drives++;
+    this.adv.drives[h.pid]++;
     this.act = { k: 'drive', u: 0, v: 0, t: this.t };
     const d = this.defenderOf(h.i);
     // 돌파 첫발에 드리블 기술 (화면용)
@@ -2099,6 +2110,22 @@ class GameSim {
     this.misc = null;
     const near = si.kind === 'dunk' || si.kind === 'layup' || si.kind === 'hook' || si.kind === 'floater';
     const d = dd0;
+    // 분석 (M17): 어떤 상황에서 쏜 슛인지, 누가 막았는지, 골밑은 누가 지켰는지
+    const caught = assist >= 0 && this.t - this.lastPass!.t < 1.1;
+    const ctx: ShotCtx = mv === 'putback' ? 'putback' : ph.post ? 'post' : fast ? 'fast' : wasDrive && near ? 'drive' : caught && !wasDrive ? 'catch' : !near ? 'pullup' : 'other';
+    const Hh = this.hoop(h.team);
+    let rimP = -1;
+    let rimD = 2.0;
+    if (near) {
+      for (const q of this.mates((1 - h.team) as Side)) {
+        const rd = dist(q.x, q.y, Hh.x, Hh.y);
+        if (rd < rimD) {
+          rimD = rd;
+          rimP = q.pid;
+        }
+      }
+    }
+    const meta = { ctx, def: d.pid, rim: rimP >= 0 ? rimP : undefined, passer: assist >= 0 ? this.P[assist].pid : undefined };
     if (c1 > 0.3 && dist(d.x, d.y, h.x, h.y) < 2.5) this.jumpFx(d, 0.25 + d.pl.r.jump / 400, 0.45, ACT.CONTEST);
 
     // 차징: 돌파하다 자리 잡은 도움 수비와 부딪힌다
@@ -2154,6 +2181,7 @@ class GameSim {
           prob: p,
           contest: cAdj,
           move: mv,
+          ...meta,
           text: `${b.pl.name} 블록! (${h.pl.name}의 ${mv ? moveShotLabel(mv, SHOT_LABEL[si.kind]) : SHOT_LABEL[si.kind]})`,
         });
         const H = this.hoop(h.team);
@@ -2212,6 +2240,7 @@ class GameSim {
       combo: comboShot,
       move: mv,
       poster: poster && si.kind === 'dunk',
+      ...meta,
     };
   }
 
@@ -2260,6 +2289,9 @@ class GameSim {
         combo: ph.combo || undefined,
         move: ph.move,
         poster: ph.poster || undefined,
+        ctx: ph.ctx,
+        def: ph.def,
+        rim: ph.rim,
         text: `${h.pl.name} ${fb}${ao}${label} 성공${ph.poster ? '!! 수비 머리 위로' : ''}${ast}${fouled ? ' + 앤드원!' : ''}${ph.combo ? ' · 콤비 플레이!' : ''}`,
       });
       const H = this.hoop(h.team);
@@ -2302,6 +2334,10 @@ class GameSim {
       prob: ph.prob,
       contest: ph.contest,
       move: ph.move,
+      ctx: ph.ctx,
+      def: ph.def,
+      rim: ph.rim,
+      passer: ph.passer,
       text: `${h.pl.name} ${label} 실패`,
     });
     if (this.buzzer) {
@@ -2465,6 +2501,7 @@ class GameSim {
   // ---------------------------------------------------------------- 패스
 
   private startPass(h: SP, m: SP, inbound: boolean, from?: { x: number; y: number }, handoff = false) {
+    if (this.act.k === 'drive' && this.ball.holder === h.i) this.adv.drivePass[h.pid]++;
     const sx = from?.x ?? h.x;
     const sy = from?.y ?? h.y;
     const lob = !inbound && !handoff && this.lobChance(h, m);
@@ -3220,8 +3257,9 @@ class GameSim {
     } else {
       const db = dist(mx, my, this.ball.x, this.ball.y);
       const sag = clamp(1.0 + db * 0.1, 1.0, 2.4);
-      const bx = mx + ux * sag;
-      const by = my + uy * sag;
+      const tight = 1 - (this.star[m.pid] / STAR_MAX) * 0.55;
+      const bx = mx + ux * sag * tight;
+      const by = my + uy * sag * tight;
       const helpX = lerp(this.ball.x, H.x, 0.55);
       const helpY = lerp(this.ball.y, H.y, 0.55);
       let w = clamp((db - 5) / 9, 0, 0.45) * (0.65 + p.pl.r.helpD / 200);
@@ -3230,6 +3268,11 @@ class GameSim {
       if (Lman.u < 3.2 && Math.abs(Lman.v) > 5.5) w *= 0.55;
       if (m.pl.r.three >= 60) w *= 0.7;
       else if (m.pl.r.three < 42) w = Math.min(0.6, w * 1.3 + 0.1);
+      // 그래비티 (M17): 슈퍼스타는 공이 없어도 딱 붙고, 공 가진 슈퍼스타 쪽으로는 도움 수비가 몰린다
+      const threat = this.star[m.pid] / STAR_MAX;
+      w *= 1 - threat * 0.7;
+      const h = this.holder();
+      if (h && h.team !== def) w = Math.min(0.75, w + (this.star[h.pid] / STAR_MAX) * 0.5);
       gx = lerp(bx, helpX, w);
       gy = lerp(by, helpY, w);
     }

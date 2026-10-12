@@ -80,6 +80,11 @@ export interface GameEvent {
   move?: ShotMove;
   /** 블록하러 뜬 수비 위로 찍었다 (인유어페이스) */
   poster?: boolean;
+  /** 분석 (M17): 슛 상황, 맡은 수비, 골밑을 지킨 수비, 패스해 준 선수 (안 들어간 슛도) */
+  ctx?: ShotCtx;
+  def?: number;
+  rim?: number;
+  passer?: number;
   quarter: number;
   clock: number;
   score: [number, number];
@@ -179,6 +184,9 @@ export type ShotMove =
   | 'contactDunk'
   | 'putback';
 
+/** 슛 상황 (M17 분석): 받자마자 / 드리블하다 / 돌파 끝 / 포스트 / 풋백 / 속공 / 그 밖 */
+export type ShotCtx = 'catch' | 'pullup' | 'drive' | 'post' | 'putback' | 'fast' | 'other';
+
 export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360' | 'double' | 'elbow' | 'between' | 'ftline' | 'cradle' | 'putback';
 export const DUNK_LABEL: Record<DunkStyle, string> = {
   one: '원핸드 덩크',
@@ -259,6 +267,8 @@ export interface GameResult {
   quarterSeconds: number;
   /** 밸런스 확인용 카운터 */
   counters: Counters;
+  /** 분석 (M17): 선수별 돌파와 돌파 결과 (패스, 실책) */
+  adv?: { drives: number[]; drivePass: number[]; driveTov: number[] };
 }
 
 export interface Counters {

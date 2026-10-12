@@ -12,7 +12,7 @@
 
 프로 쪽만 빨리 보고 싶으면 `play/sample-pre-draft-save.json`을 타이틀의 '파일 불러오기'로 넣으면 고3 마지막 주부터 시작한다 (다음 주가 드래프트).
 
-지금 버전은 **M16 동작·슈퍼스타** (M8 프로 커리어 끝까지 + M9 개발자 패널 + M10 연출 + M11 밸런스 + M12 대학·성격 + M13 남은 기획 + M14 인게임 에디터 + M15 상 기준 +): 선수를 만들어 고교 3년 동안 키우고, 드래프트로 프로 팀에 들어가 상을 받고, 올스타·국가대표·해외 리그를 거쳐 은퇴하면 2세로 이어 간다.
+지금 버전은 **M17 분석 지표** (M8 프로 커리어 끝까지 + M9 개발자 패널 + M10 연출 + M11 밸런스 + M12 대학·성격 + M13 남은 기획 + M14 인게임 에디터 + M15 상 기준 + M16 동작·슈퍼스타 +): 선수를 만들어 고교 3년 동안 키우고, 드래프트로 프로 팀에 들어가 상을 받고, 올스타·국가대표·해외 리그를 거쳐 은퇴하면 2세로 이어 간다.
 
 - 선수 만들기: 출신 배경 7가지(천재 포함) + 자유 포인트 배분, 키·체형, 겉모습, 학교
 - 마을 맵에서 매주 행동 하나 (팀 훈련, 개인 훈련, 은사 특훈, 웨이트, 영상 분석, 길거리 3x3, 친구와 놀기, 휴식, 재활) → 포인트 → 능력치 투자
@@ -79,6 +79,7 @@ npm run report     # 100경기 돌려서 평균 통계를 실제 리그와 비�
 - `node tools/m12-ui.mjs <주소> <폴더> <고3 마지막 주 세이브>`: 진로 선택 → 대학 입학 → 대학 일정 → 성격 칸 캡처
 - `node tools/dev-ui.mjs <주소> <폴더> <세이브.json>`: 개발자 패널 탭별 화면 캡처
 - `node tools/editor-ui.mjs <주소> <폴더> <프로 세이브> <고교 세이브>`: 에디터로 내 선수·팀원·리그·상대 학교 선수 고치기 확인
+- `npx tsx tools/analytics.ts [경기 수] [능력치] [자리]`: 현대 농구 지표 (TS·USG·BPM·WAR·온오프·그래비티·슛 상황별·수비) 리그 평균과 슈퍼스타 비교
 - `npx tsx tools/moves.ts [경기 수]`: 슛 동작별 횟수·성공률·앤드원, `npx tsx tools/star.ts [경기 수] [능력치] [자리]`: 한 선수 능력치를 전부 N으로 해서 경기당 기록·팀 승률
 - `node tools/m16-ui.mjs <주소> <폴더> <프로 세이브>`, `node tools/labels-ui.mjs <주소> <폴더>`, `node tools/hl-ui.mjs <주소> <폴더>`, `node tools/sprites-shot.mjs <주소/sprites.html> <출력.png>`: 동작 팝업, 이름표, 동작 시트 캡처
 - `node tools/m13-ui.mjs <주소> <폴더> <프로 세이브.json>`: 3x3·전지훈련·전향 제안·콤비·연애 표시·미니게임 세 가지 캡처, `node tools/combo-ui.mjs <주소> <폴더> <프로 세이브.json>`: 콤비 둘로 경기 관람, `npx tsx tools/combo-check.ts <세이브.json> [경기 수]`: 콤비가 경기당 몇 번 나오나 (`V=1` 출전 시간)
@@ -96,7 +97,7 @@ npm run report     # 100경기 돌려서 평균 통계를 실제 리그와 비�
 
 - [기획 질문지](docs/planning/01-questions.md): 방향을 정하기 위한 질문 133개와 추천 답
 - [기획 결정 v1](docs/planning/02-decisions.md): 질문지 답변 정리, 해석, 열린 질문
-- [로드맵](docs/planning/03-roadmap.md): 마일스톤 M0~M16
+- [로드맵](docs/planning/03-roadmap.md): 마일스톤 M0~M17
 - [M9~M13 설계](docs/planning/04-next-design.md): 개발자 패널, 연출, 밸런스, 대학·성격, 남은 기획
 - [M14~ 설계](docs/planning/05-next-design.md): 인게임 에디터, MVP 밸런스, 동작 늘리기, 빠진 것, 콘텐츠
 - [M1 밸런스 리포트](docs/planning/m1-balance-report.txt), [M2 밸런스 리포트](docs/planning/m2-balance-report.txt), [M10 밸런스 리포트](docs/planning/m10-balance-report.txt): 200경기 평균 통계

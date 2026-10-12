@@ -19,6 +19,7 @@ import { applyMatch, playMatch, teamInfoOf } from '../career/match';
 import { afterGame } from '../career/turn';
 import type { Playback } from '../view/playback';
 import { DEV } from '../view/devflags';
+import { analyzeGame, derive } from '../sim/analytics';
 import type { ScreenId } from './dom';
 import { download, esc, toast } from './dom';
 import { Editor } from './editor';
@@ -364,7 +365,27 @@ export class DevPanel {
         <div class="dvrow"><button type="button" data-dv="reroll" ${onGame ? '' : 'disabled'}>다른 시드로 다시</button><input type="number" id="dvSeed" value="${seed ?? 1}" class="md" /><button type="button" data-dv="seed" ${onGame ? '' : 'disabled'}>이 시드로</button></div>
         <p class="hint">커리어 경기는 결과를 반영하기 전(경기를 보는 중)에만 바꿀 수 있다. 바꾸면 🔧 표시.</p>
         <div class="dvrow"><button type="button" data-dv="exhibition">데모 경기 (시드)</button></div>
-      </div>`;
+      </div>
+      ${pb ? this.advHtml(pb) : ''}`;
+  }
+
+  /** 이 경기 고급 기록 (M17 분석 지표, 경기 끝 기준) */
+  private advHtml(pb: Playback) {
+    const g = pb.game;
+    const raw = analyzeGame(g);
+    const rows = g.players
+      .map((p, pid) => ({ p, pid, m: derive(raw[pid]), sec: raw[pid].sec }))
+      // 3분 넘게 뛴 선수만 (짧게 뛰면 숫자가 크게 흔들린다)
+      .filter((x) => x.sec >= 180)
+      .sort((a, b) => g.teamOf[a.pid] - g.teamOf[b.pid] || b.m.bpm - a.m.bpm)
+      .map(
+        ({ p, pid, m }) =>
+          `<tr><td class="nm"><i class="sw" style="background:${g.teams[g.teamOf[pid]].color}"></i>${esc(p.name)}</td><td>${m.mpg.toFixed(0)}</td><td>${m.ppg.toFixed(0)}</td><td>${(m.ts * 100).toFixed(0)}</td><td>${(m.usg * 100).toFixed(0)}</td><td>${m.bpm.toFixed(1)}</td><td>${m.onOff.toFixed(0)}</td><td>${m.drivesPg.toFixed(0)}</td><td>${m.gravityBall.toFixed(2)}</td><td>${m.dfgaPg ? `${(m.dfgPct * 100).toFixed(0)}` : '-'}</td></tr>`,
+      )
+      .join('');
+    return `<div class="dvgrp"><h5>이 경기 고급 기록 (경기 끝 기준)</h5>
+      <table class="ttable dvt"><tr><th class="nm">선수</th><th>분</th><th>점</th><th title="트루 슈팅 %">TS</th><th title="공격 점유율 %">USG</th><th title="박스 +/- (100 공격당)">BPM</th><th title="코트에 있을 때와 없을 때 넷 레이팅 차이">온오프</th><th>돌파</th><th title="공 가졌을 때 몰려온 도움 수비 (명)">그래비티</th><th title="1차 수비로 막은 슛의 상대 야투율 %">DFG</th></tr>${rows}</table>
+      <p class="hint">전체 지표는 npx tsx tools/analytics.ts (돌파 결과, 슛 상황·견제별 성공률, 리바운드·스틸·블록 %, WAR, 수비 그래비티 등)</p></div>`;
   }
 
   // ───────────── 리그 ─────────────
