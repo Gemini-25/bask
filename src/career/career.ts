@@ -12,6 +12,7 @@ import { dunkList } from '../data/dunks';
 import type { DunkStyle } from '../sim/types';
 import { emptyStats, startAbilities, type CareerStats } from './abilities';
 import { has, houseMult, houseRest } from './money';
+import { gainPopularity } from './fans';
 import type { AllStarWeekend, NationalCamp } from './allstar';
 import type { SeasonAwards } from './awards';
 import type { LegacyBonus, RetireSummary } from './legacy';
@@ -39,10 +40,20 @@ export const POINT_LABEL: Record<PointKind, string> = { P: '피지컬', T: '기�
 export const POINT_OF = {} as Record<RatingKey, PointKind>;
 for (const g of RATING_GROUPS) for (const [k] of g.items) POINT_OF[k] = g.key === 'physical' ? 'P' : g.key === 'mental' ? 'M' : 'T';
 
+/** 감독 신뢰 변화: 높을수록 덜 오른다 (M11) */
+export function trustStep(trust: number, d: number) {
+  return d > 0 ? d * Math.max(0.15, 1 - trust / 125) : d;
+}
+
 /** 능력치 v를 v+1로 올리는 비용. 잠재력을 넘으면 비싸진다 (소프트 캡, T6) */
 export function costOf(v: number, potential: number): number {
   if (v >= MAX_RATING) return Infinity;
   let c = 3 + Math.floor(Math.max(0, v - 20) / 5);
+  // 높은 능력치는 훨씬 비싸다 (M11): 한 분야만 끝까지 올리기보다 잘 나눠야 하고, 정상은 잘 키워야 간다
+  if (v >= 90) c = Math.ceil(c * 3.6);
+  else if (v >= 80) c = Math.ceil(c * 2.6);
+  else if (v >= 70) c = Math.ceil(c * 1.8);
+  else if (v >= 60) c = Math.ceil(c * 1.3);
   if (v >= potential) c *= 2;
   if (v >= potential + 8) c = Math.ceil(c * 1.5);
   return c;
@@ -572,13 +583,13 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   if (id === 'ad') {
     const pay = Math.round(300 + (c.popularity ?? 0) * 15);
     c.money += pay;
-    c.popularity = Math.min(100, (c.popularity ?? 0) + 1);
+    gainPopularity(c, 1);
     notes.push(`광고 촬영비 ${pay}만 원을 받았다.`);
   }
   // 감독 신뢰도와 친밀도
   let dTrust = a.trust;
   if (id === 'rest' && c.fatigue < 25) dTrust -= 0.3;
-  c.trust = clamp(c.trust + dTrust, 0, 100);
+  c.trust = clamp(c.trust + trustStep(c.trust, dTrust), 0, 100);
   const roster = teammates(c);
   const mates = roster.map((e) => e.player.id);
   if (id === 'team') {

@@ -6,6 +6,7 @@ import { agePlayer, draftClass, finishOf, leagueTeam, offseason, PRO_WEEKS, quic
 import { myTeam } from './match';
 import { grantTrophies, seasonAwards, synthLines } from './awards';
 import { offerFor } from './money';
+import { gainPopularity } from './fans';
 import { withRival } from './people';
 import { devFlags, homecomingOffers, idleSeason, joinTeam, moveLeague, overseasOffer } from './overseas';
 import { RETIRE_FORCE_AGE, RETIRE_MIN_AGE } from './legacy';
@@ -92,7 +93,7 @@ export function recordProGame(c: Career, week: number, a: string, b: string, sco
   if (s.winner && !before[g.series]) {
     if (L.champion === me) {
       c.trust = Math.min(100, c.trust + 5);
-      c.popularity = Math.min(100, (c.popularity ?? 0) + 8);
+      gainPopularity(c, 8);
       return '챔피언 결정전 우승! 리그 정상에 올랐다!';
     }
     return s.winner === me ? `${PRO_WEEKS.playoffs[s.round].name} 통과!` : `${PRO_WEEKS.playoffs[s.round].name}에서 탈락했다.`;
@@ -148,7 +149,8 @@ export function proNewYear(c: Career): string[] {
   }
   if (c.rival) agePlayer(c.rival.player, rng);
   // 내가 없는 리그도 한 해가 간다
-  for (const other of [c.homeLeague, c.abroadLeague]) if (other) idleSeason(other, rng);
+  if (c.homeLeague) idleSeason(c.homeLeague, rng, c, 'BASK 리그');
+  if (c.abroadLeague) idleSeason(c.abroadLeague, rng, c, '해외 리그');
   c.allStar = null;
   c.pro!.years--;
   if ((c.me.age ?? 0) >= RETIRE_FORCE_AGE) c.retirePending = 'forced';

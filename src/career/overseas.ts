@@ -4,7 +4,9 @@ import type { Gender } from '../data/names';
 import { overall } from '../data/player';
 import { generateTeam, type TeamInfo } from '../data/teams';
 import type { Career } from './career';
-import { draftClass, finishOf, freeNumber, leagueTeam, offseason, scheduleSeason, standings, type League, type LeagueTeam } from './league';
+import { draftClass, finishOf, freeNumber, leagueTeam, offseason, quickPro, scheduleSeason, standings, startPlayoffs, updateSeries, type League, type LeagueTeam } from './league';
+import { seasonAwards, synthLines } from './awards';
+import { withRival } from './people';
 import { coachName } from './people';
 import type { Offer } from './pro';
 
@@ -102,12 +104,33 @@ export function moveLeague(c: Career, toAbroad: boolean, base: number) {
   c.rng = rng.state;
 }
 
-/** 내가 없는 리그도 한 해가 지나간다 (나이, 은퇴, 신인) */
-export function idleSeason(L: League, rng: Rng) {
-  const order = [...L.teams].sort((a, b) => avg(a) + rng.normal(0, 2) - (avg(b) + rng.normal(0, 2)));
-  L.lastOrder = order.map((t) => t.info.id);
-  L.history.push({ season: L.season, champion: order[order.length - 1].info.id, myFinish: '-' });
+/** 내가 없는 리그도 한 시즌을 다 치른다: 정규시즌, 플레이오프, 시상, 나이·은퇴·신인 (M11) */
+export function idleSeason(L: League, rng: Rng, c: Career, name: string) {
+  scheduleSeason(L, 0);
+  L.stats = {};
+  const lines = (id: string) => withRival(c, id, leagueTeam(L, id).players);
+  for (const g of L.games) {
+    g.score = quickPro(L, g.a, g.b, rng);
+    synthLines(L, lines(g.a), g.a, g.score[0], rng);
+    synthLines(L, lines(g.b), g.b, g.score[1], rng);
+  }
+  startPlayoffs(L, 0);
+  for (let guard = 0; guard < 60 && !L.champion; guard++) {
+    const g = L.games.find((x) => !x.score);
+    if (!g) break;
+    g.score = quickPro(L, g.a, g.b, rng);
+    updateSeries(L, 0);
+  }
+  const wins = Object.fromEntries(standings(L).map((r) => [r.id, r.w]));
+  (L.awards ??= []).push(seasonAwards(L, name, L.rookies ?? [], wins));
+  L.history.push({ season: L.season, champion: L.champion ?? standings(L)[0].id, myFinish: '-' });
+  L.lastOrder = standings(L)
+    .map((r) => r.id)
+    .reverse();
   offseason(L, rng, draftClass(rng, 20));
+  L.stats = {};
+  L.games = [];
+  L.series = [];
   L.season++;
 }
 

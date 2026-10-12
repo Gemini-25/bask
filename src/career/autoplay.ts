@@ -2,22 +2,94 @@
 // 경기는 결과만 보고, 이벤트는 첫 선택지, 드래프트·시상·올스타 화면은 건너뛴다.
 import { overall } from '../data/player';
 import { RATING_KEYS, type RatingKey } from '../data/ratings';
-import { costOf, dateOf, invest, POINT_OF, type ActionId, type Career, type FocusId } from './career';
+import { costOf, dateOf, FOCUS, invest, mentorReady, POINT_OF, type ActionId, type Career, type FocusId } from './career';
+import { buy, has, itemDef } from './money';
 import { resolveEvent } from './events';
 import { applyMatch, playMatch } from './match';
 import { contractOffers, signContract } from './pro';
 import { afterGame, playWeek } from './turn';
 
-export type AutoPolicy = 'simple' | { repeat: ActionId; focus?: FocusId };
+/** simple: 대충 (훈련 돌려 쓰기), good: 잘 키우기 (은사·트레이너·피로 관리·장비) */
+export type AutoPolicy = 'simple' | 'good' | { repeat: ActionId; focus?: FocusId };
 
 const ROTATION: ActionId[] = ['team', 'solo', 'weight', 'team', 'video'];
+
+/** 종합 능력치가 가장 많이 오르는 훈련 분야 */
+export function bestFocus(c: Career): FocusId {
+  let best: FocusId = 'shoot';
+  let bv = -Infinity;
+  const base = overall(c.me, c.prefPos);
+  for (const f of FOCUS) {
+    let v = 0;
+    for (const k of f.keys) {
+      if (c.me.r[k] >= 99) continue;
+      c.me.r[k]++;
+      v += overall(c.me, c.prefPos) - base;
+      c.me.r[k]--;
+    }
+    v /= f.keys.length;
+    if (v > bv) {
+      bv = v;
+      best = f.id;
+    }
+  }
+  return best;
+}
 
 /** 이번 주 행동 */
 export function autoAction(c: Career, policy: AutoPolicy): { id: ActionId; focus?: FocusId } {
   if (c.injury) return { id: 'rehab' };
+  if (policy === 'good') return goodAction(c);
   if (c.fatigue > 62) return { id: 'rest' };
   if (policy === 'simple') return { id: ROTATION[c.week % ROTATION.length], focus: 'shoot' };
   return { id: policy.repeat, focus: policy.focus };
+}
+
+function goodAction(c: Career): { id: ActionId; focus?: FocusId } {
+  // 지치기 전에 쉬어서 컨디션을 지킨다
+  if (c.fatigue > 46) return { id: 'rest' };
+  if (c.condition <= 1) return { id: 'friends' };
+  const focus = bestFocus(c);
+  if (mentorReady(c)) return { id: 'mentor', focus };
+  // 은사를 만나러 공원에 간다
+  if (!c.mentor.met && c.week % 3 === 0) return { id: 'street' };
+  if (c.trust < 60 && !c.pro) return { id: 'team' };
+  if (c.pro && (c.money ?? 0) >= 2500) return { id: 'trainer', focus };
+  if (c.pro && c.trust < 55) return { id: 'team' };
+  return c.week % 3 === 2 ? { id: 'team' } : { id: 'solo', focus };
+}
+
+/** 잘 키우기: 돈이 되면 장비와 집을 산다 (싸고 효과 큰 것부터) */
+const SHOPPING = ['shoeLight', 'sleeve', 'bed', 'knee', 'yardHoop', 'compression', 'goggles', 'homeGym', 'theater', 'shoePro', 'aqua', 'cheerFlags', 'cheerBanner', 'cheerChant', 'cheerMascot', 'cheerLeaders', 'cheerJumbo'];
+export function autoShop(c: Career) {
+  if (!c.pro) return;
+  for (const id of SHOPPING) {
+    const it = itemDef(id);
+    if (!it || has(c, id)) continue;
+    // 트레이너 비용은 남겨 둔다
+    if ((c.money ?? 0) - it.price < 2000) return;
+    buy(c, id);
+  }
+}
+
+/** 대충 투자: 싼 능력치부터 골고루 (한 분야를 노리지 않는다) */
+export function spreadInvest(c: Career) {
+  for (let g = 0; g < 300; g++) {
+    let best: RatingKey | null = null;
+    let bc = Infinity;
+    for (const k of RATING_KEYS) {
+      const cost = costOf(c.me.r[k], c.potential);
+      if (cost > c.points[POINT_OF[k]]) continue;
+      // 같은 값이면 낮은 능력치부터
+      const v = cost + c.me.r[k] * 0.01;
+      if (v < bc) {
+        bc = v;
+        best = k;
+      }
+    }
+    if (!best) break;
+    invest(c, { [best]: 1 });
+  }
 }
 
 /** 포인트를 종합 능력치가 가장 많이 오르는 곳부터 쓴다 */
@@ -55,7 +127,7 @@ export interface AutoWeekResult {
  * 한 주 자동 진행. stop에 걸리는 일이 생기면 그 화면은 남겨 두고 멈춘다
  * (경기면 경기를 치르기 전에, 드래프트면 결과를 안 지운 채로).
  */
-export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean; stop?: StopAt } = {}): AutoWeekResult {
+export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean; spread?: boolean; stop?: StopAt } = {}): AutoWeekResult {
   const stop = opts.stop ?? 'none';
   const yearBefore = dateOf(c.week).year;
   const a = autoAction(c, policy);
@@ -90,6 +162,10 @@ export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean
     if (stop === 'contract') return { stopped: 'contract', notes, games };
     signContract(c, contractOffers(c).mine);
   }
-  if (opts.invest) autoInvest(c);
+  if (opts.invest) {
+    if (opts.spread) spreadInvest(c);
+    else autoInvest(c);
+  }
+  if (policy === 'good') autoShop(c);
   return { stopped: null, notes, games };
 }

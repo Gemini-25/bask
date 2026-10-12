@@ -1,7 +1,7 @@
 // 한 주가 끝난 뒤 결과, 연습경기 전 안내, 경기 뒤 성장 결과 화면
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
 import { addXp, CONDITION_LABEL, dateText, FOCUS, myOverall, type Career, type WeekResult } from '../career/career';
-import type { InterviewChoice } from '../career/fans';
+import { gainPopularity, type InterviewChoice } from '../career/fans';
 import { effectHint, eventById, fill, resolveEvent } from '../career/events';
 import { leagueTeam } from '../career/league';
 import { moneyText } from '../career/money';
@@ -130,7 +130,7 @@ export interface ResultActions {
 
 function applyInterview(c: Career, ch: InterviewChoice) {
   const e = ch.effect;
-  if (e.pop) c.popularity = Math.min(100, Math.max(0, (c.popularity ?? 0) + e.pop));
+  if (e.pop) gainPopularity(c, e.pop);
   if (e.trust) c.trust = Math.min(100, Math.max(0, c.trust + e.trust));
   if (e.friends) for (const id of Object.keys(c.friends)) c.friends[id] = Math.min(100, c.friends[id] + e.friends);
   const ups = {};

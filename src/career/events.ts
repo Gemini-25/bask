@@ -4,6 +4,7 @@ import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
 import { addXp, dateOf, teammates, type Career } from './career';
+import { gainPopularity } from './fans';
 import { avgFriendship } from './people';
 import { signContract } from './pro';
 import { schoolById } from './schools';
@@ -424,7 +425,7 @@ export function resolveEvent(c: Career, ev: PendingEvent, choice: number): strin
     if (e.friend && ev.mate) c.friends[ev.mate] = clamp((c.friends[ev.mate] ?? 20) + e.friend, 0, 100);
     if (e.friendsAll) for (const id of Object.keys(c.friends)) c.friends[id] = clamp(c.friends[id] + e.friendsAll, 0, 100);
     if (e.shoe !== undefined) c.me.look.shoe = e.shoe;
-    if (e.pop) c.popularity = clamp((c.popularity ?? 0) + e.pop, 0, 100);
+    if (e.pop) gainPopularity(c, e.pop);
     if (e.money) c.money = Math.max(0, (c.money ?? 0) + e.money);
     if (e.item && !(c.items ??= []).includes(e.item)) c.items.push(e.item);
     if (e.trade && c.pro && c.league) {

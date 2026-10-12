@@ -1557,7 +1557,7 @@ class GameSim {
       if (play?.k === 'iso' && play.star === h.i) ev += 0.04;
       if (L.u > 9.6 && tLeft > 3) ev -= 0.1; // 너무 먼 슛은 꺼린다
       // 많이 쐈으면 동료를 찾는다. 팀 슛의 3분의 1을 넘기면 훨씬 강하게
-      ev -= clamp((this.share(h.pid) - 0.22) * 1.4, 0, 0.3) + clamp((this.share(h.pid) - 0.3) * 4, 0, 0.8);
+      ev -= this.hogPenalty(h.pid);
       if (doubled) ev -= 0.1;
       opts.push({ v: ev, go: () => this.startGather(h, post), label: 'shot-' + si.kind + '@' + c.toFixed(2) });
     }
@@ -1574,7 +1574,7 @@ class GameSim {
       let ev = lerp(0.68, 1.26, lane) + (skill - 50) * 0.004 + mismatch;
       if (play?.k === 'iso' && play.star === h.i) ev += 0.05;
       if (this.mode === 'advance' && lane > 0.7) ev += 0.08;
-      ev -= clamp((this.share(h.pid) - 0.25) * 1.0, 0, 0.25) + clamp((this.share(h.pid) - 0.32) * 2.5, 0, 0.4);
+      ev -= this.hogPenalty(h.pid) * 0.75;
       if (doubled) ev -= 0.15;
       opts.push({ v: ev, go: () => this.startDrive(h), label: 'drive@' + lane.toFixed(2) });
     }
@@ -1637,6 +1637,12 @@ class GameSim {
   }
 
   /** 팀 슛 중 이 선수 비중 (경기 초반엔 0에 가깝게) */
+  /** 혼자 너무 많이 쐈으면 동료를 찾는다 (M11: 리그 득점이 한 명에게 덜 몰리게) */
+  private hogPenalty(pid: number): number {
+    const sh = this.share(pid);
+    return clamp((sh - 0.21) * 1.6, 0, 0.35) + clamp((sh - 0.29) * 4, 0, 0.8);
+  }
+
   private share(pid: number): number {
     const team = this.teamOf[pid];
     let sum = 0;

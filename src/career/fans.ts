@@ -27,8 +27,7 @@ export function afterGameFans(c: Career, grade: string, line: GameLine | null, w
   const g = { S: 3, A: 1.6, B: 0.6, C: 0.1, D: -0.6, '-': -0.2 }[grade] ?? 0;
   const raw = (g + (won ? 0.3 : 0) + (big ? 1.5 : 0)) * (c.pro ? 0.6 : 0.4);
   // 응원단이 있는 홈 경기는 더 오른다 (떨어질 땐 그대로)
-  const dPop = raw > 0 ? raw * boost : raw;
-  c.popularity = clamp((c.popularity ?? 0) + dPop, 0, 100);
+  const dPop = gainPopularity(c, raw > 0 ? raw * boost : raw);
   const pool = !line || line.sec < 120 ? BENCH : grade === 'S' || grade === 'A' ? GOOD : grade === 'B' || grade === 'C' ? OK : BAD;
   const n = 1 + Math.round((c.popularity ?? 0) / 35) + (big ? 1 : 0);
   const posts: SnsPost[] = [];
@@ -40,9 +39,25 @@ export function afterGameFans(c: Career, grade: string, line: GameLine | null, w
   return { dPop, posts };
 }
 
-/** 인기는 매주 조금씩 식는다 */
+/**
+ * 인기 변화 (M11): 높을수록 덜 오르고, 고교 때는 40 근처에서 멈춘다.
+ * 실제로 바뀐 만큼 돌려준다
+ */
+export function gainPopularity(c: Career, d: number): number {
+  const p = c.popularity ?? 0;
+  let v = d;
+  if (d > 0) {
+    v *= Math.max(0, 1 - p / 110);
+    if (!c.pro) v *= Math.max(0, 1 - p / 40);
+  }
+  c.popularity = clamp(p + v, 0, 100);
+  return c.popularity - p;
+}
+
+/** 인기는 매주 식는다. 높을수록 더 빨리 */
 export function popularityDecay(c: Career) {
-  c.popularity = Math.max(0, (c.popularity ?? 0) - 0.15);
+  const p = c.popularity ?? 0;
+  c.popularity = Math.max(0, p - (c.pro ? 0.1 : 0.05) - p * 0.004);
 }
 
 export interface InterviewChoice {

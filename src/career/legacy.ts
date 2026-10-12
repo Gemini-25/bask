@@ -7,7 +7,7 @@ import { WEEKS_PER_YEAR, type Career, type GameRecord } from './career';
 export const RETIRE_MIN_AGE = 31;
 export const RETIRE_FORCE_AGE = 39;
 /** 명예의 전당 점수 기준 */
-export const HOF_SCORE = 50;
+export const HOF_SCORE = 100;
 
 export interface RetireSummary {
   name: string;

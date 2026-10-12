@@ -9,6 +9,7 @@ import type { Career, PendingGame } from './career';
 import { depthChart } from './match';
 import type { League } from './league';
 import { withRival } from './people';
+import { gainPopularity } from './fans';
 
 /** 시즌 시작 주에서 몇 주 뒤 (정규시즌 한가운데, 이 주는 경기가 없다) */
 export const ALLSTAR_WEEK = 27;
@@ -110,7 +111,7 @@ export function runAllStar(c: Career, rng: Rng): AllStarWeekend {
   if (mySide >= 0) {
     notes.push(`올스타에 뽑혔다! (${mySide === 0 ? '드림팀' : '매직팀'})`);
     c.trophies.push(`${tag} 올스타`);
-    c.popularity = Math.min(100, (c.popularity ?? 0) + 3);
+    gainPopularity(c, 3);
   }
 
   // 3점 콘테스트: 3점 능력 상위 6명, 상위 3명 결승
@@ -145,7 +146,7 @@ export function runAllStar(c: Career, rng: Rng): AllStarWeekend {
   ] as const) {
     if (w.id === 'me') {
       c.trophies.push(`${tag} ${label} 우승`);
-      c.popularity = Math.min(100, (c.popularity ?? 0) + 5);
+      gainPopularity(c, 5);
       c.money += 1000;
       notes.push(`${label} 우승! 상금 1000만 원`);
     } else if (rows.some((r) => r.id === 'me')) notes.push(`${label}에 나갔다.`);
@@ -245,7 +246,7 @@ export function recordNational(c: Career, week: number, opp: string, score: [num
     camp.result = score[0] > score[1] ? '우승' : '준우승';
     if (camp.result === '우승') {
       c.trophies.push(`${camp.season + 1}시즌 아시아컵 우승 (국가대표)`);
-      c.popularity = Math.min(100, (c.popularity ?? 0) + 10);
+      gainPopularity(c, 10);
       return '아시아컵 우승! 태극기를 들고 코트를 돌았다!';
     }
     c.trophies.push(`${camp.season + 1}시즌 아시아컵 준우승 (국가대표)`);

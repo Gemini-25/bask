@@ -221,7 +221,8 @@ describe('은퇴, 명예의 전당, 2세 (L10~L12)', () => {
     expect(trophyPoints('3시즌 올스타전 MVP')).toBe(1);
     expect(trophyPoints('3시즌 우승')).toBe(6);
     expect(trophyPoints('3시즌 올스타')).toBe(2);
-    c.trophies.push('1시즌 MVP', '2시즌 MVP', '3시즌 MVP', '3시즌 우승', '4시즌 우승', '1시즌 올스타', '2시즌 올스타', '3시즌 올스타');
+    c.trophies.push('1시즌 MVP', '2시즌 MVP', '3시즌 MVP', '4시즌 MVP', '5시즌 MVP', '3시즌 우승', '4시즌 우승', '6시즌 우승');
+    for (let s = 1; s <= 7; s++) c.trophies.push(`${s}시즌 올스타`, `${s}시즌 베스트 5`);
     expect(hofScore(c)).toBeGreaterThanOrEqual(HOF_SCORE);
     c.pro!.season = 6;
     c.me.age = 33;

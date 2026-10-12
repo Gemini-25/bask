@@ -6,13 +6,13 @@ import type { Team, TeamInfo } from '../data/teams';
 import { simulateGame } from '../sim/engine';
 import { boxScore, type Line } from '../sim/stats';
 import type { GameResult, ShotKind } from '../sim/types';
-import { addXp, CONDITION_GAME, dateOf, growthMult, MAX_RATING, teammates, type Career, type GameLine, type Injury, type Points } from './career';
+import { addXp, CONDITION_GAME, dateOf, growthMult, MAX_RATING, teammates, trustStep, type Career, type GameLine, type Injury, type Points } from './career';
 import { generateSchoolRoster, schoolById, type SchoolInfo } from './schools';
 import { checkAbilities } from './abilities';
 import { allStarTeam, DREAM, KOREA, koreaTeam, MAGIC, NATIONS, nationTeam, recordNational } from './allstar';
 import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
-import { afterGameFans, interviewFor, type SnsPost } from './fans';
+import { afterGameFans, gainPopularity, interviewFor, type SnsPost } from './fans';
 import { leagueTeam } from './league';
 import { cheerBoost, gearBoost, has } from './money';
 import { leagueTeamName, recordProGame } from './pro';
@@ -352,7 +352,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
   // 감독 신뢰도: 잘하면 오르고, 공식전일수록 크게 움직인다
   const trustBefore = c.trust;
   const dt = ({ S: 4, A: 3, B: 1.5, C: 0.5, D: -1, '-': 0 }[grade] ?? 0) + (won ? 0.5 : 0);
-  if (!m.special) c.trust = Math.max(0, Math.min(100, c.trust + dt * (m.kind === 'official' ? 0.8 : 0.5)));
+  if (!m.special) c.trust = Math.max(0, Math.min(100, c.trust + trustStep(c.trust, dt * (m.kind === 'official' ? 0.8 : 0.5))));
 
   // 공식전이면 대진표에 기록하고, 대회가 끝났으면 성적 보상
   let tourNote: string | undefined;
@@ -421,7 +421,7 @@ function allStarResult(c: Career, g: GameResult, score: [number, number], myPid:
   if (c.allStar) c.allStar.game = { score, mvp };
   if (best >= 0 && best === myPid) {
     c.trophies.push(`${c.overseas ? '해외 ' : ''}${c.league!.season + 1}시즌 올스타전 MVP`);
-    c.popularity = Math.min(100, (c.popularity ?? 0) + 4);
+    gainPopularity(c, 4);
     return '올스타전 MVP! 트로피를 들어 올렸다!';
   }
   return `올스타전 MVP는 ${mvp}.`;
