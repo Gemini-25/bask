@@ -93,6 +93,7 @@ npm run report     # 100경기 돌려서 평균 통계를 실제 리그와 비�
 - [기획 결정 v1](docs/planning/02-decisions.md): 질문지 답변 정리, 해석, 열린 질문
 - [로드맵](docs/planning/03-roadmap.md): 마일스톤 M0~M13
 - [M9~M13 설계](docs/planning/04-next-design.md): 개발자 패널, 연출, 밸런스, 대학·성격, 남은 기획
+- [M14~ 설계](docs/planning/05-next-design.md): 인게임 에디터, MVP 밸런스, 동작 늘리기, 빠진 것, 콘텐츠
 - [M1 밸런스 리포트](docs/planning/m1-balance-report.txt), [M2 밸런스 리포트](docs/planning/m2-balance-report.txt), [M10 밸런스 리포트](docs/planning/m10-balance-report.txt): 200경기 평균 통계
 - [M11 밸런스 리포트](docs/planning/m11-balance-report.txt): 대충 / 잘 키우기 / 골고루 자동 플레이 비교
 - [M4 성장 리포트](docs/planning/m4-growth-report.txt), [M5 시즌 리포트](docs/planning/m5-season-report.txt): 배경별 1학년 1년 자동 플레이
