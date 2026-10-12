@@ -75,7 +75,7 @@ export function eventModal(c: Career, onDone: () => void) {
   const box = modal(
     `<h2>${esc(fill(c, def.title, ev.mate))}</h2>
     <p class="evtext">${esc(fill(c, def.text, ev.mate))}</p>
-    <div class="choices">${def.choices.map((ch, i) => `<button type="button" class="choice" data-ch="${i}"><b>${esc(ch.label)}</b><small>${esc(effectHint(ch.effect))}</small></button>`).join('')}</div>`,
+    <div class="choices">${def.choices.map((ch, i) => `<button type="button" class="choice" data-ch="${i}"><b>${esc(fill(c, ch.label, ev.mate))}</b><small>${esc(effectHint(ch.effect))}</small></button>`).join('')}</div>`,
   );
   box.querySelectorAll<HTMLElement>('[data-ch]').forEach(
     (b) =>

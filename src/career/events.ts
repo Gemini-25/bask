@@ -1,5 +1,5 @@
 // 이벤트 (L4, K8): 조건이 맞으면 주말에 가끔 일어난다. 선택지마다 효과가 다르다.
-// 글 안의 {me} {coach} {rival} {rivalSchool} {mate} {mentor} {school} 은 실제 이름으로 바뀐다.
+// 글 안의 {me} {coach} {rival} {rivalSchool} {mate} {mentor} {school} {hs} {nick} {love} 는 실제 이름으로 바뀐다.
 import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
@@ -8,8 +8,9 @@ import { gainPopularity } from './fans';
 import { addTrait, traitDef, type TraitId } from './personality';
 import { avgFriendship } from './people';
 import { signContract } from './pro';
-import { schoolById } from './schools';
+import { schoolById, type RosterEntry } from './schools';
 import { addAffection, meet, romanceOn, setStatus, type RomanceStatus } from './romance';
+import { addConfidence, confidenceOf } from './spirit';
 
 export interface Effect {
   P?: number;
@@ -42,6 +43,8 @@ export interface Effect {
   meet?: boolean;
   love?: number;
   loveStatus?: RomanceStatus;
+  /** 자신감 (M19) */
+  conf?: number;
 }
 
 export interface Choice {
@@ -508,6 +511,359 @@ EVENTS.push(
   },
 );
 
+// ───────────── M20: 이벤트 더 (학교·대학·프로·해외·자신감·별명) ─────────────
+const student = (c: Career) => !c.pro;
+const lastOfficial = (c: Career) => {
+  const g = c.games[c.games.length - 1];
+  return g && g.kind === 'official' && g.week === c.week - 1 ? g : null;
+};
+const age = (c: Career) => c.me.age ?? 0;
+
+EVENTS.push(
+  // 학교
+  {
+    id: 'exam',
+    title: '시험 기간',
+    text: '다음 주가 시험이다. 담임 선생님이 "운동부도 낙제는 안 봐준다"고 못을 박았다.',
+    cooldown: 20,
+    weight: 14,
+    when: (c) => student(c) && (month(c) === 4 || month(c) === 10),
+    choices: [
+      { label: '밤새 공부한다', effect: { M: 2, fatigue: 5, trust: 1, text: '성적표를 본 감독님이 처음으로 웃었다.' } },
+      { label: '몰래 체육관에 간다', effect: { chance: { p: 0.6, ok: { T: 3, text: '아무도 몰랐다. 슛 감각은 그대로다.' }, fail: { T: 1, trust: -3, text: '교감 선생님께 딱 걸렸다. 감독님까지 불려 갔다.' } } } },
+      { label: '벼락치기 + 아침 슈팅', effect: { T: 1, M: 1, fatigue: 3 } },
+    ],
+  },
+  {
+    id: 'schoolFest',
+    title: '학교 축제',
+    text: '축제 날, 학생회가 농구부에 이벤트 경기를 부탁했다. 운동장에 전교생이 모였다.',
+    cooldown: 40,
+    weight: 20,
+    when: (c) => student(c) && !c.college && month(c) === 9,
+    choices: [
+      { label: '덩크로 분위기를 띄운다', hint: '덩크가 되면 좋다', effect: { chance: { p: 0.7, ok: { pop: 2, conf: 4, friendsAll: 2, text: '함성이 학교 밖까지 들렸다.' }, fail: { conf: -3, text: '림에 걸려 튕겨 나왔다... 다들 웃었다. 나도 웃었다.' } } } },
+      { label: '전교생 자유투 대결', effect: { friendsAll: 3, xp: { freeThrow: 0.3 }, M: 1 } },
+      { label: '구경만 한다', effect: { fatigue: -6, condition: 1 } },
+    ],
+  },
+  {
+    id: 'alumni',
+    title: '졸업한 선배',
+    text: '프로에 간 {hs} 출신 선배가 체육관에 찾아왔다. "고등학교 때 제일 후회되는 거? 기본기 대충 한 거."',
+    once: true,
+    weight: 18,
+    when: (c) => student(c) && c.week >= 20,
+    choices: [
+      { label: '기본기 비결을 묻는다', effect: { xp: { consistency: 0.4, layup: 0.3 }, conf: 2 } },
+      { label: '프로 생활을 묻는다', effect: { M: 2, xp: { iq: 0.3 }, text: '"몸 관리가 반이야." 선배가 웃었다.' } },
+    ],
+  },
+  {
+    id: 'scout',
+    title: '관중석의 스카우트',
+    text: '관중석 맨 위에 프로 구단 점퍼를 입은 사람이 노트를 펴고 앉아 있다. 나를 보러 온 걸까?',
+    cooldown: 16,
+    weight: 22,
+    when: (c) => !c.pro && dateOf(c.week).grade >= 3 && !!lastOfficial(c),
+    choices: [
+      { label: '보여 주자', effect: { conf: 4, xp: { competitive: 0.4 }, fatigue: 3, text: '다음 경기가 기다려진다.' } },
+      { label: '평소대로', effect: { xp: { composure: 0.5 }, text: '누가 보든 내 농구를 하면 된다.' } },
+    ],
+  },
+  {
+    id: 'mateHurt',
+    title: '다친 팀원',
+    text: '{mate}이(가) 발목을 다쳐 몇 주 못 뛴다. 그 자리는 당분간 비어 있다.',
+    mate: 'random',
+    cooldown: 24,
+    weight: 8,
+    when: (c) => c.week >= 6 && teammates(c).length >= 6,
+    choices: [
+      { label: '병문안을 간다', effect: { friend: 8, M: 1, text: '{mate}이(가) "금방 돌아간다"며 주먹을 내밀었다.' } },
+      { label: '그 자리를 노린다', effect: { trust: 2, friend: -4, xp: { competitive: 0.3 }, T: 1 } },
+    ],
+  },
+  {
+    id: 'nightCourt',
+    title: '새벽 코트의 고수',
+    text: '새벽 공원 코트에 처음 보는 아저씨가 혼자 슛을 쏜다. "한 판 할래? 11점 먼저."',
+    cooldown: 20,
+    weight: 10,
+    when: (c) => (c.counts.street ?? 0) >= 1 && !c.injury,
+    choices: [
+      { label: '붙는다', effect: { chance: { p: 0.55, ok: { conf: 5, xp: { ballHandling: 0.4 }, text: '11-9. 아저씨가 "예전엔 내가 국가대표였는데" 하며 웃었다.' }, fail: { conf: -2, xp: { hustle: 0.3, iq: 0.3 }, text: '7-11. 한 번도 못 막았다. 저 스텝은 뭐지?' } } } },
+      { label: '구경하며 배운다', effect: { xp: { iq: 0.4 }, text: '쓸데없는 동작이 하나도 없다.' } },
+    ],
+  },
+  {
+    id: 'parentsGame',
+    title: '부모님의 응원',
+    text: '관중석에 부모님이 와 계셨다. 엄마는 직접 만든 응원 수건을 흔들고 있다.',
+    cooldown: 24,
+    weight: 12,
+    when: (c) => !c.overseas && !!lastOfficial(c),
+    choices: [
+      { label: '경기 끝나고 같이 밥 먹는다', effect: { condition: 1, M: 2, fatigue: -4 } },
+      { label: '손 흔들고 바로 훈련', effect: { T: 2, xp: { focus: 0.2 } } },
+    ],
+  },
+  {
+    id: 'dream',
+    title: '이상한 꿈',
+    text: '꿈에서 꽉 찬 경기장 한가운데 서 있었다. 전광판에 내 이름이 떠 있었다.',
+    cooldown: 30,
+    weight: 6,
+    when: (c) => c.week >= 4,
+    choices: [
+      { label: '좋은 징조다', effect: { conf: 3, condition: 1 } },
+      { label: '꿈은 꿈일 뿐', effect: { xp: { focus: 0.3 } } },
+    ],
+  },
+  // 대학
+  {
+    id: 'lecture',
+    title: '교양 수업',
+    text: '"스포츠 심리학" 수업. 교수님이 "긴장은 적이 아니라 연료"라고 칠판에 썼다.',
+    cooldown: 24,
+    weight: 14,
+    when: (c) => !!c.college && !c.pro,
+    choices: [
+      { label: '열심히 듣는다', effect: { xp: { composure: 0.4, focus: 0.3 }, M: 1 } },
+      { label: '맨 뒤에서 잔다', effect: { fatigue: -8, text: '출석 체크 소리에 깼다.' } },
+    ],
+  },
+  {
+    id: 'campusStar',
+    title: '캠퍼스 스타',
+    text: '학교 신문 1면에 내 사진이 실렸다. 학생 식당에서 다들 쳐다본다.',
+    cooldown: 30,
+    weight: 16,
+    when: (c) => !!c.college && !c.pro && lastGames(c, 3).filter((g) => g.grade === 'S' || g.grade === 'A').length >= 2,
+    choices: [
+      { label: '즐긴다', effect: { pop: 2, conf: 3 } },
+      { label: '모자를 푹 눌러쓴다', effect: { xp: { focus: 0.3 }, condition: 1 } },
+    ],
+  },
+  // 자신감·별명 (M19)
+  {
+    id: 'confLow',
+    title: '바닥난 자신감',
+    text: '공을 잡으면 패스할 곳부터 찾게 된다. 슛을 쏘는 게 무섭다.',
+    cooldown: 10,
+    weight: 45,
+    when: (c) => confidenceOf(c) < 25,
+    choices: [
+      { label: '{mentor} 선생님께 전화한다', effect: { conf: 10, M: 1, text: '"넌 원래 잘하는 애야. 슛 하나 놓친 걸로 안 변해."' } },
+      { label: '골밑 슛 1000개', effect: { conf: 6, xp: { layup: 0.3, consistency: 0.3 }, fatigue: 6 } },
+      { label: '{mate}와(과) 밤새 수다', effect: { conf: 7, friend: 4, fatigue: -3 } },
+    ],
+    mate: 'best',
+  },
+  {
+    id: 'confHigh',
+    title: '들뜬 마음',
+    text: '감독 {coach}: "요즘 잘 풀리지? 그럴 때 다치고 그럴 때 무너진다. 들뜨지 마라."',
+    cooldown: 16,
+    weight: 30,
+    when: (c) => confidenceOf(c) >= 85,
+    choices: [
+      { label: '"명심하겠습니다."', effect: { conf: -5, trust: 2, xp: { focus: 0.4 } } },
+      { label: '"저 지금 최고예요."', effect: { conf: 2, trust: -2, xp: { competitive: 0.3 } } },
+    ],
+  },
+  {
+    id: 'nickHeadline',
+    title: "'{nick}'",
+    text: "신문 기사 제목에 '{nick} {me}'라고 붙었다. 이제 다들 그렇게 부른다.",
+    once: true,
+    weight: 70,
+    when: (c) => !!c.nickname,
+    choices: [
+      { label: '마음에 든다', effect: { conf: 5, pop: 1 } },
+      { label: '쑥스럽다', effect: { xp: { composure: 0.3 }, condition: 1 } },
+    ],
+  },
+  {
+    id: 'comboSign',
+    title: '둘만의 사인',
+    text: '{mate}와(과) 눈만 마주쳐도 뭘 할지 안다. 둘만 아는 사인을 하나 더 만들기로 했다.',
+    mate: 'best',
+    cooldown: 20,
+    weight: 12,
+    when: (c) => (c.combos ?? []).length > 0,
+    choices: [
+      { label: '밤새 맞춘다', effect: { friend: 5, xp: { teamwork: 0.4, passing: 0.2 }, fatigue: 4 } },
+      { label: '경기에서 바로 써 본다', effect: { friend: 3, conf: 2 } },
+    ],
+  },
+);
+
+// 프로·해외
+EVENTS.push(
+  {
+    id: 'charity',
+    title: '자선 농구 교실',
+    text: '구단이 어린이 농구 교실에 와 달라고 부탁했다. 아이들 30명이 기다린다.',
+    cooldown: 30,
+    weight: 14,
+    when: (c) => !!c.pro && !c.overseas,
+    choices: [
+      { label: '하루 종일 같이 뛴다', effect: { pop: 3, fatigue: 6, xp: { leadership: 0.4 }, text: '아이들이 내 등번호를 외쳤다.' } },
+      { label: '사인회만 한다', effect: { pop: 1, condition: 1 } },
+    ],
+  },
+  {
+    id: 'vetAdvice',
+    title: '베테랑의 조언',
+    text: '팀 최고참 {mate}이(가) 원정 버스에서 옆자리에 앉았다. "프로는 경기보다 회복 싸움이야."',
+    mate: 'senior',
+    once: true,
+    weight: 30,
+    when: (c) => !!c.pro && c.pro.season <= 1 && c.week % 48 >= 12,
+    choices: [
+      { label: '회복 루틴을 배운다', effect: { fatigue: -10, xp: { stamina: 0.3 }, friend: 5 } },
+      { label: '수비 요령을 묻는다', effect: { xp: { perimeterD: 0.4, iq: 0.3 }, friend: 5 } },
+    ],
+  },
+  {
+    id: 'contractYear',
+    title: '계약 마지막 해',
+    text: '올해가 계약 마지막 해다. 기자들이 "FA 대박" 이야기를 꺼내기 시작했다.',
+    cooldown: 40,
+    weight: 30,
+    when: (c) => !!c.pro && c.pro.years === 1 && c.week % 48 >= 8 && c.week % 48 <= 20,
+    choices: [
+      { label: '이를 악문다', effect: { T: 3, P: 2, fatigue: 6, conf: 2 } },
+      { label: '에이전트에게 맡기고 농구만', effect: { M: 3, xp: { composure: 0.4 } } },
+    ],
+  },
+  {
+    id: 'variety',
+    title: '예능 섭외',
+    text: '주말 예능 프로그램에서 출연 제안이 왔다. 출연료도 꽤 된다.',
+    cooldown: 30,
+    weight: 16,
+    when: (c) => !!c.pro && (c.popularity ?? 0) >= 40,
+    choices: [
+      { label: '나간다', effect: { pop: 4, money: 300, fatigue: 6, trust: -1, text: '덩크 슛 한 장면이 실시간 검색어에 올랐다.' } },
+      { label: '시즌 중엔 안 한다', effect: { trust: 2, xp: { focus: 0.3 } } },
+    ],
+  },
+  {
+    id: 'trashTalk',
+    title: '상대 에이스의 도발',
+    text: '경기 전 인터뷰에서 상대 에이스가 말했다. "{me}? 아직 멀었죠."',
+    cooldown: 18,
+    weight: 12,
+    when: (c) => !!c.pro && c.games.filter((g) => g.label.includes('정규')).length >= 5,
+    choices: [
+      { label: '"코트에서 보자."', effect: { conf: 4, xp: { competitive: 0.4 }, pop: 1 } },
+      { label: '못 들은 척', effect: { xp: { composure: 0.5 } } },
+    ],
+  },
+  {
+    id: 'boo',
+    title: '원정 야유',
+    text: '원정 경기장. 공만 잡으면 야유가 쏟아진다. 오늘따라 슛이 안 들어갔다.',
+    cooldown: 16,
+    weight: 18,
+    when: (c) => {
+      const g = c.games[c.games.length - 1];
+      return !!c.pro && !!g && !g.home && g.week === c.week - 1 && (g.grade === 'C' || g.grade === 'D');
+    },
+    choices: [
+      { label: '다음엔 조용하게 만든다', effect: { chance: { p: 0.6, ok: { conf: 3, xp: { competitive: 0.3 }, text: '야유가 연료가 됐다.' }, fail: { conf: -3, text: '그날 밤 잠이 안 왔다.' } } } },
+      { label: '관중은 관중일 뿐', effect: { xp: { composure: 0.4 }, conf: 1 } },
+    ],
+  },
+  {
+    id: 'signature',
+    title: '시그니처 농구화',
+    text: '스포츠 브랜드가 내 이름을 단 시그니처 농구화를 만들자고 한다!',
+    once: true,
+    weight: 60,
+    when: (c) => !!c.pro && (c.popularity ?? 0) >= 75,
+    choices: [
+      { label: '디자인까지 직접 한다', effect: { money: 8000, pop: 5, conf: 4, text: '출시 첫날 매진됐다.' } },
+      { label: '이름만 빌려준다', effect: { money: 6000, pop: 3 } },
+    ],
+  },
+  {
+    id: 'rookieMentor',
+    title: '신인 후배',
+    text: '올해 들어온 신인 {mate}이(가) 매일 내 슛 훈련을 지켜본다. 예전의 나 같다.',
+    mate: 'junior',
+    cooldown: 40,
+    weight: 14,
+    when: (c) => !!c.pro && c.pro.season >= 4,
+    choices: [
+      { label: '같이 훈련하자고 한다', effect: { friend: 8, xp: { leadership: 0.5, teamwork: 0.2 }, fatigue: 3 } },
+      { label: '"보고 배워."', effect: { xp: { competitive: 0.2 }, conf: 1 } },
+    ],
+  },
+  {
+    id: 'hometown',
+    title: '모교 방문',
+    text: '{hs} 농구부에서 특강을 부탁했다. 그 체육관 냄새가 그대로다.',
+    once: true,
+    weight: 30,
+    when: (c) => !!c.pro && c.pro.season >= 2 && !c.overseas,
+    choices: [
+      { label: '후배들에게 농구화를 선물한다', effect: { money: -200, pop: 3, M: 2, text: '후배들이 "선배님처럼 될게요!"라고 소리쳤다.' } },
+      { label: '특강을 한다', effect: { xp: { leadership: 0.5 }, conf: 2 } },
+    ],
+  },
+  {
+    id: 'ownerDinner',
+    title: '구단주 만찬',
+    text: '구단주가 저녁 식사에 불렀다. "자네가 이 팀의 얼굴이야."',
+    cooldown: 48,
+    weight: 16,
+    when: (c) => !!c.pro && !c.overseas && c.trust >= 65 && (c.popularity ?? 0) >= 35,
+    choices: [
+      { label: '"우승하겠습니다."', effect: { trust: 3, conf: 3, xp: { leadership: 0.3 } } },
+      { label: '"동료들 연봉도 챙겨 주세요."', effect: { friendsAll: 4, trust: 1 } },
+    ],
+  },
+  {
+    id: 'homesick',
+    title: '향수병',
+    text: '해외 생활 몇 달째. 김치찌개가 너무 먹고 싶다. 말도 잘 안 통한다.',
+    cooldown: 20,
+    weight: 22,
+    when: (c) => c.overseas,
+    choices: [
+      { label: '한식당을 찾아 30km 운전', effect: { condition: 1, money: -20, M: 2, text: '된장찌개 한 숟가락에 눈물이 났다.' } },
+      { label: '버틴다', effect: { M: 3, conf: -2, xp: { composure: 0.3 } } },
+    ],
+  },
+  {
+    id: 'language',
+    title: '말 배우기',
+    text: '라커룸 농담을 못 알아들어서 혼자만 안 웃었다. 말을 배워 볼까?',
+    cooldown: 30,
+    weight: 16,
+    when: (c) => c.overseas,
+    choices: [
+      { label: '동료들한테 배운다', effect: { friendsAll: 4, xp: { teamwork: 0.4, iq: 0.2 } } },
+      { label: '농구는 만국 공통어', effect: { xp: { competitive: 0.3 }, conf: 1 } },
+    ],
+  },
+  {
+    id: 'twilight',
+    title: '은퇴 고민',
+    text: '아침에 일어나면 무릎이 먼저 인사한다. 기자가 물었다. "은퇴 생각은 없으세요?"',
+    cooldown: 48,
+    weight: 30,
+    when: (c) => !!c.pro && age(c) >= 33,
+    choices: [
+      { label: '"아직 보여 줄 게 남았습니다."', effect: { conf: 5, xp: { competitive: 0.4 }, fatigue: 4 } },
+      { label: '"후배들 길을 열어 줘야죠."', effect: { xp: { leadership: 0.5 }, friendsAll: 3, M: 2 } },
+    ],
+  },
+);
+
 export interface PendingEvent {
   id: string;
   mate?: string;
@@ -533,7 +889,10 @@ export function rollEvent(c: Career, rng: Rng): PendingEvent | null {
 
 function pickMate(c: Career, e: EventDef, rng: Rng): string | undefined {
   if (!e.mate) return undefined;
-  const list = teammates(c).filter((x) => (e.mate === 'senior' ? x.grade === 3 : e.mate === 'junior' ? x.grade === 1 : true));
+  // 프로는 학년이 없어서 나이로 (선배 31살 넘게, 후배 23살 아래)
+  const senior = (x: RosterEntry) => (c.pro ? (x.player.age ?? 0) >= 31 : x.grade === 3);
+  const junior = (x: RosterEntry) => (c.pro ? (x.player.age ?? 99) <= 23 : x.grade === 1);
+  const list = teammates(c).filter((x) => (e.mate === 'senior' ? senior(x) : e.mate === 'junior' ? junior(x) : true));
   if (!list.length) return undefined;
   if (e.mate === 'best') return list.reduce((a, b) => ((c.friends[a.player.id] ?? 0) >= (c.friends[b.player.id] ?? 0) ? a : b)).player.id;
   return rng.pick(list).player.id;
@@ -562,7 +921,9 @@ export function fill(c: Career, text: string, mate?: string) {
     .replace(/\{mate\}/g, mateName)
     .replace(/\{mentor\}/g, c.mentor.name)
     .replace(/\{school\}/g, schoolById(c.school).name)
-    .replace(/\{love\}/g, c.romance?.name ?? '그 사람');
+    .replace(/\{love\}/g, c.romance?.name ?? '그 사람')
+    .replace(/\{hs\}/g, schoolById(c.hsSchool ?? c.school).name)
+    .replace(/\{nick\}/g, c.nickname ?? c.me.name);
 }
 
 /** 선택지를 고르면 효과를 적용하고 결과 글을 돌려준다 */
@@ -596,6 +957,7 @@ export function resolveEvent(c: Career, ev: PendingEvent, choice: number): strin
       for (const [k, v] of Object.entries(e.xp)) addXp(c, k as RatingKey, v!, ups);
       for (const [k, n] of Object.entries(ups)) out.push(`${RATING_LABEL[k as RatingKey]} +${n}`);
     }
+    if (e.conf) addConfidence(c, e.conf);
     if (e.street) c.streetPending = true;
     if (e.meet && !c.romance) meet(c, rng);
     if (e.love) {
@@ -629,6 +991,7 @@ export function effectHint(e: Effect): string {
   if (e.trade) parts.push('다른 팀으로');
   if (e.trait) parts.push(`성격: ${traitDef(e.trait).label}`);
   if (e.love) parts.push(`호감 ${e.love > 0 ? '+' : ''}${e.love}`);
+  if (e.conf) parts.push(`자신감 ${e.conf > 0 ? '+' : ''}${e.conf}`);
   if (e.xp) parts.push(Object.keys(e.xp).map((k) => `${RATING_LABEL[k as RatingKey]} 경험치`).join(', '));
   return parts.join(' · ');
 }

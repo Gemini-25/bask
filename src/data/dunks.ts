@@ -25,8 +25,13 @@ export const DUNKS: DunkDef[] = [
   { id: 'd360', need: { dunk: 80, jump: 75, agility: 68 }, flash: 3 },
   { id: 'cradle', need: { dunk: 72, jump: 70, agility: 60 }, flash: 2.3 },
   { id: 'putback', need: { dunk: 55, jump: 58 }, flash: 0, situational: true },
+  // M20
+  { id: 'hammer', need: { dunk: 74, strength: 70, jump: 66 }, flash: 2.2 },
+  { id: 'superman', need: { dunk: 82, jump: 84 }, flash: 2.6 },
   { id: 'between', need: { dunk: 86, jump: 82, agility: 74 }, flash: 3.4, contestOnly: true },
   { id: 'ftline', need: { dunk: 88, jump: 90 }, flash: 3.8, contestOnly: true },
+  { id: 'scorpion', need: { dunk: 84, jump: 84, agility: 70 }, flash: 3.5, contestOnly: true },
+  { id: 'selfOop', need: { dunk: 82, jump: 80, ballHandling: 70 }, flash: 3.6, contestOnly: true },
 ];
 
 export function dunkUnlocked(p: Player, d: DunkDef) {

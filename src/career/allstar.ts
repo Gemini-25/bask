@@ -1,7 +1,7 @@
 // 올스타 위크엔드 (L6, L8)와 국가대표 (L7)
 import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
-import { dunkList } from '../data/dunks';
+import { DUNKS, dunkList } from '../data/dunks';
 import { generateTeam, type Team, type TeamInfo } from '../data/teams';
 import { overall, type Player } from '../data/player';
 import type { DunkStyle } from '../sim/types';
@@ -85,8 +85,11 @@ function threeRound(rng: Rng, p: Player): ContestRound {
   return { score, shots };
 }
 
+const flashOf = (d: DunkStyle) => DUNKS.find((x) => x.id === d)?.flash ?? 1;
+
 function dunkRound(rng: Rng, p: Player, used: DunkStyle[]): ContestRound {
-  const list = dunkList(p);
+  // 덜 화려한 것부터 (콘테스트 덩크가 맨 끝)
+  const list = dunkList(p).sort((a, b) => flashOf(a) - flashOf(b));
   // 아직 안 보여준 가장 화려한 덩크부터
   const fresh = list.filter((d) => !used.includes(d));
   const from = fresh.length ? fresh : list;

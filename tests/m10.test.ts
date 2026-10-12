@@ -43,11 +43,11 @@ describe('연출 (M10)', () => {
     expect(acts.has(ACT.FTLINE)).toBe(false);
   });
 
-  it('덩크 12가지 (M16에 크레들·풋백), 능력치가 되면 열린다', () => {
-    expect(DUNKS.length).toBe(12);
+  it('덩크 16가지 (M16에 크레들·풋백, M20에 해머·슈퍼맨·스콜피온·셀프 앨리웁), 능력치가 되면 열린다', () => {
+    expect(DUNKS.length).toBe(16);
     const p = generatePlayer(new Rng(1), 'SF', 0, 1);
     for (const k of RATING_KEYS) p.r[k] = 95;
-    expect(dunkList(p).length).toBe(12);
+    expect(dunkList(p).length).toBe(16);
   });
 
   it('곡 데이터: 멜로디 길이는 마디(8칸)의 배수, 화음은 세 음', () => {

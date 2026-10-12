@@ -511,6 +511,42 @@ function poseFor(f: Figure, leg: number): Pose {
       base.legB = { a: 0.4, len: leg - 1 };
       base.eyes = 'focus';
       break;
+    // 덩크 (M20)
+    case ACT.HAMMER:
+      // 두 손으로 머리 뒤까지 젖혔다가 망치처럼 내리친다
+      base.armF = { a: air && f.lift > 6 ? 3.7 : 3.0, len: 6 };
+      base.armB = { a: air && f.lift > 6 ? 3.6 : 2.9, len: 6 };
+      base.legF = { a: 0.7, len: leg - 1 };
+      base.legB = { a: 0.2, len: leg - 1 };
+      base.lean = -1;
+      base.eyes = 'angry';
+      break;
+    case ACT.SUPERMAN:
+      // 몸을 눕혀 한 팔을 쭉 뻗고 다리는 뒤로
+      base.armF = { a: 2.4, len: 7 };
+      base.armB = { a: 1.6, len: 5 };
+      base.legF = { a: -0.5, len: leg };
+      base.legB = { a: -0.9, len: leg };
+      base.lean = 1;
+      base.eyes = 'focus';
+      break;
+    case ACT.SCORPION:
+      // 공을 머리 뒤로, 다리를 뒤로 높이 차올린다
+      base.armF = { a: 3.5, len: 6 };
+      base.armB = { a: 3.4, len: 5 };
+      base.legF = { a: 0.6, len: leg - 1 };
+      base.legB = { a: -1.7, len: leg - 1 };
+      base.lean = -1;
+      base.eyes = 'focus';
+      break;
+    case ACT.SELFOOP:
+      // 스스로 띄운 공을 공중에서 잡는다
+      base.armF = { a: air ? 2.9 + 0.2 * Math.sin(t * 10) : 2.4, len: 6 };
+      base.armB = { a: air ? 2.7 : 1.4, len: 5 };
+      base.legF = { a: 0.9, len: leg - 1 };
+      base.legB = { a: 0.3, len: leg - 1 };
+      base.eyes = 'happy';
+      break;
     case ACT.SCREEN:
       base.armF = { a: 0.9, len: 3 };
       base.armB = { a: 0.9, len: 3 };

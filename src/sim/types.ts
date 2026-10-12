@@ -155,6 +155,11 @@ export const ACT = {
   SNAP: 55,
   KILLER: 56,
   CRADLE: 57,
+  // 덩크 (M20)
+  HAMMER: 58,
+  SUPERMAN: 59,
+  SCORPION: 60,
+  SELFOOP: 61,
 } as const;
 
 /** 드리블 기술 이름 */
@@ -187,7 +192,7 @@ export type ShotMove =
 /** 슛 상황 (M17 분석): 받자마자 / 드리블하다 / 돌파 끝 / 포스트 / 풋백 / 속공 / 그 밖 */
 export type ShotCtx = 'catch' | 'pullup' | 'drive' | 'post' | 'putback' | 'fast' | 'other';
 
-export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360' | 'double' | 'elbow' | 'between' | 'ftline' | 'cradle' | 'putback';
+export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360' | 'double' | 'elbow' | 'between' | 'ftline' | 'cradle' | 'putback' | 'hammer' | 'superman' | 'scorpion' | 'selfOop';
 export const DUNK_LABEL: Record<DunkStyle, string> = {
   one: '원핸드 덩크',
   two: '투핸드 덩크',
@@ -201,6 +206,10 @@ export const DUNK_LABEL: Record<DunkStyle, string> = {
   ftline: '자유투 라인 덩크',
   cradle: '크레들 덩크',
   putback: '풋백 덩크',
+  hammer: '해머 덩크',
+  superman: '슈퍼맨 덩크',
+  scorpion: '스콜피온 덩크',
+  selfOop: '셀프 앨리웁 덩크',
 };
 export const DUNK_ACT: Record<DunkStyle, number> = {
   one: ACT.DUNK,
@@ -215,6 +224,10 @@ export const DUNK_ACT: Record<DunkStyle, number> = {
   ftline: ACT.FTLINE,
   cradle: ACT.CRADLE,
   putback: ACT.DUNK2,
+  hammer: ACT.HAMMER,
+  superman: ACT.SUPERMAN,
+  scorpion: ACT.SCORPION,
+  selfOop: ACT.SELFOOP,
 };
 
 export const FLAG_STUN = 1;

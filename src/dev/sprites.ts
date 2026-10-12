@@ -28,7 +28,7 @@ acts.forEach(([name, act], k) => {
     const pl = players[(k + fi) % 3];
     const x = 14 + col * 52 + fi * 11;
     const y = 50 + row * 70 + (fi % 2) * 4;
-    const air: number[] = [ACT.SHOOT, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.HANG, ACT.DUNK2, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE, ACT.STEPBACK, ACT.SIDESTEP, ACT.FADE, ACT.TURNFADE, ACT.ONELEG, ACT.SCOOP, ACT.REVLAY, ACT.FINGER, ACT.POWERLAY, ACT.CLUTCH, ACT.POSTER, ACT.CONTACT, ACT.SKYHOOK, ACT.CRADLE];
+    const air: number[] = [ACT.SHOOT, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.HANG, ACT.DUNK2, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE, ACT.STEPBACK, ACT.SIDESTEP, ACT.FADE, ACT.TURNFADE, ACT.ONELEG, ACT.SCOOP, ACT.REVLAY, ACT.FINGER, ACT.POWERLAY, ACT.CLUTCH, ACT.POSTER, ACT.CONTACT, ACT.SKYHOOK, ACT.CRADLE, ACT.HAMMER, ACT.SUPERMAN, ACT.SCORPION, ACT.SELFOOP];
     const lift = air.includes(act) ? 8 : 0;
     drawFigure(ctx, x, y, { pl, kit: { jersey: fi % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing, flip, act, speed: (act === ACT.IDLE && fi === 0) || (act === ACT.STANCE && fi === 1) ? 4 : 0, lift, time: 0.3, seed: k, tired: false });
   });
