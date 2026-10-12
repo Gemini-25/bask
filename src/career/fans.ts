@@ -22,10 +22,12 @@ function fill(t: string, c: Career, line: GameLine | null, team: string) {
 }
 
 /** 경기 뒤 인기 변화와 SNS 글 */
-export function afterGameFans(c: Career, grade: string, line: GameLine | null, won: boolean, big: boolean, team: string): { dPop: number; posts: SnsPost[] } {
+export function afterGameFans(c: Career, grade: string, line: GameLine | null, won: boolean, big: boolean, team: string, boost = 1): { dPop: number; posts: SnsPost[] } {
   const rng = Rng.fromState(c.rng);
   const g = { S: 3, A: 1.6, B: 0.6, C: 0.1, D: -0.6, '-': -0.2 }[grade] ?? 0;
-  const dPop = (g + (won ? 0.3 : 0) + (big ? 1.5 : 0)) * (c.pro ? 0.6 : 0.4);
+  const raw = (g + (won ? 0.3 : 0) + (big ? 1.5 : 0)) * (c.pro ? 0.6 : 0.4);
+  // 응원단이 있는 홈 경기는 더 오른다 (떨어질 땐 그대로)
+  const dPop = raw > 0 ? raw * boost : raw;
   c.popularity = clamp((c.popularity ?? 0) + dPop, 0, 100);
   const pool = !line || line.sec < 120 ? BENCH : grade === 'S' || grade === 'A' ? GOOD : grade === 'B' || grade === 'C' ? OK : BAD;
   const n = 1 + Math.round((c.popularity ?? 0) / 35) + (big ? 1 : 0);

@@ -2,13 +2,14 @@ import Phaser from 'phaser';
 import galmuri11 from 'galmuri/dist/Galmuri11.woff2?url';
 import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
-import { $, closeModal, download, modal, modalOpen, onScreen, pickFile, screen, show, toast } from './app/dom';
+import { $, closeModal, download, modal, modalOpen, onScreen, pickFile, screen, show, toast, type ScreenId } from './app/dom';
 import { DevPanel } from './app/dev';
 import { sound } from './view/sound';
-import { allStarModal, awardsModal, contractModal, draftModal, eventModal, preGameModal, renderResult, retireModal, retireSummaryModal, weekModal } from './app/flow';
-import { checkAchievements, enshrine, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
+import type { SongId } from './view/music';
+import { allStarModal, awardsModal, contractModal, draftModal, eventModal, preGameModal, renderResult, retireModal, retireSummaryModal, seasonCardModal, weekModal } from './app/flow';
+import { checkAchievements, enshrine, hallOfFame, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
 import { teamInfoOf } from './career/match';
-import { moneyText } from './career/money';
+import { itemDef, moneyText } from './career/money';
 import { Home } from './app/home';
 import { renderTitle } from './app/title';
 import { createCareer, dateOf, dateText, myOverall, type Career } from './career/career';
@@ -22,6 +23,7 @@ import { generateTeam, TEAM_INFOS, type Team } from './data/teams';
 import { simulateGame } from './sim/engine';
 import type { GameResult } from './sim/types';
 import { CourtScene, type SceneHost, type TeamLook } from './view/CourtScene';
+import type { ArenaDeco } from './view/arena';
 import { VIEW_H, VIEW_W } from './view/iso';
 import { colorDistance, numberColorFor, shade } from './view/pixel';
 import { Playback, type PlayMode } from './view/playback';
@@ -125,10 +127,11 @@ function setMode(m: PlayMode) {
   ui.setMode(m, hint);
 }
 
-function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exhibition' | 'career'; focus?: number; banner?: string; done?: () => void; tier?: number; gym?: string }) {
+function watch(game: GameResult, looks: [TeamLook, TeamLook], opts: { kind: 'exhibition' | 'career'; focus?: number; banner?: string; done?: () => void; tier?: number; gym?: string; deco?: ArenaDeco }) {
   const pb = new Playback(game);
   host.tier = opts.tier ?? 1;
   host.banner = opts.gym;
+  host.deco = opts.deco;
   paused = false;
   pb.speed = speed;
   pb.paused = paused;
@@ -241,6 +244,7 @@ function retireFlow(c: Career) {
       );
       c.retirePending = null;
       enshrine(s);
+      sound.music(true, 'ending');
       save();
       achievements();
       return s;
@@ -264,18 +268,25 @@ function afterWeek() {
   const c = career!;
   achievements();
   if (c.retired) {
+    sound.music(true, 'ending');
     retireSummaryModal(c.retired, { legacy: (s) => startLegacy(s), toTitle: () => toTitle() });
     return;
   }
   if (c.ceremony) {
-    awardsModal(c, () => {
-      save();
-      home.render(c);
-      afterWeek();
-    });
+    sound.music(true, 'ceremony');
+    // 내 시즌 카드를 먼저 보고 시상식으로
+    seasonCardModal(c, () =>
+      awardsModal(c, () => {
+        sound.music(true, songFor('home'));
+        save();
+        home.render(c);
+        afterWeek();
+      }),
+    );
     return;
   }
   if (c.draft) {
+    sound.music(true, 'ceremony');
     draftModal(c, () => {
       save();
       toHome();
@@ -329,6 +340,7 @@ function preGame() {
     match = playMatch(c);
     report = null;
   }
+  if (/플레이오프|챔피언|결승|왕중왕/.test(c.pendingGame?.label ?? '')) sound.music(true, 'tense');
   preGameModal(
     c,
     () => {
@@ -354,7 +366,25 @@ function watchMatch() {
   // 연습경기는 학교 체육관, 공식전은 대회장, 결승·왕중왕전은 큰 무대
   const tier = m.special ? (m.special === 'allstar' || m.label.includes('결승') ? 2 : 1) : m.pro ? (m.label.includes('챔피언') || m.label.includes('4강 플레이오프') ? 2 : 1) : m.kind === 'practice' ? 0 : m.label.includes('결승') || m.tour === 'kings' ? 2 : 1;
   const gym = m.pro ? '' : `${schoolById(m.home ? c.school : m.opponent).name} 농구부 파이팅`;
-  watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch, tier, gym });
+  watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch, tier, gym, deco: arenaDeco(c, m) });
+}
+
+/** 프로 경기장 장식: 홈팀 우승 배너, 영구결번, 내 홈 경기면 응원단과 인기만큼 찬 관중석 */
+function arenaDeco(c: Career, m: MatchSetup): ArenaDeco | undefined {
+  if (!m.pro || m.special || !c.league || !c.pro) return undefined;
+  const homeId = m.home ? c.pro.team : m.opponent;
+  const titles = c.league.history.filter((h) => h.champion === homeId).map((h) => h.season + 1);
+  const retired = hallOfFame()
+    .filter((h) => h.retiredTeam === homeId)
+    .map((h) => h.number);
+  return {
+    titles,
+    retired: [...new Set(retired)],
+    cheer: m.home ? (c.items ?? []).filter((id) => itemDef(id)?.kind === 'cheer') : [],
+    myNumber: c.me.number,
+    myName: c.me.name,
+    fill: m.home ? 0.3 + Math.min(1, (c.popularity ?? 0) / 100) * 0.7 : 0.75,
+  };
 }
 
 function finishMatch() {
@@ -418,7 +448,10 @@ function toTitle() {
       slot = s;
       career = c;
       toHome();
-      if (c.retired) retireSummaryModal(c.retired, { legacy: (x) => startLegacy(x), toTitle: () => toTitle() });
+      if (c.retired) {
+        sound.music(true, 'ending');
+        retireSummaryModal(c.retired, { legacy: (x) => startLegacy(x), toTitle: () => toTitle() });
+      }
     },
     newCareer(s) {
       startCareer(s);
@@ -530,7 +563,13 @@ soundButtons();
 document.addEventListener('click', (e) => {
   if ((e.target as HTMLElement).closest('button')) sound.play('click');
 });
-onScreen((s) => sound.music(s !== 'game'));
+/** 화면마다 곡: 타이틀, 고교 홈, 프로 홈, 플레이오프 (경기 화면은 관중 소리만) */
+function songFor(s: ScreenId): SongId {
+  if (s === 'title' || s === 'create' || !career) return 'title';
+  if (career.pro) return career.week % 48 >= 40 ? 'tense' : 'pro';
+  return 'school';
+}
+onScreen((s) => sound.music(s !== 'game', songFor(s)));
 
 boot();
 

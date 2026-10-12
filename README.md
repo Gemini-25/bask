@@ -12,7 +12,7 @@
 
 프로 쪽만 빨리 보고 싶으면 `play/sample-pre-draft-save.json`을 타이틀의 '파일 불러오기'로 넣으면 고3 마지막 주부터 시작한다 (다음 주가 드래프트).
 
-지금 버전은 **M9 개발자 패널** (M8 프로 커리어 끝까지 +): 선수를 만들어 고교 3년 동안 키우고, 드래프트로 프로 팀에 들어가 상을 받고, 올스타·국가대표·해외 리그를 거쳐 은퇴하면 2세로 이어 간다.
+지금 버전은 **M10 연출** (M8 프로 커리어 끝까지 + M9 개발자 패널 +): 선수를 만들어 고교 3년 동안 키우고, 드래프트로 프로 팀에 들어가 상을 받고, 올스타·국가대표·해외 리그를 거쳐 은퇴하면 2세로 이어 간다.
 
 - 선수 만들기: 출신 배경 7가지(천재 포함) + 자유 포인트 배분, 키·체형, 겉모습, 학교
 - 마을 맵에서 매주 행동 하나 (팀 훈련, 개인 훈련, 은사 특훈, 웨이트, 영상 분석, 길거리 3x3, 친구와 놀기, 휴식, 재활) → 포인트 → 능력치 투자
@@ -28,6 +28,7 @@
 - 올스타 위크엔드: 올스타전, 3점 콘테스트, 덩크 콘테스트. 비시즌엔 국가대표 아시아컵
 - 해외 리그 진출 (쿼터 12분, 6반칙 퇴장, 더 센 가상 리그)과 국내 복귀
 - 은퇴식, 명예의 전당, 영구결번, 2세 계승, 업적 26개 (타이틀 화면에 남는다)
+- 드리블 기술 5가지와 덩크 10가지, 쳐낸 공·블록이 날아가는 궤적, 응원단과 천장 배너, BGM 6곡, 우승·시상·드래프트 무대 장면, 시즌 요약 카드
 - 저장은 브라우저 슬롯 3개 + 세이브 파일 내보내기·불러오기 (예전 세이브 자동 변환)
 - 타이틀의 '프로 리그 경기 관람 (데모)'는 프로 팀끼리 경기
 
@@ -65,6 +66,7 @@ npm run report     # 100경기 돌려서 평균 통계를 실제 리그와 비�
 - `npx tsx tools/full.ts [시드] [햇수] [abroad]`: 고교 3년 → 드래프트 → 프로 자동 플레이 (시상, 올스타, 국가대표, 은퇴까지). `abroad`면 해외 제안을 받는다
 - `npx tsx tools/make-save.ts <주 수> <출력.json> [시드] [abroad]`: 그 주까지 자동으로 진행한 세이브 파일 (화면 확인용, 타이틀에서 '파일 불러오기')
 - `node tools/career-ui3.mjs <주소> <폴더> <세이브.json>`: 드래프트·프로 화면 캡처
+- `node tools/cheer-ui.mjs <주소> <폴더> <프로 세이브.json>`, `node tools/m10-ui.mjs <주소> <폴더> <올스타 직전 세이브> <드래프트 직전 세이브>`: 응원단·덩크 콘테스트·시즌 카드·시상식·드래프트 무대 캡처
 - `node tools/dev-ui.mjs <주소> <폴더> <세이브.json>`: 개발자 패널 탭별 화면 캡처
 - `node tools/career-ui4.mjs <주소> <폴더> <세이브.json> [이름표]`: 올스타 위크엔드·국가대표·해외 경기 화면 캡처. `RETIRE=1`이면 은퇴식 → 2세 → 타이틀, `WATCH=1`이면 경기 화면도
 
@@ -80,9 +82,9 @@ npm run report     # 100경기 돌려서 평균 통계를 실제 리그와 비�
 
 - [기획 질문지](docs/planning/01-questions.md): 방향을 정하기 위한 질문 133개와 추천 답
 - [기획 결정 v1](docs/planning/02-decisions.md): 질문지 답변 정리, 해석, 열린 질문
-- [로드맵](docs/planning/03-roadmap.md): 마일스톤 M0~M9
+- [로드맵](docs/planning/03-roadmap.md): 마일스톤 M0~M10
 - [M9~M13 설계](docs/planning/04-next-design.md): 개발자 패널, 연출, 밸런스, 대학·성격, 남은 기획
-- [M1 밸런스 리포트](docs/planning/m1-balance-report.txt), [M2 밸런스 리포트](docs/planning/m2-balance-report.txt): 200경기 평균 통계
+- [M1 밸런스 리포트](docs/planning/m1-balance-report.txt), [M2 밸런스 리포트](docs/planning/m2-balance-report.txt), [M10 밸런스 리포트](docs/planning/m10-balance-report.txt): 200경기 평균 통계
 - [M4 성장 리포트](docs/planning/m4-growth-report.txt), [M5 시즌 리포트](docs/planning/m5-season-report.txt): 배경별 1학년 1년 자동 플레이
 - [M7 커리어 리포트](docs/planning/m7-pro-report.txt): 고교 3년 → 드래프트 → 프로 2시즌
 - [M8 커리어 리포트](docs/planning/m8-career-report.txt): 고교 3년 → 프로 13시즌 (해외 진출·복귀, 국가대표, 은퇴)

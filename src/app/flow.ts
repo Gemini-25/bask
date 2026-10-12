@@ -12,9 +12,12 @@ import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, closeModal, esc, modal } from './dom';
 import { hofScore, HOF_SCORE, type RetireSummary } from '../career/legacy';
-import { DUNK_LABEL } from '../sim/types';
+import { ACT, DUNK_LABEL } from '../sim/types';
+import { everyone } from '../career/allstar';
+import { dunkScene, stageScene } from './stage';
 import { sound } from '../view/sound';
 import { trainingScene } from './scenes';
+import { figureCanvas } from './figure';
 import { fatigueColor, pointsHtml } from './home';
 
 function upsHtml(ups: Partial<Record<RatingKey, number>>) {
@@ -156,6 +159,7 @@ export function renderResult(c: Career, m: MatchSetup, rep: GameReport, ovrBefor
         <span class="rlabel">${esc(m.label)}</span>
       </div>
       ${rep.tourNote ? `<div class="banner-note">${esc(rep.tourNote)}</div>` : ''}
+      ${rep.won && rep.tourNote && /우승/.test(rep.tourNote) ? '<div class="champ"><canvas class="px stage" id="chCanvas"></canvas></div>' : ''}
       <div class="rgrid">
         <section class="rbox">
           <h3>내 기록 <small>${m.started ? '주전' : '교체'}${m.pos ? ` · ${m.pos}` : ''}</small></h3>
@@ -189,6 +193,14 @@ export function renderResult(c: Career, m: MatchSetup, rep: GameReport, ovrBefor
     </div>`;
   $('rReplay').onclick = act.replay;
   $('rNext').onclick = act.next;
+  const ch = document.getElementById('chCanvas') as HTMLCanvasElement | null;
+  if (ch) {
+    // 우승 세리머니: 팀원들과 트로피
+    const side = m.home ? 0 : 1;
+    const mates = m.game.players.filter((p, pid) => m.game.teamOf[pid] === side && p.id !== 'me');
+    stageScene(ch, { kind: 'title', pl: c.me, kit: { jersey: mine.color, trim: numberColorFor(mine.color) }, mates });
+    sound.play('fanfare');
+  }
   const iv = document.getElementById('iv');
   if (iv && rep.interview) {
     iv.onclick = (e) => {
@@ -227,8 +239,9 @@ export function draftModal(c: Career, onDone: () => void) {
     window.clearInterval(timer);
     const t = leagueTeam(L, d.team).info;
     sound.play('fanfare');
-    modal(
+    const dbox = modal(
       `<h2>${d.myNo}순위 지명!</h2>
+      <canvas class="px stage" id="drCanvas"></canvas>
       <div class="vs"><span><i class="sw" style="background:${t.color}"></i>${esc(t.city)} ${esc(t.name)}</span></div>
       <p class="center">"${esc(c.me.name)} 선수, ${esc(t.name)}에 오신 걸 환영합니다!"</p>
       <div class="chgs">
@@ -241,6 +254,7 @@ export function draftModal(c: Career, onDone: () => void) {
       <div class="mbtn"><button type="button" class="primary" data-close>입단식 끝! ▶</button></div>`,
       { onClose: onDone },
     );
+    stageScene(dbox.querySelector('#drCanvas') as HTMLCanvasElement, { kind: 'draft', pl: c.me, kit: { jersey: t.color, trim: numberColorFor(t.color) }, label: `${t.city} ${t.name}` });
   };
   const step = () => {
     if (finished) return;
@@ -317,14 +331,19 @@ export function awardsModal(c: Career, onDone: () => void) {
   const team = (id: string) => (L.teams.some((t) => t.info.id === id) ? teamInfoOf(c, id).name : id);
   const main = a.awards.filter((x) => x.key !== 'best5');
   const best = a.awards.filter((x) => x.key === 'best5');
-  modal(
+  const box = modal(
     `<h2>${esc(a.league)} ${a.season + 1}시즌 시상식</h2>
-    ${mine.length ? `<p class="note hot center">🏆 ${mine.map((x) => esc(x.label)).join(' · ')} 수상!</p>` : ''}
+    ${mine.length ? `<canvas class="px stage" id="awCanvas"></canvas><p class="note hot center">🏆 ${mine.map((x) => esc(x.label)).join(' · ')} 수상!</p>` : ''}
     <table class="ttable aw">${main.map((x) => `<tr class="${x.id === 'me' ? 'me' : ''}"><td class="nm"><b>${esc(x.label)}</b></td><td class="nm">${esc(x.name)} <small class="muted">${esc(team(x.team))}</small></td><td>${esc(x.value)}</td></tr>`).join('')}</table>
     <h4 class="sub">베스트 5</h4><div class="b5">${best.map((x) => `<span class="${x.id === 'me' ? 'me' : ''}">${esc(x.name)} <small>${esc(team(x.team))}</small></span>`).join('')}</div>
     <div class="mbtn"><button type="button" class="primary" data-close>새 시즌으로 ▶</button></div>`,
     { onClose: onDone, wide: true },
   );
+  const cv = box.querySelector('#awCanvas') as HTMLCanvasElement | null;
+  if (cv && c.pro) {
+    const col = teamInfoOf(c, c.pro.team).color;
+    stageScene(cv, { kind: 'award', pl: c.me, kit: { jersey: col, trim: numberColorFor(col) }, label: mine[0].label });
+  }
 }
 
 // ───────────── 올스타 위크엔드 (L6, L8) ─────────────
@@ -341,13 +360,15 @@ export function allStarModal(c: Career, onDone: () => void) {
     `<h2>${c.overseas ? '해외 리그' : 'BASK'} 올스타 위크엔드</h2>
     ${w.mySide >= 0 ? `<p class="note hot center">${esc(w.notes[0])}</p>` : '<p class="muted center">이번엔 올스타에 못 뽑혔다. 관중석에서 본다. 내년엔 저 무대에!</p>'}
     <div class="contest" id="cst3"><h4>🏀 3점 슛 콘테스트</h4><div class="crows"></div></div>
-    <div class="contest" id="cstD"><h4>💥 덩크 콘테스트</h4><div class="crows"></div></div>
+    <div class="contest" id="cstD"><h4>💥 덩크 콘테스트</h4><canvas class="px stage" id="dkCanvas"></canvas><div class="crows"></div></div>
     <div class="mbtn"><button type="button" id="asSkip">바로 보기</button><button type="button" class="primary" id="asOk" disabled>${w.mySide >= 0 ? '올스타전으로 ▶' : '확인'}</button></div>`,
     { wide: true, onClose: onDone },
   );
   let fast = false;
   const wait = (ms: number) => (fast ? Promise.resolve() : sleep(ms));
   const okBtn = box.querySelector('#asOk') as HTMLButtonElement;
+  const show = dunkScene(box.querySelector('#dkCanvas') as HTMLCanvasElement);
+  const players = new Map(everyone(c).map((x) => [x.p.id, x.p]));
   okBtn.onclick = () => closeModal();
   (box.querySelector('#asSkip') as HTMLElement).onclick = () => (fast = true);
   const rowHtml = (r: { id: string; name: string; team: string }) => `<div class="crow${r.id === 'me' ? ' me' : ''}"><span class="cn"><i class="sw" style="background:${team(r.team).color}"></i>${esc(r.name)}</span><span class="cv"></span><b class="cs"></b></div>`;
@@ -397,7 +418,13 @@ export function allStarModal(c: Career, onDone: () => void) {
         el.scrollIntoView({ block: 'nearest' });
         const v = el.querySelector('.cv') as HTMLElement;
         v.innerHTML = `<em>${esc(DUNK_LABEL[d.dunk!])}</em>`;
-        await wait(r.id === 'me' ? 700 : 350);
+        // 코트에서 덩크를 보여준다
+        const pl = players.get(r.id);
+        if (pl) {
+          const col = team(r.team).color;
+          show.show({ pl, kit: { jersey: col, trim: numberColorFor(col) }, style: d.dunk! });
+        }
+        await wait(r.id === 'me' ? 2600 : 1700);
         if (!fast) sound.play(d.score >= 45 ? 'dunk' : 'clank');
         for (const j of d.judges ?? []) {
           v.insertAdjacentHTML('beforeend', `<i class="card j${j >= 9 ? 'hi' : j <= 6 ? 'lo' : ''}">${j}</i>`);
@@ -473,4 +500,46 @@ export function retireSummaryModal(s: RetireSummary, act: Pick<RetireActions, 'l
   trainingScene($('rtCanvas') as HTMLCanvasElement, { scene: 'title', pl: s.player, kit: { jersey: s.color, trim: numberColorFor(s.color) } });
   (box.querySelector('#rtTitle') as HTMLElement).onclick = act.toTitle;
   (box.querySelector('#rtLegacy') as HTMLElement).onclick = () => act.legacy(s);
+}
+
+// ───────────── 시즌 요약 카드 (M10) ─────────────
+
+/** 시즌이 끝나면 내 시즌을 카드 한 장으로 */
+export function seasonCardModal(c: Career, onDone: () => void) {
+  const a = c.ceremony;
+  const L = c.league;
+  if (!a || !L || !c.pro) return onDone();
+  const from = c.week - 48;
+  const games = c.games.filter((g) => g.week >= from && g.week < c.week && g.kind === 'official' && !g.label.startsWith('아시아컵') && g.line);
+  const n = Math.max(1, games.length);
+  const sum = (k: 'pts' | 'reb' | 'ast' | 'stl' | 'blk' | 'sec' | 'fgm' | 'fga' | 'tpm' | 'tpa') => games.reduce((s, g) => s + (g.line?.[k] ?? 0), 0);
+  const pct = (m: number, t: number) => (t ? `${Math.round((m / t) * 100)}%` : '-');
+  const best = games.reduce<(typeof games)[number] | null>((b, g) => (!b || g.line!.pts > b.line!.pts ? g : b), null);
+  const tag = `${a.season + 1}시즌`;
+  const prizes = c.trophies.filter((t) => t.includes(`${tag} `) || t.endsWith(tag));
+  const finish = L.history[L.history.length - 1]?.myFinish ?? '-';
+  const col = teamInfoOf(c, c.pro.team).color;
+  sound.play('jingle');
+  const box = modal(
+    `<div class="scard" style="--tc:${col}">
+      <div class="sctop"><canvas class="px" id="scFig"></canvas><div><b class="scno">#${c.me.number}</b><h2>${esc(c.me.name)}</h2><span>${esc(teamInfoOf(c, c.pro.team).full)} · ${esc(tag)}${c.overseas ? ' · 해외' : ''}</span></div></div>
+      <div class="scstats">
+        <div><small>경기</small><b>${games.length}</b></div>
+        <div><small>득점</small><b>${(sum('pts') / n).toFixed(1)}</b></div>
+        <div><small>리바</small><b>${(sum('reb') / n).toFixed(1)}</b></div>
+        <div><small>어시</small><b>${(sum('ast') / n).toFixed(1)}</b></div>
+        <div><small>스틸</small><b>${(sum('stl') / n).toFixed(1)}</b></div>
+        <div><small>블록</small><b>${(sum('blk') / n).toFixed(1)}</b></div>
+        <div><small>출전</small><b>${(sum('sec') / n / 60).toFixed(1)}분</b></div>
+        <div><small>야투</small><b>${pct(sum('fgm'), sum('fga'))}</b></div>
+        <div><small>3점</small><b>${pct(sum('tpm'), sum('tpa'))}</b></div>
+      </div>
+      ${best ? `<p class="scbest">최고 경기 <b>${best.line!.pts}점</b> ${best.line!.reb}리바 ${best.line!.ast}어시 · vs ${esc(teamInfoOf(c, best.opponent).full)} (${esc(best.label)})</p>` : ''}
+      <p class="scfin">팀 성적 <b>${esc(finish)}</b></p>
+      ${prizes.length ? `<div class="troph">${prizes.map((t) => `<span>🏆 ${esc(t.replace(`${tag} `, ''))}</span>`).join('')}</div>` : '<p class="muted">이번 시즌 상은 없다. 다음 시즌에!</p>'}
+    </div>
+    <div class="mbtn"><button type="button" class="primary" data-close>시상식 보기 ▶</button></div>`,
+    { onClose: onDone },
+  );
+  figureCanvas(box.querySelector('#scFig') as HTMLCanvasElement, () => ({ pl: c.me, kit: { jersey: col, trim: numberColorFor(col) }, act: ACT.CELEBRATE }));
 }

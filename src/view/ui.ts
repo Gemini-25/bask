@@ -25,7 +25,7 @@ export function quarterText(q: number): string {
   return q <= 4 ? `${q}Q` : `OT${q - 4}`;
 }
 
-const LOG_TYPES = new Set(['tip', 'quarterStart', 'quarterEnd', 'gameEnd', 'made', 'miss', 'rebound', 'turnover', 'ankle', 'foul', 'ft', 'sub', 'timeout', 'defense', 'ejected']);
+const LOG_TYPES = new Set(['tip', 'quarterStart', 'quarterEnd', 'gameEnd', 'made', 'miss', 'rebound', 'turnover', 'ankle', 'foul', 'ft', 'sub', 'timeout', 'defense', 'ejected', 'loose']);
 const BANNER_TYPES = new Set(['quarterStart', 'quarterEnd', 'gameEnd', 'timeout']);
 
 export interface UiActions {

@@ -26,8 +26,9 @@ export interface RetireSummary {
   trophies: string[];
   hofScore: number;
   hof: boolean;
-  /** 영구결번한 팀 이름 */
+  /** 영구결번한 팀 이름과 id */
   retiredBy: string | null;
+  retiredTeam?: string;
   teams: string[];
   money: number;
   player: Player;
@@ -107,6 +108,7 @@ export function retire(c: Career, teamName: (id: string) => string, teamColor: (
     hofScore: score,
     hof,
     retiredBy,
+    retiredTeam: retiredBy ? lastTeam : undefined,
     teams: [...new Set(hist.map((h) => h.name))],
     money: c.money,
     player: JSON.parse(JSON.stringify(c.me)) as Player,

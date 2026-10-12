@@ -27,8 +27,10 @@ import {
   type Lineup,
   type Side,
   type TurnoverKind,
+  DRIBBLE_MOVES,
   DUNK_ACT,
   DUNK_LABEL,
+  MOVE_LABEL,
   type DunkStyle,
 } from './types';
 
@@ -100,6 +102,8 @@ interface SP {
   /** 화면용: 잠깐 보여줄 동작과 끝나는 시각 */
   fx: number;
   fxUntil: number;
+  /** 연출 동작 시작 시각 */
+  fxT: number;
 }
 
 type Phase =
@@ -143,7 +147,9 @@ type Phase =
       bounce?: boolean;
     }
   | { k: 'reb'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; z0: number; peak: number; shotTeam: Side; ft: boolean; jumped?: boolean }
-  | { k: 'loose'; t: number; vx: number; vy: number; shotTeam: Side }
+  | { k: 'loose'; t: number; vx: number; vy: number; shotTeam: Side; steal?: { by: number; from: number; kind: TurnoverKind } }
+  /** 블록한 공이 코트 밖으로 날아간다 (공격팀 공) */
+  | { k: 'swat'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; team: Side }
   | { k: 'inbound'; inb: number; recv: number; sx: number; sy: number; t: number; ready: number; made: boolean }
   | { k: 'dead'; t: number; dur: number; sx: number; sy: number }
   | { k: 'timeout'; t: number; dur: number; team: Side; sx: number; sy: number }
@@ -419,6 +425,7 @@ class GameSim {
       jh: 0,
       fx: 0,
       fxUntil: 0,
+      fxT: 0,
     };
     this.applyPlayer(sp, pid);
     return sp;
@@ -624,12 +631,21 @@ class GameSim {
     p.jd = dur;
     p.jh = h;
     p.fx = act;
+    p.fxT = this.t;
     p.fxUntil = this.t + dur;
   }
 
   private poseFx(p: SP, act: number, dur: number) {
     p.fx = act;
+    p.fxT = this.t;
     p.fxUntil = this.t + dur;
+  }
+
+  /** 드리블 기술 고르기 (볼 핸들링이 좋을수록 화려하게, 연출용 난수) */
+  private pickMove(h: SP): number {
+    const bh = h.pl.r.ballHandling;
+    const w = [3, bh >= 58 ? 1.6 : 0, bh >= 64 ? 1.6 : 0, bh >= 70 && h.pl.r.agility >= 60 ? 1.2 : 0, 2];
+    return DRIBBLE_MOVES[this.fxr.weighted(w)];
   }
 
   private updatePhase() {
@@ -674,6 +690,14 @@ class GameSim {
       case 'timeout':
         if (t - ph.t >= ph.dur) this.runResume();
         break;
+      case 'swat':
+        if (t - ph.t >= ph.dur) {
+          this.ball.x = ph.ex;
+          this.ball.y = ph.ey;
+          this.off = ph.team;
+          this.startDead(ph.team);
+        }
+        break;
       case 'ft':
         this.ftUpdate(ph);
         break;
@@ -697,7 +721,7 @@ class GameSim {
 
   private updateClocks() {
     const k = this.ph.k;
-    const stopped = k === 'dead' || k === 'break' || k === 'end' || k === 'timeout' || k === 'ft' || k === 'outro';
+    const stopped = k === 'dead' || k === 'swat' || k === 'break' || k === 'end' || k === 'timeout' || k === 'ft' || k === 'outro';
     if (this.clockRunning && !stopped) {
       this.clock -= DT;
       this.elapsed += DT;
@@ -1398,7 +1422,9 @@ class GameSim {
         if (this.act.k === 'drive') lam *= 1.8;
         if (trapped || this.doubleFor === h.i) lam *= 2.5;
         if (this.rng.chance(lam * DT)) {
-          this.turnover(h.i, 'stolenDribble', d.i);
+          // 절반쯤은 손끝으로 쳐내서 루즈볼이 된다
+          if (this.rng.chance(0.45)) this.deflect(h, d, 'stolenDribble', h.x, h.y, Math.atan2(h.y - d.y, h.x - d.x));
+          else this.turnover(h.i, 'stolenDribble', d.i);
           return;
         }
       }
@@ -1450,6 +1476,14 @@ class GameSim {
       this.helper = -1;
     }
 
+    // 수비와 마주 서면 가끔 드리블 기술로 간을 본다 (화면용)
+    if (this.act.k !== 'drive' && this.act.k !== 'post' && this.t >= h.fxUntil && this.fxr.chance(0.012)) {
+      const d = this.defenderOf(h.i);
+      if (dist(d.x, d.y, h.x, h.y) < 2.4) {
+        const m = this.pickMove(h);
+        if (m !== ACT.SPIN) this.poseFx(h, m, 0.5);
+      }
+    }
     if (this.t >= this.nextThink) this.think(h);
   }
 
@@ -1835,6 +1869,10 @@ class GameSim {
     this.cnt.drives++;
     this.act = { k: 'drive', u: 0, v: 0, t: this.t };
     const d = this.defenderOf(h.i);
+    // 돌파 첫발에 드리블 기술 (화면용)
+    const close = dist(d.x, d.y, h.x, h.y) < 2.6;
+    const move = this.pickMove(h);
+    if (close && this.fxr.chance(0.6)) this.poseFx(h, move, move === ACT.SPIN ? 0.55 : 0.45);
     if (dist(d.x, d.y, h.x, h.y) < 1.8 && d.stun <= 0) {
       const r = h.pl.r;
       const edge = r.ballHandling + 0.5 * r.speed + 0.5 * r.accel - d.pl.r.perimeterD - d.pl.r.agility;
@@ -1842,7 +1880,8 @@ class GameSim {
       if (this.rng.chance(p)) {
         d.stun = 0.7;
         this.nextThink = this.t + 0.15;
-        this.emit({ type: 'ankle', team: h.team, player: h.i, other: d.i, pts: 0, text: `${h.pl.name}의 크로스오버! ${d.pl.name} 휘청` });
+        this.poseFx(h, move, 0.5);
+        this.emit({ type: 'ankle', team: h.team, player: h.i, other: d.i, pts: 0, text: `${h.pl.name}의 ${MOVE_LABEL[move]}! ${d.pl.name} 휘청` });
       }
     }
   }
@@ -1930,6 +1969,26 @@ class GameSim {
         });
         const H = this.hoop(h.team);
         const a = Math.atan2(h.y - H.y, h.x - H.x) + this.rng.normal(0, 0.8);
+        const kind = this.rng.next();
+        if (kind < 0.22) {
+          // 관중석까지 날려 버린다 (공격팀 공으로 다시)
+          for (const len of [11, 16, 22]) {
+            const ex = h.x + Math.cos(a) * len;
+            const ey = h.y + Math.sin(a) * len;
+            if (!this.inCourt(ex, ey)) {
+              const fx = clamp(ex, -1.8, COURT.length + 1.8);
+              const fy = clamp(ey, -1.8, COURT.width + 1.8);
+              this.ball.holder = -1;
+              this.ph = { k: 'swat', t: this.t, dur: 0.75, sx: h.x, sy: h.y, ex: fx, ey: fy, team: h.team };
+              return;
+            }
+          }
+        }
+        if (kind > 0.85) {
+          // 쳐낸 공을 블록한 선수가 바로 잡는다
+          this.startRebound(h.x, h.y, 2.4, b.x, b.y, h.team);
+          return;
+        }
         const rr = this.rng.range(1.5, 4);
         this.startRebound(h.x, h.y, 2.4, h.x + Math.cos(a) * rr, h.y + Math.sin(a) * rr, h.team);
         return;
@@ -1966,7 +2025,7 @@ class GameSim {
 
   /** 덩크 종류: 노마크·속공일수록 화려하게 (열린 것 중에서) */
   private pickDunk(h: SP, contest: number, open: boolean): DunkStyle {
-    const list = DUNKS.filter((d) => dunkUnlocked(h.pl, d));
+    const list = DUNKS.filter((d) => !d.contestOnly && dunkUnlocked(h.pl, d));
     const w = list.map((d) => (contest > 0.35 && d.flash > 1 ? 0.05 : open ? d.flash ** 2 : d.flash));
     return list[this.fxr.weighted(w)].id;
   }
@@ -2125,17 +2184,51 @@ class GameSim {
       }
     }
     if (best && (bd < 0.6 || this.t - ph.t > 4)) {
-      this.rebound(best, ph.shotTeam);
+      if (ph.steal) this.looseRecover(best, ph);
+      else this.rebound(best, ph.shotTeam);
       return;
     }
     if (!this.inCourt(this.ball.x, this.ball.y)) {
       this.off = ph.shotTeam;
-      this.startDead((1 - ph.shotTeam) as Side);
+      // 수비가 쳐내서 나갔으면 공격팀 공
+      this.startDead(ph.steal ? ph.shotTeam : ((1 - ph.shotTeam) as Side));
     }
   }
 
   private inCourt(x: number, y: number) {
     return x > 0 && x < COURT.length && y > 0 && y < COURT.width;
+  }
+
+  /** 공을 쳐냈다: 공이 튀어 나가 루즈볼. 누가 잡느냐에 따라 스틸이 되거나 공격이 이어진다 */
+  private deflect(from: SP, by: SP, kind: TurnoverKind, bx: number, by_: number, dir: number) {
+    const a = dir + this.rng.normal(0, 0.9);
+    const v = this.rng.range(2.5, 4.2);
+    this.ball.holder = -1;
+    this.ball.x = bx;
+    this.ball.y = by_;
+    this.poseFx(by, ACT.STEAL, 0.4);
+    this.emit({ type: 'loose', team: by.team, player: by.i, other: from.i, pts: 0, text: `${by.pl.name} 공을 쳐냈다!` });
+    this.act = { k: 'hold', u: 0, v: 0, t: this.t };
+    this.ph = { k: 'loose', t: this.t, vx: Math.cos(a) * v, vy: Math.sin(a) * v, shotTeam: this.off, steal: { by: by.i, from: from.i, kind } };
+  }
+
+  /** 쳐낸 루즈볼을 누가 잡았나 */
+  private looseRecover(p: SP, ph: Extract<Phase, { k: 'loose' }>) {
+    const st = ph.steal!;
+    // 몸을 던져서 잡기도 한다
+    const rival = this.P.some((q) => q.team !== p.team && dist(q.x, q.y, p.x, p.y) < 1.6);
+    if (rival && this.fxr.chance(0.45)) this.poseFx(p, ACT.FALL, 0.7);
+    if (p.team !== ph.shotTeam) {
+      // 수비가 잡으면 쳐낸 선수의 스틸
+      this.turnover(st.from, st.kind, st.by);
+      this.ball.holder = p.i;
+      return;
+    }
+    this.emit({ type: 'loose', team: p.team, player: p.i, other: -1, pts: 0, offensive: true, text: `${p.pl.name} 루즈볼을 다시 잡았다` });
+    this.ball.holder = p.i;
+    this.act = { k: 'hold', u: 0, v: 0, t: this.t };
+    this.nextThink = this.t + 0.2;
+    this.ph = { k: 'live' };
   }
 
   private rebound(p: SP, shotTeam: Side) {
@@ -2219,6 +2312,11 @@ class GameSim {
     if (ph.intercept >= 0) {
       this.ball.x = ph.ex;
       this.ball.y = ph.ey;
+      // 손만 대서 튕겨 나가는 패스도 있다
+      if (this.rng.chance(0.3)) {
+        this.deflect(this.P[ph.from], this.P[ph.intercept], 'stolenPass', ph.ex, ph.ey, Math.atan2(ph.ey - ph.sy, ph.ex - ph.sx));
+        return;
+      }
       this.turnover(ph.from, 'stolenPass', ph.intercept);
       return;
     }
@@ -2540,6 +2638,11 @@ class GameSim {
     }
     if (ph.k === 'dead') {
       for (const p of this.P) this.setGoal(p, p.x + (14 - p.x) * 0.05, p.y + (MID_Y - p.y) * 0.05, 0.3);
+      return;
+    }
+    if (ph.k === 'swat') {
+      // 날아가는 공을 눈으로 따라간다
+      for (const p of this.P) this.setGoal(p, p.x + (this.ball.x - p.x) * 0.08, p.y + (this.ball.y - p.y) * 0.08, 0.4);
       return;
     }
     if (ph.k === 'ft') {
@@ -3066,6 +3169,40 @@ class GameSim {
       }
       b.x = h.x + fx * 0.3;
       b.y = h.y + fy * 0.3;
+      // 드리블 기술 중엔 공이 몸 주위를 오간다
+      if (ph.k === 'live' && t < h.fxUntil && DRIBBLE_MOVES.includes(h.fx)) {
+        const s = clamp((t - h.fxT) / Math.max(0.05, h.fxUntil - h.fxT), 0, 1);
+        const px = -fy;
+        const py = fx;
+        let lat = 0;
+        let fwd = 0.3;
+        let z = 0.15 + 0.6 * Math.abs(Math.sin(t * Math.PI * 2.4));
+        if (h.fx === ACT.CROSSOVER) {
+          lat = 0.38 * Math.cos(Math.PI * s);
+          fwd = 0.28;
+          z = 0.1 + 0.45 * Math.abs(Math.sin(Math.PI * 3 * s));
+        } else if (h.fx === ACT.BEHIND) {
+          lat = 0.36 * Math.cos(Math.PI * s);
+          fwd = 0.3 - 0.55 * Math.sin(Math.PI * s);
+          z = 0.35;
+        } else if (h.fx === ACT.LEGS) {
+          lat = 0.32 * Math.cos(Math.PI * s);
+          fwd = 0.08;
+          z = 0.12 + 0.25 * Math.abs(Math.sin(Math.PI * 2 * s));
+        } else if (h.fx === ACT.SPIN) {
+          const a = Math.PI * 2 * s;
+          lat = 0.36 * Math.sin(a);
+          fwd = 0.36 * Math.cos(a);
+          z = 0.6;
+        } else if (h.fx === ACT.HESI) {
+          fwd = 0.22;
+          z = 0.85;
+        }
+        b.x = h.x + fx * fwd + px * lat;
+        b.y = h.y + fy * fwd + py * lat;
+        b.z = z;
+        return;
+      }
       if (ph.k === 'gather') b.z = lerp(1.1, 2.3, clamp((t - ph.t) / ph.dur, 0, 1));
       else if (ph.k === 'live') b.z = 0.15 + 0.85 * Math.abs(Math.sin(t * Math.PI * 1.7));
       else if (ph.k === 'ft') b.z = 0.3 + 0.7 * Math.abs(Math.sin(t * Math.PI * 1.2)); // 자유투 전 공 튕기기
@@ -3123,6 +3260,13 @@ class GameSim {
       case 'inbound':
         if (ph.made) b.z = Math.max(0.1, b.z - 6 * DT);
         break;
+      case 'swat': {
+        const s = clamp((t - ph.t) / ph.dur, 0, 1);
+        b.x = lerp(ph.sx, ph.ex, s);
+        b.y = lerp(ph.sy, ph.ey, s);
+        b.z = lerp(2.4, 0.6, s) + 2.2 * Math.sin(Math.PI * s);
+        break;
+      }
       case 'dead':
       case 'break':
       case 'timeout':

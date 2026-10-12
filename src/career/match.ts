@@ -14,7 +14,7 @@ import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
 import { afterGameFans, interviewFor, type SnsPost } from './fans';
 import { leagueTeam } from './league';
-import { gearBoost, has } from './money';
+import { cheerBoost, gearBoost, has } from './money';
 import { leagueTeamName, recordProGame } from './pro';
 import { withRival } from './people';
 import { recordMyMatch, TOURS } from './season';
@@ -388,7 +388,8 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
   }
 
   const big = !!tourNote || g.events.some((e) => e.player === m.myPid && e.type === 'made' && (e.shot === 'dunk' || (e.quarter >= 4 && e.clock < 2)));
-  const fans = afterGameFans(c, grade, line, won, big || !!m.special, m.special === 'national' ? '국가대표' : m.special === 'allstar' ? '올스타' : m.pro && c.pro ? leagueTeamName(c) : schoolById(c.school).name);
+  const boost = m.pro && m.home && !m.special ? cheerBoost(c) : 1;
+  const fans = afterGameFans(c, grade, line, won, big || !!m.special, m.special === 'national' ? '국가대표' : m.special === 'allstar' ? '올스타' : m.pro && c.pro ? leagueTeamName(c) : schoolById(c.school).name, boost);
 
   c.games.push({ week: c.week - 1, kind: m.kind, label: m.label, opponent: m.opponent, home: m.home, score, won, seed: m.seed, line, grade, started: m.started });
   c.pendingGame = null;

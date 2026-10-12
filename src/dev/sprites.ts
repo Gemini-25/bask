@@ -6,6 +6,8 @@ import { drawFigure, type Facing } from '../view/character';
 
 const c = document.getElementById('c') as HTMLCanvasElement;
 const ctx = c.getContext('2d')!;
+// 동작 수에 맞춰 높이를 늘린다
+c.height = 50 + Math.ceil(Object.keys(ACT).length / 9) * 70;
 ctx.fillStyle = '#d8a66a';
 ctx.fillRect(0, 0, c.width, c.height);
 const rng = new Rng(4);
@@ -26,7 +28,7 @@ acts.forEach(([name, act], k) => {
     const pl = players[(k + fi) % 3];
     const x = 14 + col * 52 + fi * 11;
     const y = 50 + row * 70 + (fi % 2) * 4;
-    const air: number[] = [ACT.SHOOT, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.HANG, ACT.DUNK2, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360];
+    const air: number[] = [ACT.SHOOT, ACT.LAYUP, ACT.DUNK, ACT.REBOUND, ACT.BLOCK, ACT.HANG, ACT.DUNK2, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE];
     const lift = air.includes(act) ? 8 : 0;
     drawFigure(ctx, x, y, { pl, kit: { jersey: fi % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing, flip, act, speed: (act === ACT.IDLE && fi === 0) || (act === ACT.STANCE && fi === 1) ? 4 : 0, lift, time: 0.3, seed: k, tired: false });
   });

@@ -85,6 +85,20 @@ function arc(cx: number, cy: number, r: number, a0: number, a1: number): [number
   return out;
 }
 
+/** 프로 경기장 장식 (M10): 천장 배너, 영구결번, 내 응원단 */
+export interface ArenaDeco {
+  /** 홈팀 우승 시즌 (천장 배너) */
+  titles: number[];
+  /** 홈팀 영구결번 */
+  retired: number[];
+  /** 내 응원 아이템 (내 홈 경기일 때만) */
+  cheer: string[];
+  myNumber: number;
+  myName: string;
+  /** 관중이 얼마나 찼나 (0~1) */
+  fill: number;
+}
+
 export interface ArenaLook {
   home: string;
   away: string;
@@ -92,6 +106,7 @@ export interface ArenaLook {
   tier: number;
   /** 체육관 현수막 글 */
   banner?: string;
+  deco?: ArenaDeco;
 }
 
 /** 움직이지 않는 배경 */
@@ -121,6 +136,7 @@ export function drawArena(look: ArenaLook): HTMLCanvasElement {
       ctx.fillRect(0, 80, VIEW_W, 1);
       ctx.fillRect(0, 87, VIEW_W, 1);
     }
+    if (look.deco) drawRafters(ctx, look.home, look.deco);
   }
   // 바닥 (코트 바깥)
   ctx.fillStyle = '#3a2f2a';
@@ -243,6 +259,48 @@ export function drawArena(look: ArenaLook): HTMLCanvasElement {
   return c;
 }
 
+/** 천장: 왼쪽엔 우승 배너, 오른쪽엔 영구결번 유니폼 */
+function drawRafters(ctx: CanvasRenderingContext2D, home: string, deco: ArenaDeco) {
+  deco.titles.slice(-10).forEach((season, i) => {
+    const x = 6 + i * 13;
+    ctx.fillStyle = '#ffb545';
+    ctx.fillRect(x - 1, 0, 12, 15);
+    ctx.fillStyle = home;
+    ctx.fillRect(x, 0, 10, 13);
+    ctx.fillRect(x + 2, 13, 6, 2);
+    ledText(ctx, String(season).padStart(2, ' ').slice(-2), x + 1, 4, '#fff6dc', 1);
+  });
+  deco.retired.slice(-8).forEach((num, i) => {
+    const x = VIEW_W - 18 - i * 14;
+    ctx.fillStyle = '#f2f4f8';
+    ctx.fillRect(x, 2, 12, 11);
+    ctx.fillRect(x - 2, 2, 2, 4);
+    ctx.fillRect(x + 12, 2, 2, 4);
+    ctx.fillStyle = home;
+    ctx.fillRect(x + 4, 2, 4, 1);
+    ledText(ctx, String(num).padStart(2, ' '), x + 2, 5, home, 1);
+  });
+}
+
+/** 내 응원단: 관중석 현수막 (관중 위에 그린다) */
+export function drawCheerBanner(ctx: CanvasRenderingContext2D, home: string, deco: ArenaDeco, time: number) {
+  if (!deco.cheer.includes('cheerBanner')) return;
+  const text = `#${deco.myNumber} ${deco.myName}`;
+  ctx.font = '8px Galmuri11, monospace';
+  const w = Math.ceil(ctx.measureText(text).width) + 10;
+  const x = 150;
+  const y = 52 + Math.round(Math.sin(time * 2) * 1);
+  ctx.fillStyle = '#f7f2e8';
+  ctx.fillRect(x, y, w, 11);
+  ctx.fillStyle = home;
+  ctx.fillRect(x, y, w, 2);
+  ctx.fillRect(x, y + 9, w, 2);
+  ctx.fillStyle = shade(home, -0.35);
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillText(text, x + 5, y + 2);
+}
+
 /** 골대: 뒤쪽(백보드, 림 뒷부분)과 앞쪽(림 앞부분, 그물)을 나눠 그려서 공이 림을 통과하는 것처럼 */
 export function drawHoopBack(ctx: CanvasRenderingContext2D, side: 0 | 1) {
   const d = side === 0 ? 1 : -1;
@@ -304,9 +362,11 @@ interface Fan {
   phase: number;
   /** 앞줄(코트 가까운 쪽) 관중 */
   front: boolean;
+  /** 응원 깃발을 들었다 */
+  flag?: boolean;
 }
 
-export function makeCrowd(home: string, away: string, seed: number, tier = 1): Fan[] {
+export function makeCrowd(home: string, away: string, seed: number, tier = 1, fill = -1, flags = false): Fan[] {
   let h = seed >>> 0 || 1;
   const r = () => {
     h = Math.imul(h ^ (h >>> 15), 2246822507);
@@ -320,14 +380,15 @@ export function makeCrowd(home: string, away: string, seed: number, tier = 1): F
   const fans: Fan[] = [];
   // 학교 체육관은 관람석 두 줄에 친구들 몇 명, 결승은 꽉 찬다
   const rows = tier === 0 ? [3, 4] : [0, 1, 2, 3, 4];
-  const empty = tier === 0 ? 0.6 : tier >= 2 ? 0.03 : 0.12;
+  // 프로 홈 경기는 인기만큼 관중이 찬다
+  const empty = tier === 0 ? 0.6 : tier >= 2 ? 0.03 : fill >= 0 ? 0.42 - 0.39 * Math.min(1, fill) : 0.12;
   for (const row of rows) {
     const y = 24 + row * 13 + (tier === 0 ? 3 : 0);
     for (let x = 4 + (row % 2) * 4; x < VIEW_W - 4; x += 8) {
       if (r() < empty) continue; // 빈자리
       const isHome = r() < 0.7;
       const shirt = r() < 0.55 ? (isHome ? home : away) : neutral[Math.floor(r() * neutral.length)];
-      fans.push({ x: x + Math.floor(r() * 3), y, shirt, skin: skins[Math.floor(r() * skins.length)], hair: hairs[Math.floor(r() * hairs.length)], home: isHome, phase: r() * 10, front: false });
+      fans.push({ x: x + Math.floor(r() * 3), y, shirt, skin: skins[Math.floor(r() * skins.length)], hair: hairs[Math.floor(r() * hairs.length)], home: isHome, phase: r() * 10, front: false, flag: flags && isHome && r() < 0.14 });
     }
   }
   // 코트 앞쪽 (카메라 쪽) 앞줄 관중: 머리만 보인다 (체육관엔 없다)
@@ -375,6 +436,16 @@ export function drawCrowd(ctx: CanvasRenderingContext2D, fans: Fan[], mood: Crow
       }
       continue;
     }
+    if (f.flag) {
+      // 깃대와 펄럭이는 깃발
+      const wv = Math.round(Math.sin(time * 6 + f.phase) * 1.5);
+      ctx.fillStyle = '#d9d4c7';
+      ctx.fillRect(f.x + 3, y - 12, 1, 9);
+      ctx.fillStyle = f.shirt;
+      ctx.fillRect(f.x + 4, y - 12 + (wv > 0 ? 1 : 0), 5, 3);
+      ctx.fillStyle = shade(f.shirt, 0.3);
+      ctx.fillRect(f.x + 4, y - 12 + (wv > 0 ? 1 : 0), 5, 1);
+    }
     ctx.fillStyle = f.shirt;
     ctx.fillRect(f.x - 2, y - 3, 5, 4);
     ctx.fillStyle = f.skin;
@@ -390,7 +461,7 @@ export function drawCrowd(ctx: CanvasRenderingContext2D, fans: Fan[], mood: Crow
 }
 
 /** 전광판: 점수와 시계를 LED 숫자로 */
-export function drawJumbotron(ctx: CanvasRenderingContext2D, home: string, away: string, score: [number, number], clock: string, q: string) {
+export function drawJumbotron(ctx: CanvasRenderingContext2D, home: string, away: string, score: [number, number], clock: string, q: string, flash?: string) {
   const w = 120;
   const x = (VIEW_W - w) / 2;
   ctx.fillStyle = '#05070b';
@@ -398,6 +469,13 @@ export function drawJumbotron(ctx: CanvasRenderingContext2D, home: string, away:
   ctx.fillStyle = '#2a3142';
   ctx.fillRect(x, 1, w, 1);
   ctx.fillRect(x, 21, w, 1);
+  if (flash) {
+    // 전광판에 내 등번호 (응원 아이템)
+    ctx.fillStyle = home;
+    ctx.fillRect(x + 1, 2, w - 2, 19);
+    ledText(ctx, flash, x + w / 2 - flash.length * 6 + 2, 4, '#fff6dc', 3);
+    return;
+  }
   ctx.fillStyle = home;
   ctx.fillRect(x + 3, 4, 3, 15);
   ctx.fillStyle = away;

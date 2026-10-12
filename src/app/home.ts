@@ -235,7 +235,7 @@ export class Home {
 
   private lifeHtml() {
     const c = this.c!;
-    const shop = (kind: 'gear' | 'house') =>
+    const shop = (kind: 'gear' | 'house' | 'cheer') =>
       ITEMS.filter((i) => i.kind === kind)
         .map((i) => {
           const own = has(c, i.id);
@@ -251,6 +251,7 @@ export class Home {
     return `${contract}
       <h4 class="sub">장비 <small class="muted">경기 중 능력치 보너스</small></h4><div class="items">${shop('gear')}</div>
       <h4 class="sub">집 꾸미기 <small class="muted">훈련·휴식 효과</small></h4><div class="items">${shop('house')}</div>
+      <h4 class="sub">응원단 <small class="muted">홈 경기장이 바뀌고, 홈 경기 인기가 하나에 5%씩 더 오른다</small></h4><div class="items">${shop('cheer')}</div>
       <h4 class="sub">SNS 반응</h4><ul class="sns">${sns || '<li class="muted">아직 조용하다. 경기에서 활약하면 반응이 생긴다.</li>'}</ul>
       ${c.pro ? `<h4 class="sub">은퇴</h4>${canRetire(c) ? `<p class="hint">명예의 전당 점수 ${hofScore(c)} / ${HOF_SCORE}. 은퇴하면 이 커리어는 끝나고 2세로 이어 할 수 있다.</p><button type="button" data-retire>은퇴 선언</button>` : `<p class="hint">${RETIRE_MIN_AGE}살부터 스스로 은퇴할 수 있다. ${RETIRE_FORCE_AGE}살이 되면 무조건 은퇴. (지금 명예의 전당 점수 ${hofScore(c)} / ${HOF_SCORE})</p>`}` : ''}`;
   }

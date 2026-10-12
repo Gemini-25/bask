@@ -2,7 +2,7 @@
 import type { RatingKey } from '../data/ratings';
 import type { Career } from './career';
 
-export type ItemKind = 'gear' | 'house';
+export type ItemKind = 'gear' | 'house' | 'cheer';
 
 export interface ItemDef {
   id: string;
@@ -26,7 +26,19 @@ export const ITEMS: ItemDef[] = [
   { id: 'theater', kind: 'house', label: '영상실', desc: '영상 분석 포인트 +30%', price: 1500 },
   { id: 'yardHoop', kind: 'house', label: '마당 농구 골대', desc: '개인 훈련 포인트 +20%', price: 1000 },
   { id: 'aqua', kind: 'house', label: '아쿠아 테라피 욕조', desc: '재활이 더 빠르고 매주 피로가 2 더 풀린다', price: 3000 },
+  // 응원단 (M10): 홈 경기 관중석이 바뀌고, 홈 경기 인기가 조금 더 오른다
+  { id: 'cheerBanner', kind: 'cheer', label: '등번호 현수막', desc: '홈 관중석에 내 등번호 현수막이 걸린다', price: 800 },
+  { id: 'cheerFlags', kind: 'cheer', label: '응원 깃발', desc: '홈 팬들이 팀 색 깃발을 흔든다', price: 600 },
+  { id: 'cheerChant', kind: 'cheer', label: '이름 응원 구호', desc: '내가 코트에 있으면 관중이 내 이름을 외친다', price: 1200 },
+  { id: 'cheerMascot', kind: 'cheer', label: '마스코트 인형탈', desc: '코트 앞에서 마스코트가 분위기를 띄운다', price: 1800 },
+  { id: 'cheerLeaders', kind: 'cheer', label: '치어리더 후원', desc: '골대 옆에서 치어리더가 춤춘다', price: 2500 },
+  { id: 'cheerJumbo', kind: 'cheer', label: '전광판 내 얼굴', desc: '내가 넣으면 전광판에 내 등번호가 뜬다', price: 3000 },
 ];
+
+/** 홈 경기 인기 상승 배율 (응원 아이템 하나에 5%) */
+export function cheerBoost(c: Career): number {
+  return 1 + 0.05 * (c.items ?? []).filter((id) => itemDef(id)?.kind === 'cheer').length;
+}
 
 export function itemDef(id: string) {
   return ITEMS.find((i) => i.id === id);

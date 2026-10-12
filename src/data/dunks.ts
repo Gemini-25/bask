@@ -8,6 +8,8 @@ export interface DunkDef {
   need: Partial<Record<RatingKey, number>>;
   /** 노마크일 때 고르는 무게 (화려할수록 크다) */
   flash: number;
+  /** 덩크 콘테스트에서만 (경기 중엔 안 한다) */
+  contestOnly?: boolean;
 }
 
 export const DUNKS: DunkDef[] = [
@@ -16,7 +18,11 @@ export const DUNKS: DunkDef[] = [
   { id: 'tomahawk', need: { dunk: 55, jump: 55 }, flash: 1.5 },
   { id: 'reverse', need: { dunk: 62, agility: 55 }, flash: 1.8 },
   { id: 'windmill', need: { dunk: 70, jump: 68 }, flash: 2.4 },
+  { id: 'double', need: { dunk: 66, jump: 62, agility: 60 }, flash: 2.1 },
+  { id: 'elbow', need: { dunk: 76, jump: 78 }, flash: 2.7 },
   { id: 'd360', need: { dunk: 80, jump: 75, agility: 68 }, flash: 3 },
+  { id: 'between', need: { dunk: 86, jump: 82, agility: 74 }, flash: 3.4, contestOnly: true },
+  { id: 'ftline', need: { dunk: 88, jump: 90 }, flash: 3.8, contestOnly: true },
 ];
 
 export function dunkUnlocked(p: Player, d: DunkDef) {

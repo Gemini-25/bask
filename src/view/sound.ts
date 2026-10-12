@@ -1,6 +1,8 @@
 // 효과음과 칩튠 음악 (SD1, SD2): 파일 없이 WebAudio로 코드에서 만든다.
 // 브라우저는 사용자가 한 번 눌러야 소리를 낼 수 있어서 첫 클릭 때 켠다.
 
+import { SONGS, type SongId } from './music';
+
 export type Sfx = 'swish' | 'dunk' | 'clank' | 'block' | 'whistle' | 'buzzer' | 'cheer' | 'bounce' | 'click' | 'jingle' | 'fanfare' | 'pop';
 
 const PREF = 'bask.sound';
@@ -15,6 +17,7 @@ class SoundBox {
   private bgmWanted = false;
   private nextNote = 0;
   private step = 0;
+  private song: SongId = 'title';
 
   constructor() {
     try {
@@ -183,11 +186,21 @@ class SoundBox {
 
   // ───── 칩튠 음악: 8마디를 반복하는 밝은 루프 ─────
 
-  /** 화면이 원하면 음악을 튼다 (경기 화면은 관중 소리만) */
-  music(on: boolean) {
+  /** 화면이 원하면 음악을 튼다 (경기 화면은 관중 소리만). 곡이 바뀌면 처음부터 */
+  music(on: boolean, song: SongId = this.song) {
+    if (song !== this.song) {
+      this.song = song;
+      this.step = 0;
+      if (this.ctx) this.nextNote = this.ctx.currentTime + 0.15;
+    }
     this.bgmWanted = on;
     if (on && this.bgmOn) this.startBgm();
     else this.stopBgmTimer();
+  }
+
+  /** 지금 곡 */
+  current(): SongId {
+    return this.song;
   }
 
   private startBgm() {
@@ -205,25 +218,23 @@ class SoundBox {
   private schedule() {
     const c = this.ctx;
     if (!c) return;
-    // C - Am - F - G 진행, 8분음표
-    const beat = 0.2;
-    const prog = [
-      [60, 64, 67],
-      [57, 60, 64],
-      [53, 57, 60],
-      [55, 59, 62],
-    ];
-    const lead = [72, 0, 74, 76, 79, 0, 76, 74, 72, 0, 69, 72, 74, 0, 0, 0, 69, 0, 72, 74, 76, 0, 74, 72, 71, 0, 72, 74, 67, 0, 0, 0];
+    const song = SONGS[this.song];
+    const beat = song.beat;
     const midi = (n: number) => 440 * 2 ** ((n - 69) / 12);
+    // 탭이 멈췄다 돌아오면 밀린 음은 건너뛴다
+    if (this.nextNote < c.currentTime - 0.5) this.nextNote = c.currentTime + 0.05;
     while (this.nextNote < c.currentTime + 0.4) {
-      const s = this.step % 32;
-      const chord = prog[Math.floor(s / 8)];
-      const at = this.nextNote - c.currentTime;
-      const ln = lead[s];
-      if (ln) this.tone('square', midi(ln), midi(ln), beat * 0.9, 0.035, at);
-      if (s % 2 === 0) this.tone('triangle', midi(chord[0] - 12), midi(chord[0] - 12), beat * 1.8, 0.08, at);
-      this.tone('square', midi(chord[(s % 3) + 0]), midi(chord[(s % 3) + 0]), beat * 0.4, 0.012, at);
-      if (s % 4 === 0) this.hiss(0.05, 0.05, 6000, 1, at, 'highpass');
+      const s = this.step % song.lead.length;
+      const chord = song.chords[Math.floor(s / 8) % song.chords.length];
+      const at = Math.max(0, this.nextNote - c.currentTime);
+      const ln = song.lead[s];
+      if (ln) this.tone(song.leadWave, midi(ln), midi(ln), beat * 0.9, song.leadVol, at);
+      if (s % song.bass === 0) this.tone('triangle', midi(chord[0] - 12), midi(chord[0] - 12), beat * (song.bass === 1 ? 0.9 : 1.8), 0.08, at);
+      if (song.arp) this.tone('square', midi(chord[s % 3]), midi(chord[s % 3]), beat * 0.4, 0.012, at);
+      const d = song.drums[s % song.drums.length];
+      if (d === 'k') this.tone('sine', 120, 45, 0.12, 0.12, at);
+      else if (d === 's') this.hiss(0.09, 0.06, 1800, 0.8, at);
+      else if (d === 'h') this.hiss(0.04, 0.035, 7000, 1, at, 'highpass');
       this.nextNote += beat;
       this.step++;
     }

@@ -1744,3 +1744,64 @@ ol.picks li.rv {
     margin-right: 400px;
   }
 }
+
+/* M10: 무대 장면, 시즌 카드 */
+canvas.stage {
+  width: 480px;
+  height: 270px;
+  max-width: 100%;
+  margin: 6px auto;
+  box-shadow: 0 0 0 2px var(--line);
+}
+.champ {
+  display: flex;
+  justify-content: center;
+}
+.scard {
+  background: linear-gradient(160deg, color-mix(in srgb, var(--tc) 35%, #1b202c), #141822 70%);
+  box-shadow:
+    0 0 0 2px var(--tc),
+    0 0 0 4px #0d1018;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.sctop {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.sctop canvas {
+  width: 80px;
+  height: 88px;
+}
+.sctop h2 {
+  margin: 0;
+}
+.sctop span {
+  color: var(--muted);
+}
+.scno {
+  font-size: 22px;
+  color: var(--led);
+}
+.scstats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 4px;
+  margin: 10px 0;
+}
+.scstats div {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 6px;
+  display: grid;
+}
+.scstats small {
+  color: var(--muted);
+}
+.scstats b {
+  font-size: 18px;
+}
+.scbest,
+.scfin {
+  margin: 4px 0;
+}

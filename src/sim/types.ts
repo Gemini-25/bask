@@ -32,7 +32,9 @@ export type EventType =
   | 'sub'
   | 'timeout'
   | 'defense'
-  | 'ejected';
+  | 'ejected'
+  /** 공을 쳐냈다 (player = 쳐낸 선수, other = 공 가졌던 선수), 루즈볼을 공격팀이 다시 잡았다 (offensive) */
+  | 'loose';
 
 export interface GameEvent {
   tick: number;
@@ -110,11 +112,48 @@ export const ACT = {
   D360: 27,
   BOUNCE: 28,
   LOB: 29,
+  // 드리블 기술 (M10)
+  CROSSOVER: 30,
+  BEHIND: 31,
+  LEGS: 32,
+  SPIN: 33,
+  HESI: 34,
+  // 덩크 (M10)
+  DOUBLE: 35,
+  ELBOW: 36,
+  BETWEEN: 37,
+  FTLINE: 38,
 } as const;
 
-export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360';
-export const DUNK_LABEL: Record<DunkStyle, string> = { one: '원핸드 덩크', two: '투핸드 덩크', tomahawk: '토마호크 덩크', reverse: '리버스 덩크', windmill: '윈드밀 덩크', d360: '360 덩크' };
-export const DUNK_ACT: Record<DunkStyle, number> = { one: ACT.DUNK, two: ACT.DUNK2, tomahawk: ACT.TOMAHAWK, reverse: ACT.REVERSE, windmill: ACT.WINDMILL, d360: ACT.D360 };
+/** 드리블 기술 이름 */
+export const MOVE_LABEL: Record<number, string> = { 30: '크로스오버', 31: '비하인드 백', 32: '레그 스루', 33: '스핀 무브', 34: '헤지테이션' };
+export const DRIBBLE_MOVES = [ACT.CROSSOVER, ACT.BEHIND, ACT.LEGS, ACT.SPIN, ACT.HESI] as number[];
+
+export type DunkStyle = 'one' | 'two' | 'tomahawk' | 'reverse' | 'windmill' | 'd360' | 'double' | 'elbow' | 'between' | 'ftline';
+export const DUNK_LABEL: Record<DunkStyle, string> = {
+  one: '원핸드 덩크',
+  two: '투핸드 덩크',
+  tomahawk: '토마호크 덩크',
+  reverse: '리버스 덩크',
+  windmill: '윈드밀 덩크',
+  d360: '360 덩크',
+  double: '더블 클러치 덩크',
+  elbow: '엘보우 행 덩크',
+  between: '비트윈 더 레그 덩크',
+  ftline: '자유투 라인 덩크',
+};
+export const DUNK_ACT: Record<DunkStyle, number> = {
+  one: ACT.DUNK,
+  two: ACT.DUNK2,
+  tomahawk: ACT.TOMAHAWK,
+  reverse: ACT.REVERSE,
+  windmill: ACT.WINDMILL,
+  d360: ACT.D360,
+  double: ACT.DOUBLE,
+  elbow: ACT.ELBOW,
+  between: ACT.BETWEEN,
+  ftline: ACT.FTLINE,
+};
 
 export const FLAG_STUN = 1;
 export const FLAG_SHOOT = 2;
