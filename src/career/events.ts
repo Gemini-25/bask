@@ -3,8 +3,10 @@
 import { clamp } from '../core/math';
 import { Rng } from '../core/rng';
 import { RATING_LABEL, type RatingKey } from '../data/ratings';
-import { addXp, dateOf, type Career } from './career';
+import { addXp, dateOf, teammates, type Career } from './career';
 import { avgFriendship } from './people';
+import { leagueTeam } from './league';
+import { signContract } from './pro';
 import { schoolById } from './schools';
 
 export interface Effect {
@@ -25,6 +27,11 @@ export interface Effect {
   text?: string;
   /** 확률로 갈리는 결과 */
   chance?: { p: number; ok: Effect; fail: Effect };
+  /** 프로: 인기, 돈(만원), 받는 물건, 트레이드 */
+  pop?: number;
+  money?: number;
+  item?: string;
+  trade?: boolean;
 }
 
 export interface Choice {
@@ -292,6 +299,59 @@ export const EVENTS: EventDef[] = [
   },
 ];
 
+// 프로 이벤트 (M7)
+EVENTS.push(
+  {
+    id: 'tradeRumor',
+    title: '트레이드 소문',
+    text: '구단이 너를 트레이드 카드로 쓴다는 기사가 났다. 감독 {coach}은(는) 말이 없다.',
+    cooldown: 20,
+    weight: 40,
+    when: (c) => !!c.pro && c.trust < 30,
+    choices: [
+      { label: '"더 열심히 하겠습니다."', effect: { trust: 5, fatigue: 5, text: '훈련장에 제일 먼저 나와 제일 늦게 나갔다.' } },
+      { label: '트레이드를 요청한다', effect: { trade: true, text: '구단이 요청을 받아들였다. 새 팀으로 간다.' } },
+    ],
+  },
+  {
+    id: 'fanLetter',
+    title: '팬레터',
+    text: '구단으로 팬레터가 왔다. "선수님 덕분에 농구를 시작했어요!"',
+    cooldown: 16,
+    weight: 15,
+    when: (c) => (c.popularity ?? 0) >= 30,
+    choices: [
+      { label: '답장을 쓴다', effect: { condition: 1, M: 2, pop: 1 } },
+      { label: '사인볼을 보낸다', effect: { pop: 2, money: -10 } },
+    ],
+  },
+  {
+    id: 'rookieWall',
+    title: '신인의 벽',
+    text: '프로는 고교와 다르다. 몸싸움도, 속도도. 선배 {mate}이(가) 웃으며 어깨를 친다. "다들 한 번씩 겪어."',
+    mate: 'random',
+    once: true,
+    weight: 60,
+    when: (c) => !!c.pro && c.pro.season === 0 && c.games.filter((g) => g.label.includes('정규')).length >= 3,
+    choices: [
+      { label: '웨이트를 늘린다', effect: { P: 4, fatigue: 6, friend: 3 } },
+      { label: '영상으로 공부한다', effect: { M: 4, xp: { iq: 0.4 }, friend: 3 } },
+    ],
+  },
+  {
+    id: 'sponsor',
+    title: '스폰서 제안',
+    text: '스포츠 브랜드에서 후원 계약을 제안했다! 신발과 용품을 준다고 한다.',
+    once: true,
+    weight: 50,
+    when: (c) => !!c.pro && (c.popularity ?? 0) >= 45,
+    choices: [
+      { label: '계약한다', effect: { money: 3000, pop: 3, item: 'shoeLight', text: '계약금 3000만 원과 새 농구화를 받았다.' } },
+      { label: '지금은 농구만', effect: { trust: 2, text: '감독님이 그 말을 들었다.' } },
+    ],
+  },
+);
+
 export interface PendingEvent {
   id: string;
   mate?: string;
@@ -317,7 +377,7 @@ export function rollEvent(c: Career, rng: Rng): PendingEvent | null {
 
 function pickMate(c: Career, e: EventDef, rng: Rng): string | undefined {
   if (!e.mate) return undefined;
-  const list = c.roster.filter((x) => (e.mate === 'senior' ? x.grade === 3 : e.mate === 'junior' ? x.grade === 1 : true));
+  const list = teammates(c).filter((x) => (e.mate === 'senior' ? x.grade === 3 : e.mate === 'junior' ? x.grade === 1 : true));
   if (!list.length) return undefined;
   if (e.mate === 'best') return list.reduce((a, b) => ((c.friends[a.player.id] ?? 0) >= (c.friends[b.player.id] ?? 0) ? a : b)).player.id;
   return rng.pick(list).player.id;
@@ -329,12 +389,12 @@ export function eventById(id: string) {
 
 /** 글 속 이름 바꾸기 */
 export function fill(c: Career, text: string, mate?: string) {
-  const mateName = c.roster.find((e) => e.player.id === mate)?.player.name ?? '팀원';
+  const mateName = teammates(c).find((e) => e.player.id === mate)?.player.name ?? '팀원';
   return text
     .replace(/\{me\}/g, c.me.name)
     .replace(/\{coach\}/g, c.coach)
     .replace(/\{rival\}/g, c.rival?.player.name ?? '라이벌')
-    .replace(/\{rivalSchool\}/g, c.rival ? schoolById(c.rival.school).name : '')
+    .replace(/\{rivalSchool\}/g, c.rival ? (c.pro && c.league ? leagueTeam(c.league, c.rival.school).info.name : schoolById(c.rival.school).name) : '')
     .replace(/\{mate\}/g, mateName)
     .replace(/\{mentor\}/g, c.mentor.name)
     .replace(/\{school\}/g, schoolById(c.school).name);
@@ -357,6 +417,15 @@ export function resolveEvent(c: Career, ev: PendingEvent, choice: number): strin
     if (e.friend && ev.mate) c.friends[ev.mate] = clamp((c.friends[ev.mate] ?? 20) + e.friend, 0, 100);
     if (e.friendsAll) for (const id of Object.keys(c.friends)) c.friends[id] = clamp(c.friends[id] + e.friendsAll, 0, 100);
     if (e.shoe !== undefined) c.me.look.shoe = e.shoe;
+    if (e.pop) c.popularity = clamp((c.popularity ?? 0) + e.pop, 0, 100);
+    if (e.money) c.money = Math.max(0, (c.money ?? 0) + e.money);
+    if (e.item && !(c.items ??= []).includes(e.item)) c.items.push(e.item);
+    if (e.trade && c.pro && c.league) {
+      const others = c.league.teams.filter((t) => t.info.id !== c.pro!.team);
+      const to = others[Math.floor(rng.next() * others.length)];
+      signContract(c, { team: to.info.id, salary: c.pro.salary, years: Math.max(1, c.pro.years) });
+      out.push(`${to.info.city} ${to.info.name}(으)로 이적했다!`);
+    }
     if (e.xp) {
       const ups: Partial<Record<RatingKey, number>> = {};
       for (const [k, v] of Object.entries(e.xp)) addXp(c, k as RatingKey, v!, ups);
@@ -379,6 +448,9 @@ export function effectHint(e: Effect): string {
   if (e.condition) parts.push(`컨디션 ${e.condition > 0 ? '↑' : '↓'}`);
   if (e.friend) parts.push(`친밀도 ${e.friend > 0 ? '+' : ''}${e.friend}`);
   if (e.friendsAll) parts.push(`팀 친밀도 +${e.friendsAll}`);
+  if (e.pop) parts.push(`인기 +${e.pop}`);
+  if (e.money) parts.push(`돈 ${e.money > 0 ? '+' : ''}${e.money}만`);
+  if (e.trade) parts.push('다른 팀으로');
   if (e.xp) parts.push(Object.keys(e.xp).map((k) => `${RATING_LABEL[k as RatingKey]} 경험치`).join(', '));
   return parts.join(' · ');
 }

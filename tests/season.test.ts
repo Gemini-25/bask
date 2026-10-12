@@ -162,7 +162,7 @@ describe('특수능력 (S8)', () => {
 });
 
 describe('세이브 변환 (K4)', () => {
-  it('v1 세이브를 읽으면 v2 항목이 채워지고 시즌이 이어진다', () => {
+  it('v1 세이브를 읽으면 새 항목이 채워지고 시즌이 이어진다', () => {
     const c = createCareer(spec(), 10);
     for (let i = 0; i < 9; i++) playWeek(c, 'rest');
     const v1 = JSON.parse(exportCareer(c));
@@ -176,7 +176,7 @@ describe('세이브 변환 (K4)', () => {
     }
     delete old.me.abilities;
     const back = importCareer(JSON.stringify(v1));
-    expect(back.v).toBe(2);
+    expect(back.v).toBe(3);
     expect(back.pendingGame).toEqual({ kind: 'practice', opponent: 'HANB', label: '연습경기', home: expect.any(Boolean) });
     expect(back.trust).toBe(40);
     expect(back.rival).toBeTruthy();

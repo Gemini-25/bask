@@ -11,10 +11,14 @@ import { coachName, createMentor, createRival, type Mentor, type Rival } from '.
 import { dunkList } from '../data/dunks';
 import type { DunkStyle } from '../sim/types';
 import { emptyStats, startAbilities, type CareerStats } from './abilities';
+import { has, houseMult, houseRest } from './money';
+import type { DraftResult } from './draft';
 import type { PendingEvent } from './events';
+import type { SnsPost } from './fans';
+import type { League } from './league';
 import type { Season } from './season';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const WEEKS_PER_YEAR = 48;
 export const MAX_RATING = 99;
 /** 선수 만들 때 자유 포인트로 올릴 수 있는 최대치 */
@@ -35,7 +39,7 @@ for (const g of RATING_GROUPS) for (const [k] of g.items) POINT_OF[k] = g.key ==
 /** 능력치 v를 v+1로 올리는 비용. 잠재력을 넘으면 비싸진다 (소프트 캡, T6) */
 export function costOf(v: number, potential: number): number {
   if (v >= MAX_RATING) return Infinity;
-  let c = 2 + Math.floor(Math.max(0, v - 20) / 7);
+  let c = 3 + Math.floor(Math.max(0, v - 20) / 5);
   if (v >= potential) c *= 2;
   if (v >= potential + 8) c = Math.ceil(c * 1.5);
   return c;
@@ -72,8 +76,22 @@ export interface GameLine {
   fta: number;
 }
 
+export interface ProState {
+  /** 내 팀 (TEAM_INFOS id) */
+  team: string;
+  /** 연봉 (만원) */
+  salary: number;
+  /** 남은 계약 시즌 */
+  years: number;
+  pickNo: number;
+  /** 프로 몇 번째 시즌 (0 = 신인) */
+  season: number;
+}
+
 export interface PendingGame {
   kind: 'practice' | 'official';
+  /** 프로 경기 */
+  pro?: boolean;
   opponent: string;
   /** 공식전이면 대회 id */
   tour?: string;
@@ -148,7 +166,33 @@ export interface Career {
   stats: CareerStats;
   /** 열린 덩크 (AN2) */
   dunks: DunkStyle[];
+  /** 프로 (드래프트 뒤) */
+  pro: ProState | null;
+  league: League | null;
+  /** 이번 주에 더 남은 경기 (플레이오프는 한 주에 여러 경기) */
+  gameQueue: PendingGame[];
+  /** 아직 안 본 드래프트 결과 */
+  draft: DraftResult | null;
+  /** 재계약 협상이 필요하다 */
+  contractPending: boolean;
+  /** 돈 (만원) */
+  money: number;
+  items: string[];
+  /** 인기 0~100 */
+  popularity: number;
+  sns: SnsPost[];
+  /** 마지막으로 해 넘김을 처리한 해 */
+  yearOf: number;
   counts: Partial<Record<ActionId, number>>;
+}
+
+/** 지금 팀원 (고교 선수단 또는 프로 팀) */
+export function teammates(c: Career): RosterEntry[] {
+  if (c.pro && c.league) {
+    const t = c.league.teams.find((x) => x.info.id === c.pro!.team);
+    return (t?.players ?? []).map((player) => ({ player, grade: 0 }));
+  }
+  return c.roster;
 }
 
 // ───────────── 달력 ─────────────
@@ -162,6 +206,7 @@ export function dateOf(week: number) {
 
 export function dateText(week: number): string {
   const d = dateOf(week);
+  if (d.year >= 3) return `프로 ${d.year - 2}년차 ${d.month}월 ${d.wk}주`;
   return `${d.grade}학년 ${d.month}월 ${d.wk}주`;
 }
 
@@ -242,7 +287,7 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
   const rng = new Rng(seed);
   const { r: base, body, bg } = creationBase(spec);
   const { r } = applyAlloc(base, spec.alloc, bg.freePoints);
-  const me: Player = { id: 'me', name: spec.name.trim() || '이름없음', number: spec.number, pos: spec.prefPos, body, r, look: spec.look, abilities: startAbilities(spec.background) };
+  const me: Player = { id: 'me', name: spec.name.trim() || '이름없음', number: spec.number, pos: spec.prefPos, body, r, look: spec.look, abilities: startAbilities(spec.background), age: 16 };
   const finalHeight = Math.max(body.heightCm, Math.round(body.heightCm + bg.growth + rng.normal(0, 2)));
   const school = schoolById(spec.school);
   const roster = generateSchoolRoster(rng.fork(7), school, spec.gender, [spec.number]);
@@ -279,6 +324,16 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     pendingEvent: null,
     stats: emptyStats(),
     dunks: [],
+    pro: null,
+    league: null,
+    gameQueue: [],
+    draft: null,
+    contractPending: false,
+    money: 0,
+    items: [],
+    popularity: 0,
+    sns: [],
+    yearOf: 0,
     counts: {},
   };
   c.rival = createRival(c, rng.fork(11));
@@ -298,7 +353,7 @@ export function myOverall(c: Career, pos: Position = c.prefPos) {
 
 // ───────────── 주간 행동 (T2) ─────────────
 
-export type ActionId = 'team' | 'solo' | 'mentor' | 'weight' | 'video' | 'street' | 'friends' | 'rest' | 'rehab';
+export type ActionId = 'team' | 'solo' | 'mentor' | 'trainer' | 'weight' | 'video' | 'street' | 'ad' | 'friends' | 'rest' | 'rehab';
 export type FocusId = 'shoot' | 'drive' | 'post' | 'defense' | 'pass';
 
 export interface ActionDef {
@@ -318,15 +373,21 @@ export interface ActionDef {
   pose: number;
   /** 감독 신뢰도 변화 */
   trust: number;
+  /** 프로만 */
+  proOnly?: boolean;
+  /** 드는 돈 (만원) */
+  cost?: number;
 }
 
 export const ACTIONS: ActionDef[] = [
   { id: 'team', label: '팀 훈련', desc: '감독님 지도 아래 팀 전술 훈련. 골고루 오르고, 감독 신뢰와 팀원 친밀도가 오른다', pts: { P: 2, T: 5, M: 2 }, fatigue: 13, mood: 0, injuredOk: false, pose: ACT.DRIBBLE, trust: 1 },
   { id: 'solo', label: '개인 훈련', desc: '분야 하나를 집중 훈련. 기술 포인트 + 그 분야 경험치', pts: { P: 1, T: 7, M: 1 }, fatigue: 15, mood: -0.1, injuredOk: false, pose: ACT.SHOOT, trust: 0.3 },
   { id: 'mentor', label: '은사 특훈', desc: '전설에게 받는 특별 훈련. 고른 분야 경험치가 크게 오른다. 한 달에 한 번', pts: { P: 2, T: 9, M: 3 }, fatigue: 18, mood: 0, injuredOk: false, pose: ACT.SHOOT, trust: 0.3 },
+  { id: 'trainer', label: '개인 트레이너', desc: '전문 트레이너와 고른 분야 집중 훈련. 경험치가 크게 오르고 덜 다친다 (200만 원)', pts: { P: 3, T: 8, M: 2 }, fatigue: 14, mood: 0, injuredOk: false, pose: ACT.SHOOT, trust: 0.3, proOnly: true, cost: 200 },
   { id: 'weight', label: '웨이트', desc: '근력·점프·지구력을 키운다. 많이 지친다', pts: { P: 8, T: 0, M: 1 }, fatigue: 17, mood: -0.1, injuredOk: false, pose: ACT.STANCE, trust: 0.3 },
   { id: 'video', label: '영상 분석', desc: '프로 경기와 내 경기를 돌려 본다. 정신 포인트, 덜 지친다', pts: { P: 0, T: 1, M: 6 }, fatigue: -2, mood: 0, injuredOk: true, pose: ACT.IDLE, trust: 0.5 },
   { id: 'street', label: '길거리 3x3', desc: '공원 코트 내기 농구. 가끔 고수를 만난다. 감독님은 별로 안 좋아한다', pts: { P: 2, T: 4, M: 2 }, fatigue: 11, mood: 0.25, injuredOk: false, pose: ACT.DRIBBLE, trust: -0.4 },
+  { id: 'ad', label: '광고 촬영', desc: '돈을 벌고 인기가 오른다. 감독님은 훈련을 더 했으면 한다', pts: { P: 0, T: 0, M: 1 }, fatigue: 6, mood: 0.2, injuredOk: true, pose: ACT.CELEBRATE, trust: -0.3, proOnly: true },
   { id: 'friends', label: '친구와 놀기', desc: '팀원들과 논다. 피로가 풀리고 기분과 친밀도가 오른다', pts: { P: 0, T: 0, M: 2 }, fatigue: -12, mood: 0.7, injuredOk: true, pose: ACT.CELEBRATE, trust: 0 },
   { id: 'rest', label: '휴식', desc: '푹 쉰다. 피로가 많이 풀린다', pts: { P: 0, T: 0, M: 0 }, fatigue: -26, mood: 0.45, injuredOk: true, pose: ACT.IDLE, trust: 0 },
   { id: 'rehab', label: '재활', desc: '부상 회복이 두 배 빨라진다', pts: { P: 1, T: 0, M: 1 }, fatigue: -16, mood: 0.1, injuredOk: true, injuredOnly: true, pose: ACT.STANCE, trust: 0.2 },
@@ -365,7 +426,7 @@ export function growthMult(c: Career) {
 
 /** 이 행동을 하면 대략 얻는 포인트 (화면 미리보기용, 난수 없음) */
 export function expectedPoints(c: Career, a: ActionDef): Points {
-  const m = CONDITION_MULT[c.condition] * growthMult(c);
+  const m = CONDITION_MULT[c.condition] * growthMult(c) * houseMult(c, a.id);
   return { P: Math.round(a.pts.P * m), T: Math.round(a.pts.T * m), M: Math.round(a.pts.M * m) };
 }
 
@@ -385,6 +446,8 @@ export function injuryRisk(c: Career, a: ActionDef): number {
 
 export function canDo(c: Career, a: ActionDef): boolean {
   if (a.id === 'mentor' && !mentorReady(c)) return false;
+  if (a.proOnly && !c.pro) return false;
+  if (a.cost && (c.money ?? 0) < a.cost) return false;
   if (c.injury) return a.injuredOk;
   return !a.injuredOnly;
 }
@@ -442,15 +505,16 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   const conditionBefore = c.condition;
 
   // 포인트
-  const mult = CONDITION_MULT[c.condition] * growthMult(c) * (c.injury && id !== 'rehab' ? 0.5 : 1);
+  const mult = CONDITION_MULT[c.condition] * growthMult(c) * (c.injury && id !== 'rehab' ? 0.5 : 1) * houseMult(c, id);
+  if (a.cost) c.money -= a.cost;
   const gained: Points = { P: 0, T: 0, M: 0 };
   for (const k of ['P', 'T', 'M'] as const) gained[k] = stoch(rng, a.pts[k] * mult * rng.range(0.85, 1.15));
 
   // 개인 훈련·은사 특훈: 고른 분야 경험치
-  if (id === 'solo' || id === 'mentor') {
+  if (id === 'solo' || id === 'mentor' || id === 'trainer') {
     const f = FOCUS.find((x) => x.id === focus) ?? FOCUS[0];
-    const big = id === 'mentor' ? 2.2 : 1;
-    for (const k of f.keys) addXp(c, k, ((0.9 * big) / f.keys.length) * CONDITION_MULT[c.condition] * rng.range(0.8, 1.2), ups);
+    const big = id === 'mentor' ? 2.2 : id === 'trainer' ? 1.5 : 1;
+    for (const k of f.keys) addXp(c, k, ((0.5 * big) / f.keys.length) * CONDITION_MULT[c.condition] * rng.range(0.8, 1.2), ups);
     if (id === 'mentor') {
       c.mentor.last = c.week;
       notes.push(`${c.mentor.name} 선생님: "${rng.pick(['기본이 전부다.', '몸이 기억할 때까지.', '좋아, 그 감각이야.', '오늘은 여기까지. 쉬는 것도 훈련이다.'])}"`);
@@ -462,11 +526,18 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
     c.mentor.last = c.week - 4;
     notes.push(`공원 코트에서 은퇴한 전설 ${c.mentor.name}을(를) 만났다! 이제 '은사 특훈'을 할 수 있다.`);
   }
+  if (id === 'ad') {
+    const pay = Math.round(300 + (c.popularity ?? 0) * 15);
+    c.money += pay;
+    c.popularity = Math.min(100, (c.popularity ?? 0) + 1);
+    notes.push(`광고 촬영비 ${pay}만 원을 받았다.`);
+  }
   // 감독 신뢰도와 친밀도
   let dTrust = a.trust;
   if (id === 'rest' && c.fatigue < 25) dTrust -= 0.3;
   c.trust = clamp(c.trust + dTrust, 0, 100);
-  const mates = c.roster.map((e) => e.player.id);
+  const roster = teammates(c);
+  const mates = roster.map((e) => e.player.id);
   if (id === 'team') {
     for (const pid of mates) c.friends[pid] = clamp((c.friends[pid] ?? 20) + 0.6, 0, 100);
     for (let i = 0; i < 2; i++) {
@@ -481,7 +552,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
       picked.push(pid);
       c.friends[pid] = clamp((c.friends[pid] ?? 20) + 7, 0, 100);
     }
-    const names = picked.map((pid) => c.roster.find((e) => e.player.id === pid)!.player.name);
+    const names = picked.map((pid) => roster.find((e) => e.player.id === pid)!.player.name);
     notes.push(`${names.join(', ')}와(과) ${rng.pick(['PC방에 갔다', '떡볶이를 먹었다', '노래방에 갔다', '영화를 봤다', '한강에서 자전거를 탔다'])}.`);
   }
   // 길거리: 가끔 고수에게 배운다
@@ -495,20 +566,20 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   if (id === 'video') addXp(c, rng.pick(['iq', 'vision', 'composure'] as RatingKey[]), 0.2, ups);
 
   // 피로: 훈련으로 쌓이고, 매주 조금씩 자연 회복
-  const natural = 6 * (0.7 + (c.me.r.recovery / 100) * 0.6);
+  const natural = 6 * (0.7 + (c.me.r.recovery / 100) * 0.6) + houseRest(c);
   c.fatigue = clamp(c.fatigue + fatigueGain(c, a) - natural, 0, 100);
 
   // 부상
   let injured: Injury | null = null;
   let healed = false;
   if (c.injury) {
-    c.injury.weeks -= id === 'rehab' ? 2 : 1;
+    c.injury.weeks -= id === 'rehab' ? (has(c, 'aqua') ? 3 : 2) : 1;
     if (c.injury.weeks <= 0) {
       notes.push(`${c.injury.name}에서 회복했다.`);
       c.injury = null;
       healed = true;
     }
-  } else if (rng.chance(injuryRisk({ ...c, fatigue: fatigueBefore }, a))) {
+  } else if (rng.chance(injuryRisk({ ...c, fatigue: fatigueBefore }, a) * (id === 'trainer' ? 0.7 : 1) * (has(c, 'knee') ? 0.8 : 1))) {
     const inj = INJURIES[rng.weighted(INJURIES.map((x) => x.w))];
     const weeks = rng.int(inj.weeks[0], inj.weeks[1]);
     injured = { name: inj.name, weeks, total: weeks };

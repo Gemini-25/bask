@@ -2,11 +2,14 @@
 import { Rng } from '../core/rng';
 import { generatePlayer, type Position } from '../data/player';
 import { RATING_KEYS } from '../data/ratings';
-import { dateOf, doWeek, WEEKS_PER_YEAR, type ActionId, type Career, type FocusId, type WeekResult } from './career';
+import { dateOf, doWeek, WEEKS_PER_YEAR, type ActionId, type Career, type FocusId, type PendingGame, type WeekResult } from './career';
 import { hsHeightAdj, schoolById } from './schools';
 import { checkAbilities } from './abilities';
 import { rollEvent } from './events';
+import { runDraft } from './draft';
+import { popularityDecay } from './fans';
 import { rivalGrow } from './people';
+import { proNewYear, proWeek } from './pro';
 import { catchUp, createSeason, gameFor, playOthers } from './season';
 
 /** 올해 시즌이 없으면 만든다 (새 커리어, 새 학년, 예전 세이브) */
@@ -23,7 +26,7 @@ export function ensureSeason(c: Career) {
 }
 
 export function playWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
-  ensureSeason(c);
+  if (!c.pro) ensureSeason(c);
   // 이벤트는 이번 주 상황(지난 경기 결과 포함)으로 정하고, 훈련 결과 다음에 보여준다
   const er = Rng.fromState(c.rng);
   const ev = c.pendingEvent ?? rollEvent(c, er);
@@ -33,27 +36,52 @@ export function playWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   r.event = ev;
   const w = c.week - 1;
   const rng = Rng.fromState(c.rng);
-  playOthers(c, w, rng);
-  // 한 달이 끝나면 팀원들과 라이벌도 조금씩 큰다
-  if (w % 4 === 3) {
-    teammatesGrow(c, rng);
-    rivalGrow(c, rng);
+  let g: PendingGame | null;
+  if (c.pro) {
+    // 연봉은 매주 나눠서 들어온다
+    c.money += Math.round(c.pro.salary / WEEKS_PER_YEAR);
+    popularityDecay(c);
+    c.gameQueue = proWeek(c, w, rng);
+    g = c.gameQueue.shift() ?? null;
+  } else {
+    playOthers(c, w, rng);
+    // 한 달이 끝나면 팀원들과 라이벌도 조금씩 큰다
+    if (w % 4 === 3) {
+      teammatesGrow(c, rng);
+      rivalGrow(c, rng);
+    }
+    g = gameFor(c, w, rng);
   }
   // 능력치가 올라 조건을 채운 특수능력 (친밀도·부상 회복 등)
   r.notes.push(...checkAbilities(c));
-  const g = gameFor(c, w, rng);
   c.pendingGame = g;
   r.game = g;
   c.rng = rng.state;
-  // 다음 주가 새 학년이고 경기가 없으면 바로 진급
-  if (c.week % WEEKS_PER_YEAR === 0 && !g) r.notes.push(...newYear(c));
+  // 다음 주가 새해이고 경기가 없으면 바로 넘어간다
+  if (!g) r.notes.push(...rollover(c));
   return r;
 }
 
-/** 경기를 마친 뒤 부른다 (해가 바뀌는 주에 경기가 있었을 때 진급 처리) */
+/** 경기를 마친 뒤: 같은 주 다음 경기를 꺼내고, 해가 바뀌는 주였으면 넘어간다 */
 export function afterGame(c: Career): string[] {
-  if (c.week % WEEKS_PER_YEAR === 0 && dateOf(c.week).year !== c.season?.year) return newYear(c);
-  return [];
+  c.pendingGame = c.gameQueue?.shift() ?? null;
+  if (c.pendingGame) return [];
+  return rollover(c);
+}
+
+/** 해가 바뀌었으면: 고교는 진급, 고3이 끝나면 드래프트, 프로는 새 시즌 */
+export function rollover(c: Career): string[] {
+  const y = dateOf(c.week).year;
+  if (c.week % WEEKS_PER_YEAR !== 0 || y <= (c.yearOf ?? 0)) return [];
+  c.yearOf = y;
+  if (c.pro) return proNewYear(c);
+  if (y === 3) {
+    c.draft = runDraft(c);
+    c.me.age = (c.me.age ?? 18) + 1;
+    return ['고교 3년이 끝났다! 드래프트 날이다.'];
+  }
+  c.me.age = (c.me.age ?? 16) + 1;
+  return newYear(c);
 }
 
 function teammatesGrow(c: Career, rng: Rng) {
@@ -93,8 +121,6 @@ export function newYear(c: Career): string[] {
       c.friends[p.id] = 30;
     }
     notes.push(`${year + 1}학년이 됐다! 3학년 선배 ${grads.length}명 졸업, 신입생 ${count}명 입학.`);
-  } else {
-    notes.push('고교 3년이 끝났다! 드래프트와 프로 무대는 다음 버전에서.');
   }
   c.rng = rng.state;
   c.season = createSeason(c, year);

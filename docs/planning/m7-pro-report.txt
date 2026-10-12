@@ -1,0 +1,49 @@
+M7 커리어 리포트: tools/full.ts (5년 자동 플레이, 자유 포인트 없음, 평범한 아이 SG, 한빛고)
+전략: 팀/개인/웨이트/팀/영상 순환, 피로 62 넘으면 휴식, 포인트는 종합 능력치 위주 자동 투자, 재계약은 지금 팀
+
+--- 시드 3 ---
+1학년 2월 4주 OVR 38.9 money 0 pop 4.2 trust 82 
+2학년 2월 4주 OVR 46.0 money 0 pop 13.3 trust 100 
+프로 1년차 3월 1주 고교 3년이 끝났다! 드래프트 날이다.
+DRAFT 1 순위 대구 블레이즈 9000 만원
+3학년 2월 4주 OVR 52.8 money 0 pop 25.1 trust 35 team DAE
+프로 1년차 2월 4주 OVR 59.1 money 12024 pop 57.1 trust 100 team DAE
+프로 3년차 3월 1주 시즌 끝! 내 팀 성적: 우승 · 우승 대구 블레이즈 | 부산 씨라이언즈: 베테랑 2명 은퇴
+계약 제안 21010 [ 16300, 19600 ]
+프로 2년차 2월 4주 OVR 65.1 money 21048 pop 100.0 trust 100 team DAE
+games 127 ms 46148
+SEO 0-0 | BUS 0-0 | INC 0-0 | DAE 0-0 | GWA 0-0 | DJN 0-0 | ULS 0-0 | SUW 0-0 | CHW 0-0 | JEJ 0-0
+history [{"season":0,"champion":"BUS","myFinish":"플레이오프 탈락"},{"season":1,"champion":"DAE","myFinish":"우승"}]
+pro games 54 avg pts 34.3 avg min 29.5
+save size 247 KB true
+
+--- 시드 8 ---
+1학년 2월 4주 OVR 38.5 money 0 pop 2.8 trust 77 
+2학년 2월 4주 OVR 46.4 money 0 pop 10.2 trust 100 
+프로 1년차 3월 1주 고교 3년이 끝났다! 드래프트 날이다.
+DRAFT 3 순위 창원 스톰 8100 만원
+3학년 2월 4주 OVR 54.0 money 0 pop 26.6 trust 35 team CHW
+프로 2년차 3월 1주 시즌 끝! 내 팀 성적: 우승 · 우승 창원 스톰
+프로 1년차 2월 4주 OVR 61.9 money 11112 pop 100.0 trust 100 team CHW
+계약 제안 23980 [ 19200, 25600 ]
+프로 2년차 2월 4주 OVR 66.5 money 19224 pop 99.5 trust 100 team CHW
+games 133 ms 48692
+SEO 0-0 | BUS 0-0 | INC 0-0 | DAE 0-0 | GWA 0-0 | DJN 0-0 | ULS 0-0 | SUW 0-0 | CHW 0-0 | JEJ 0-0
+history [{"season":0,"champion":"CHW","myFinish":"우승"},{"season":1,"champion":"BUS","myFinish":"4강"}]
+pro games 54 avg pts 34.9 avg min 25.7
+save size 251 KB true
+
+--- 시드 11 ---
+1학년 2월 4주 OVR 39.0 money 0 pop 4.9 trust 86 
+2학년 2월 4주 OVR 46.9 money 0 pop 13.4 trust 100 
+프로 1년차 3월 1주 고교 3년이 끝났다! 드래프트 날이다.
+DRAFT 1 순위 제주 오션스 9000 만원
+3학년 2월 4주 OVR 54.0 money 0 pop 24.7 trust 35 team JEJ
+프로 1년차 2월 4주 OVR 58.4 money 9024 pop 41.8 trust 100 team JEJ
+계약 제안 17160 [ 14600, 16200 ]
+프로 2년차 2월 4주 OVR 63.1 money 21048 pop 79.7 trust 100 team JEJ
+games 113 ms 40391
+SEO 0-0 | BUS 0-0 | INC 0-0 | DAE 0-0 | GWA 0-0 | DJN 0-0 | ULS 0-0 | SUW 0-0 | CHW 0-0 | JEJ 0-0
+history [{"season":0,"champion":"SEO","myFinish":"플레이오프 탈락"},{"season":1,"champion":"ULS","myFinish":"플레이오프 탈락"}]
+pro games 54 avg pts 35.8 avg min 28.2
+save size 239 KB true

@@ -28,6 +28,8 @@ export interface Player {
   look: Look;
   /** 특수능력 단계 (S8). 없으면 일반 선수 */
   abilities?: Partial<Record<AbilityId, number>>;
+  /** 나이 (프로 리그) */
+  age?: number;
 }
 
 /** 이름에서 겉모습을 정한다 (같은 선수는 항상 같은 모습) */

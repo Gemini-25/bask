@@ -3,7 +3,7 @@ import { Rng } from '../core/rng';
 import { koreanName } from '../data/names';
 import { generatePlayer, lookFor, overall, type Player } from '../data/player';
 import { RATING_KEYS, type RatingKey } from '../data/ratings';
-import type { Career } from './career';
+import { teammates, type Career } from './career';
 import { hsHeightAdj, SCHOOLS, schoolById } from './schools';
 
 export interface Rival {
@@ -42,13 +42,13 @@ export function createRival(c: Career, rng: Rng): Rival {
   return { player: p, school: school.id, w: 0, l: 0 };
 }
 
-/** 라이벌도 한 달에 종합 1쯤 큰다 (내가 평균적으로 크는 속도) */
+/** 라이벌도 한 달에 종합 0.5쯤 큰다 (내가 평균적으로 크는 속도) */
 export function rivalGrow(c: Career, rng: Rng) {
   const r = c.rival;
   if (!r) return;
   const p = r.player;
   const before = overall(p, p.pos);
-  for (let guard = 0; guard < 200 && overall(p, p.pos) < before + 1; guard++) {
+  for (let guard = 0; guard < 200 && overall(p, p.pos) < before + 0.5; guard++) {
     const k = rng.pick(RATING_KEYS) as RatingKey;
     if (p.r[k] < 92) p.r[k]++;
   }
@@ -87,7 +87,7 @@ export function avgFriendship(c: Career): number {
 /** 가장 친한 팀원 */
 export function bestFriend(c: Career): { name: string; id: string; v: number } | null {
   let best: { name: string; id: string; v: number } | null = null;
-  for (const e of c.roster) {
+  for (const e of teammates(c)) {
     const v = c.friends[e.player.id] ?? 0;
     if (!best || v > best.v) best = { name: e.player.name, id: e.player.id, v };
   }
@@ -95,7 +95,7 @@ export function bestFriend(c: Career): { name: string; id: string; v: number } |
 }
 
 export function teammateName(c: Career, id: string) {
-  return c.roster.find((e) => e.player.id === id)?.player.name ?? '팀원';
+  return teammates(c).find((e) => e.player.id === id)?.player.name ?? '팀원';
 }
 
 export function schoolName(id: string) {

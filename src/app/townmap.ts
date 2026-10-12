@@ -23,10 +23,10 @@ interface Place {
 }
 
 export const PLACES: Place[] = [
-  { id: 'school', label: '학교 체육관', x: 14, y: 18, w: 108, h: 62, door: [68, 92], actions: ['team', 'solo', 'weight', 'video'] },
+  { id: 'school', label: '학교 체육관', x: 14, y: 18, w: 108, h: 62, door: [68, 92], actions: ['team', 'solo', 'trainer', 'weight', 'video'] },
   { id: 'park', label: '공원 코트', x: 208, y: 84, w: 100, h: 56, door: [222, 112], actions: ['street', 'mentor'] },
   { id: 'home', label: '집', x: 238, y: 14, w: 52, h: 40, door: [264, 62], actions: ['rest'] },
-  { id: 'snack', label: '분식집', x: 128, y: 104, w: 52, h: 34, door: [154, 100], actions: ['friends'] },
+  { id: 'snack', label: '분식집', x: 128, y: 104, w: 52, h: 34, door: [154, 100], actions: ['friends', 'ad'] },
   { id: 'hospital', label: '병원', x: 150, y: 14, w: 52, h: 40, door: [176, 62], actions: ['rehab'] },
 ];
 
@@ -116,13 +116,13 @@ function drawPlace(ctx: CanvasRenderingContext2D, p: Place, hot: boolean, t: num
 }
 
 /** 건물 이름은 캔버스 위 HTML 글자로 (도트 확대해도 또렷하게) */
-function addLabels(wrap: HTMLElement) {
+function addLabels(wrap: HTMLElement, names: Partial<Record<PlaceId, string>>) {
   wrap.querySelectorAll('.tlabel').forEach((e) => e.remove());
   for (const p of PLACES) {
     const el = document.createElement('span');
     el.className = 'tlabel';
     el.dataset.place = p.id;
-    el.textContent = p.label;
+    el.textContent = names[p.id] ?? p.label;
     el.style.left = `${((p.x + p.w / 2) / MAP_W) * 100}%`;
     el.style.top = `${((p.y + p.h + 2) / MAP_H) * 100}%`;
     wrap.appendChild(el);
@@ -135,6 +135,7 @@ export class TownMap {
     canvas: HTMLCanvasElement,
     private get: () => { pl: Player; kit: Kit; injured: boolean },
     onPick: (p: PlaceId) => void,
+    names: Partial<Record<PlaceId, string>> = {},
   ) {
     canvas.width = MAP_W;
     canvas.height = MAP_H;
@@ -149,7 +150,7 @@ export class TownMap {
       const l = (e.target as HTMLElement).closest('.tlabel') as HTMLElement | null;
       if (l) onPick(l.dataset.place as PlaceId);
     });
-    if (canvas.parentElement) addLabels(canvas.parentElement);
+    if (canvas.parentElement) addLabels(canvas.parentElement, names);
     canvas.onmousemove = (e) => {
       const [mx, my] = toMap(e);
       this.st.hover = hit(mx, my);

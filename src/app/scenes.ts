@@ -74,6 +74,7 @@ export function trainingScene(canvas: HTMLCanvasElement, o: SceneOpts) {
     switch (o.scene) {
       case 'title':
       case 'solo':
+      case 'trainer':
       case 'mentor': {
         floor(ctx, '#2a3142', '#c99a5b');
         ctx.fillStyle = '#e9ecf3';
@@ -223,6 +224,25 @@ export function trainingScene(canvas: HTMLCanvasElement, o: SceneOpts) {
         ball(ctx, meX + 5, 66 - Math.abs(Math.sin(t * 10)) * 8);
         fig(ctx, extras.mates[2], { jersey: '#e9ecf3', trim: '#3a3f52' }, meX + 14, 70, ACT.STANCE, t, { flip: true });
         fig(ctx, extras.mates[3], { jersey: '#2b2b33', trim: '#ffb545' }, 104, 60, ACT.IDLE, t, { facing: 'front' });
+        break;
+      }
+      case 'ad': {
+        // 촬영장: 조명과 카메라
+        ctx.fillStyle = '#f2f2f2';
+        ctx.fillRect(0, 0, SCENE_W, SCENE_H);
+        ctx.fillStyle = '#e0e4ea';
+        ctx.fillRect(0, 60, SCENE_W, 30);
+        ctx.fillStyle = '#2b2b33';
+        ctx.fillRect(18, 40, 12, 8);
+        ctx.fillRect(22, 48, 2, 22);
+        ctx.fillStyle = '#ffe9a0';
+        if (Math.sin(t * 7) > 0.85) ctx.fillRect(30, 41, 4, 4);
+        ctx.fillStyle = '#3a3f52';
+        ctx.fillRect(130, 20, 4, 50);
+        ctx.fillStyle = '#fff3c4';
+        ctx.fillRect(126, 16, 12, 6);
+        meX = 80;
+        meTop = fig(ctx, o.pl, o.kit, meX, 70, Math.sin(t * 2) > 0 ? ACT.CELEBRATE : ACT.HOLD, t, { facing: 'front' });
         break;
       }
       case 'friends': {

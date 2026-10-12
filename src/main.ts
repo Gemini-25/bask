@@ -4,11 +4,12 @@ import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
 import { $, closeModal, download, modal, onScreen, pickFile, show, toast } from './app/dom';
 import { sound } from './view/sound';
-import { eventModal, preGameModal, renderResult, weekModal } from './app/flow';
+import { contractModal, draftModal, eventModal, preGameModal, renderResult, weekModal } from './app/flow';
 import { Home } from './app/home';
 import { renderTitle } from './app/title';
 import { createCareer, dateOf, dateText, myOverall, type Career } from './career/career';
 import { afterGame, ensureSeason, playWeek } from './career/turn';
+import { leagueTeamName } from './career/pro';
 import { applyMatch, playMatch, type GameReport, type MatchSetup } from './career/match';
 import { deleteSlot, exportCareer, importCareer, loadCareer, saveCareer, slotInfo } from './career/save';
 import { schoolById } from './career/schools';
@@ -212,9 +213,24 @@ const home = new Home({
   },
 });
 
-/** 한 주가 끝난 뒤: 이벤트 → 주말 경기 */
+/** 한 주가 끝난 뒤: 드래프트·계약 → 이벤트 → 주말 경기 */
 function afterWeek() {
   const c = career!;
+  if (c.draft) {
+    draftModal(c, () => {
+      save();
+      toHome();
+    });
+    return;
+  }
+  if (c.contractPending && c.pro) {
+    contractModal(c, () => {
+      save();
+      home.render(c);
+      afterWeek();
+    });
+    return;
+  }
   if (c.pendingEvent) {
     eventModal(c, () => {
       save();
@@ -228,8 +244,8 @@ function afterWeek() {
 
 function toHome() {
   const c = career!;
-  ensureSeason(c);
-  show('home', `${c.me.name} · ${schoolById(c.school).name}`);
+  if (!c.pro) ensureSeason(c);
+  show('home', `${c.me.name} · ${c.pro ? leagueTeamName(c) : schoolById(c.school).name}`);
   home.render(c);
   afterWeek();
 }
@@ -265,9 +281,9 @@ function watchMatch() {
   const me = m.myPid >= 0 ? m.game.players[m.myPid] : null;
   const banner = `<b>${m.label}</b> · ${dateText(c.week - 1)} · ${me ? `내 선수 <b>#${me.number} ${me.name}</b> (노란 화살표 · 박스스코어 '나')` : '부상으로 결장'}`;
   // 연습경기는 학교 체육관, 공식전은 대회장, 결승·왕중왕전은 큰 무대
-  const tier = m.kind === 'practice' ? 0 : m.label.includes('결승') || m.tour === 'kings' ? 2 : 1;
-  const gymSchool = schoolById(m.home ? c.school : m.opponent);
-  watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch, tier, gym: `${gymSchool.name} 농구부 파이팅` });
+  const tier = m.pro ? (m.label.includes('챔피언') || m.label.includes('4강 플레이오프') ? 2 : 1) : m.kind === 'practice' ? 0 : m.label.includes('결승') || m.tour === 'kings' ? 2 : 1;
+  const gym = m.pro ? '' : `${schoolById(m.home ? c.school : m.opponent).name} 농구부 파이팅`;
+  watch(m.game, matchLooks(m), { kind: 'career', focus: m.myPid, banner, done: finishMatch, tier, gym });
 }
 
 function finishMatch() {
@@ -281,6 +297,7 @@ function finishMatch() {
     save();
   }
   renderResult(c, m, report, ovrBefore, {
+    save,
     replay() {
       watchMatch();
     },

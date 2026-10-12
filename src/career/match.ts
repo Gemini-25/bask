@@ -6,9 +6,13 @@ import type { Team } from '../data/teams';
 import { simulateGame } from '../sim/engine';
 import { boxScore, type Line } from '../sim/stats';
 import type { GameResult, ShotKind } from '../sim/types';
-import { addXp, CONDITION_GAME, dateOf, growthMult, MAX_RATING, type Career, type GameLine, type Injury, type Points } from './career';
+import { addXp, CONDITION_GAME, dateOf, growthMult, MAX_RATING, teammates, type Career, type GameLine, type Injury, type Points } from './career';
 import { generateSchoolRoster, schoolById, type SchoolInfo } from './schools';
 import { checkAbilities } from './abilities';
+import { afterGameFans, interviewFor, type SnsPost } from './fans';
+import { leagueTeam } from './league';
+import { gearBoost, has } from './money';
+import { leagueTeamName, recordProGame } from './pro';
 import { withRival } from './people';
 import { recordMyMatch, TOURS } from './season';
 
@@ -43,8 +47,12 @@ export function depthChart(players: Player[], natural: (p: Player) => Position =
   return [...starters, ...bench];
 }
 
-/** 학교 팀 (상대 학교 선수단은 커리어 시드와 해로 정해져서 그해엔 매번 같다) */
+/** 상대 팀. 고교는 커리어 시드와 해로 정해지고, 프로는 리그 선수단 */
 export function opponentTeam(c: Career, id: string): Team {
+  if (c.pro && c.league) {
+    const t = leagueTeam(c.league, id);
+    return { ...t.info, players: depthChart(withRival(c, id, t.players)).slice(0, 12) };
+  }
   const info = schoolById(id);
   const year = dateOf(c.week).year;
   const roster = generateSchoolRoster(new Rng((c.seed ^ hashId(id) ^ Math.imul(year, 0x9e3779b1)) >>> 0), info, c.gender);
@@ -63,6 +71,7 @@ function hashId(id: string) {
 
 export interface MatchSetup {
   kind: 'practice' | 'official';
+  pro?: boolean;
   label: string;
   tour?: string;
   game: GameResult;
@@ -85,12 +94,13 @@ export function trustBonus(c: Career) {
 
 /** 내 학교 출전 명단. 연습경기에선 1학년에게도 기회를 준다 (최소 식스맨) */
 export function myTeam(c: Career, official = c.pendingGame?.kind === 'official'): { team: Team; meIndex: number } {
-  const info = schoolById(c.school);
+  const info = c.pro && c.league ? leagueTeam(c.league, c.pro.team).info : toTeamInfo(schoolById(c.school));
   const me: Player = { ...c.me, r: { ...c.me.r } };
-  // 컨디션은 경기력에 바로 반영된다
+  // 컨디션과 장비는 경기력에 바로 반영된다
   const d = CONDITION_GAME[c.condition];
-  if (d) for (const k of RATING_KEYS) me.r[k] = Math.max(1, Math.min(MAX_RATING, me.r[k] + d));
-  const pool = c.roster.map((e) => e.player);
+  const gear = gearBoost(c);
+  for (const k of RATING_KEYS) me.r[k] = Math.max(1, Math.min(MAX_RATING, me.r[k] + d + (gear[k] ?? 0)));
+  const pool = teammates(c).map((e) => e.player);
   if (!c.injury) pool.push(me);
   let order = depthChart(pool, (p) => (p.id === 'me' ? c.prefPos : p.pos), (p) => (p.id === 'me' ? trustBonus(c) : 0));
   let meIndex = order.findIndex((p) => p.id === 'me');
@@ -102,7 +112,7 @@ export function myTeam(c: Career, official = c.pendingGame?.kind === 'official')
   // 엔진은 12명까지만 출전 시간을 계산한다
   order = order.slice(0, 12);
   meIndex = order.findIndex((p) => p.id === 'me');
-  return { team: { ...toTeamInfo(info), players: order }, meIndex };
+  return { team: { ...info, players: order }, meIndex };
 }
 
 const PRACTICE_FAVOR = 4;
@@ -126,7 +136,7 @@ export function playMatch(c: Career, seed?: number): MatchSetup {
   const favor = myPid < 0 ? {} : { [myPid]: official ? trustBonus(c) : PRACTICE_FAVOR };
   const minMinutes = myPid >= 0 && !official ? { [myPid]: PRACTICE_MINUTES } : {};
   const game = simulateGame(a, b, s, { energy, favor, minMinutes });
-  return { kind: pg.kind, label: pg.label, tour: pg.tour, game, myPid, home, opponent: oppId, seed: s, started: meIndex >= 0 && meIndex < 5, pos: meIndex >= 0 ? (home ? a : b).players[meIndex].pos : null };
+  return { kind: pg.kind, pro: pg.pro, label: pg.label, tour: pg.tour, game, myPid, home, opponent: oppId, seed: s, started: meIndex >= 0 && meIndex < 5, pos: meIndex >= 0 ? (home ? a : b).players[meIndex].pos : null };
 }
 
 // ───────────── 경기 후 성장 ─────────────
@@ -156,6 +166,10 @@ export interface GameReport {
   rival?: { name: string; number: number; line: GameLine | null };
   /** 특수능력 변화 */
   abilityNotes: string[];
+  /** 인기 변화와 SNS 반응 */
+  dPop: number;
+  sns: SnsPost[];
+  interview: ReturnType<typeof interviewFor>;
 }
 
 function lineOf(l: Line): GameLine {
@@ -237,7 +251,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     add('iq', min * 0.01);
     add('composure', min * 0.006 + (Math.abs(g.final[0] - g.final[1]) <= 5 ? 0.15 : 0));
     add('ballHandling', l.tov * 0.04);
-    for (const [k, v] of Object.entries(xp)) addXp(c, k as RatingKey, v * 0.45 * gm, ups);
+    for (const [k, v] of Object.entries(xp)) addXp(c, k as RatingKey, v * 0.25 * gm, ups);
 
     // 통산 기록 (특수능력 조건)
     const st = c.stats;
@@ -271,7 +285,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     c.fatigue = Math.min(100, c.fatigue + min * 0.55);
     // 많이 뛰고 지쳐 있으면 다칠 수 있다
     const p = 0.006 + (min / 40) * 0.02 * (1 + Math.max(0, fatigueBefore - 50) / 25);
-    if (rng.chance(p * (c.me.abilities?.glass ? 1.6 : 1))) {
+    if (rng.chance(p * (c.me.abilities?.glass ? 1.6 : 1) * (has(c, 'knee') ? 0.8 : 1))) {
       const weeks = rng.int(1, 3);
       injured = { name: rng.pick(['발목 염좌', '무릎 타박상', '손목 염좌']), weeks, total: weeks };
       c.injury = injured;
@@ -292,7 +306,9 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
 
   // 공식전이면 대진표에 기록하고, 대회가 끝났으면 성적 보상
   let tourNote: string | undefined;
-  if (m.kind === 'official' && m.tour) {
+  if (m.pro && c.league && c.pro) {
+    tourNote = recordProGame(c, c.week - 1, m.home ? c.pro.team : m.opponent, m.home ? m.opponent : c.pro.team, [g.final[0], g.final[1]], m.kind === 'practice');
+  } else if (m.kind === 'official' && m.tour) {
     const t = c.season?.tours.find((x) => x.id === m.tour);
     const had = t?.myFinish;
     recordMyMatch(c, m.tour, c.week - 1, [g.final[0], g.final[1]]);
@@ -315,6 +331,9 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     else c.rival.l++;
   }
 
+  const big = !!tourNote || g.events.some((e) => e.player === m.myPid && e.type === 'made' && (e.shot === 'dunk' || (e.quarter >= 4 && e.clock < 2)));
+  const fans = afterGameFans(c, grade, line, won, big, m.pro && c.pro ? leagueTeamName(c) : schoolById(c.school).name);
+
   c.games.push({ week: c.week - 1, kind: m.kind, label: m.label, opponent: m.opponent, home: m.home, score, won, seed: m.seed, line, grade, started: m.started });
   c.pendingGame = null;
   c.rng = rng.state;
@@ -324,7 +343,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     if (d > 0.001) xpGain[k] = Math.round(d * 100) / 100;
   }
   const comment = c.injury && m.myPid < 0 ? '부상으로 결장했다. 몸부터 만들자.' : rng.pick(COMMENTS[grade]);
-  return { line, grade, gameScore: Math.round(gs * 10) / 10, gained, ups, xpGain, won, score, fatigueBefore, fatigueAfter: c.fatigue, injured, comment, trustBefore, trustAfter: c.trust, tourNote, rival, abilityNotes: checkAbilities(c) };
+  return { line, grade, gameScore: Math.round(gs * 10) / 10, gained, ups, xpGain, won, score, fatigueBefore, fatigueAfter: c.fatigue, injured, comment, trustBefore, trustAfter: c.trust, tourNote, rival, abilityNotes: checkAbilities(c), dPop: fans.dPop, sns: fans.posts, interview: interviewFor(grade, m.kind === 'official') };
 }
 
 export function upsText(ups: Partial<Record<RatingKey, number>>) {

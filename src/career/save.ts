@@ -120,6 +120,21 @@ export function migrate(raw: unknown): Career {
     c.dunks ??= dunkList(c.me);
     c.me.abilities ??= startAbilities(c.background);
   }
+  if (c.v < 3) {
+    // v2 → v3: 프로, 돈, 인기
+    const y = Math.floor(c.week / 48);
+    c.yearOf ??= c.week % 48 !== 0 || c.season?.year === y || c.week === 0 ? y : y - 1;
+    c.pro ??= null;
+    c.league ??= null;
+    c.gameQueue ??= [];
+    c.draft ??= null;
+    c.contractPending ??= false;
+    c.money ??= 0;
+    c.items ??= [];
+    c.popularity ??= 0;
+    c.sns ??= [];
+    c.me.age ??= 16 + y;
+  }
   c.v = SAVE_VERSION;
   return c;
 }
