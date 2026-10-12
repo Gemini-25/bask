@@ -6,6 +6,7 @@ import { $, closeModal, download, modal, modalOpen, onScreen, pickFile, screen, 
 import { DevPanel } from './app/dev';
 import { sound } from './view/sound';
 import type { SongId } from './view/music';
+import { campModal, minigameModal, miniFor, positionModal, streetModal } from './app/extras-ui';
 import { allStarModal, awardsModal, contractModal, draftModal, eventModal, pathModal, preGameModal, renderResult, retireModal, retireSummaryModal, seasonCardModal, weekModal } from './app/flow';
 import { checkAchievements, enshrine, hallOfFame, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
 import { teamInfoOf } from './career/match';
@@ -198,10 +199,17 @@ const home = new Home({
     const c = career!;
     // 진로를 먼저 정해야 한다
     if (c.pathPending) return afterWeek();
-    const r = playWeek(c, id, focus);
-    save();
-    home.render(c);
-    weekModal(c, r, () => afterWeek());
+    const go = (bonus = 1) => {
+      const r = playWeek(c, id, focus, bonus);
+      if (bonus !== 1) r.notes.unshift(`미니게임 결과: 포인트 ×${bonus.toFixed(2)}`);
+      save();
+      home.render(c);
+      weekModal(c, r, () => afterWeek());
+    };
+    // 몇몇 훈련은 미니게임을 먼저 (설정에서 끌 수 있다)
+    const mg = miniFor(c, id, focus);
+    if (mg) return minigameModal(mg, go);
+    go();
   },
   save(silent) {
     save();
@@ -322,6 +330,14 @@ function afterWeek() {
     });
     return;
   }
+  const back = () => {
+    save();
+    home.render(c);
+    afterWeek();
+  };
+  if (c.streetPending) return streetModal(c, back);
+  if (c.campPending) return campModal(c, back);
+  if (c.posOffer) return positionModal(c, back);
   if (c.pendingEvent) {
     eventModal(c, () => {
       save();
@@ -433,7 +449,7 @@ function startCareer(s: number, legacy?: LegacyBonus) {
       achievements();
       modal(
         `<h2>입학을 축하해!</h2>
-        ${legacy ? `<p class="note hot">${legacy.parent}의 2세! 보너스 자유 포인트 +${legacy.points}, 잠재력 +${legacy.potential}${legacy.money ? `, 용돈 ${moneyText(legacy.money)} 원` : ''}</p>` : ''}
+        ${legacy ? `<p class="note hot">${legacy.parent}${legacy.spouse ? `와(과) ${legacy.spouse}` : ''}의 2세! 보너스 자유 포인트 +${legacy.points}, 잠재력 +${legacy.potential}${legacy.money ? `, 용돈 ${moneyText(legacy.money)} 원` : ''}</p>` : ''}
         <p>${schoolById(career.school).name} 농구부에 들어왔다. 매주 할 일을 하나 고르면 포인트가 쌓이고, 그 포인트로 능력치를 올린다.</p>
         <p>4주마다 연습경기가 있다. 경기에서 실제로 한 플레이는 그 능력치 경험치가 된다.</p>
         <p class="muted">피로가 쌓이면 다치기 쉽다. 가끔은 쉬자.</p>

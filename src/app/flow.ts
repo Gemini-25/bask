@@ -73,7 +73,7 @@ export function eventModal(c: Career, onDone: () => void) {
     return onDone();
   }
   const box = modal(
-    `<h2>${esc(def.title)}</h2>
+    `<h2>${esc(fill(c, def.title, ev.mate))}</h2>
     <p class="evtext">${esc(fill(c, def.text, ev.mate))}</p>
     <div class="choices">${def.choices.map((ch, i) => `<button type="button" class="choice" data-ch="${i}"><b>${esc(ch.label)}</b><small>${esc(effectHint(ch.effect))}</small></button>`).join('')}</div>`,
   );
@@ -82,7 +82,7 @@ export function eventModal(c: Career, onDone: () => void) {
       (b.onclick = () => {
         const out = resolveEvent(c, ev, Number(b.dataset.ch));
         modal(
-          `<h2>${esc(def.title)}</h2>${out.length ? out.map((t) => `<p class="note">${esc(t)}</p>`).join('') : '<p class="muted">그렇게 한 주가 지나갔다.</p>'}
+          `<h2>${esc(fill(c, def.title, ev.mate))}</h2>${out.length ? out.map((t) => `<p class="note">${esc(t)}</p>`).join('') : '<p class="muted">그렇게 한 주가 지나갔다.</p>'}
           <div class="mbtn"><button type="button" class="primary" data-close>${c.pendingGame ? '경기 준비 ▶' : '확인'}</button></div>`,
           { onClose: onDone },
         );
@@ -494,6 +494,7 @@ export function retireSummaryModal(s: RetireSummary, act: Pick<RetireActions, 'l
       <div class="chg"><span>명예의 전당 점수</span><b>${s.hofScore}</b></div>
       <div class="chg"><span>모은 돈</span><b>${moneyText(s.money)}</b></div>
     </div>
+    ${s.spouse ? `<p class="muted center">💍 곁에는 언제나 ${esc(s.spouse)}이(가) 있었다.</p>` : ''}
     ${s.trophies.length ? `<div class="troph scroll">${s.trophies.map((t) => `<span>🏆 ${esc(t)}</span>`).join('')}</div>` : '<p class="muted">트로피는 없지만, 끝까지 코트에 섰다.</p>'}
     <div class="mbtn"><button type="button" id="rtTitle">타이틀로</button><button type="button" class="primary" id="rtLegacy">2세로 이어 하기 ▶</button></div>`,
     { wide: true },

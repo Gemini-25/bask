@@ -38,6 +38,8 @@ export interface RetireSummary {
   retiredAt: number;
   /** 개발자 패널을 쓴 커리어 */
   dev?: boolean;
+  /** 배우자 (연애 이벤트로 결혼했으면) */
+  spouse?: string;
 }
 
 
@@ -117,6 +119,7 @@ export function retire(c: Career, teamName: (id: string) => string, teamColor: (
     gender: c.gender,
     retiredAt: c.week,
     dev: !!c.dev,
+    spouse: c.romance?.status === 'married' ? c.romance.name : undefined,
   };
   c.retired = s;
   return s;
@@ -125,6 +128,8 @@ export function retire(c: Career, teamName: (id: string) => string, teamColor: (
 /** 2세 보너스: 부모 기록이 좋을수록 자유 포인트·잠재력·용돈이 많다 */
 export interface LegacyBonus {
   parent: string;
+  /** 다른 부모 (결혼했으면) */
+  spouse?: string;
   points: number;
   potential: number;
   money: number;
@@ -134,6 +139,7 @@ export interface LegacyBonus {
 export function legacyBonus(s: RetireSummary, generation = 1): LegacyBonus {
   return {
     parent: s.name,
+    spouse: s.spouse,
     points: Math.min(30, 6 + Math.round(s.hofScore / 3)),
     potential: s.hof ? 4 : 2,
     money: Math.min(20000, Math.round(s.money * 0.1)),
@@ -221,6 +227,10 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'hof', label: '명예의 전당', desc: '명예의 전당에 올랐다', test: (c) => !!c.retired?.hof },
   { id: 'jersey', label: '영구결번', desc: '내 등번호가 영구결번됐다', test: (c) => !!c.retired?.retiredBy },
   { id: 'legacy', label: '대를 잇다', desc: '2세 선수로 새 커리어 시작', test: (c) => !!c.legacy },
+  { id: 'combo', label: '환상의 짝꿍', desc: '팀원과 콤비 기술이 생겼다', test: (c) => (c.combos ?? []).length > 0 },
+  { id: 'street', label: '길거리의 왕', desc: '3x3 길거리 대회 챔피언', test: (c) => has(c, /3x3 길거리 대회 챔피언/) },
+  { id: 'switch', label: '새 자리', desc: '감독의 제안으로 포지션을 바꿨다', test: (c) => (c.posChanges ?? 0) > 0 },
+  { id: 'married', label: '평생의 짝', desc: '결혼했다', test: (c) => c.romance?.status === 'married' },
 ];
 
 export function unlockedAchievements(): Record<string, number> {

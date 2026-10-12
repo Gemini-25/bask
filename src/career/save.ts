@@ -167,6 +167,15 @@ export function migrate(raw: unknown): Career {
     c.pathPending ??= null;
     c.traits ??= [];
   }
+  if (c.v < 6) {
+    // v5 → v6: 콤비, 포지션 전향, 전지훈련, 3x3, 연애, 설정
+    c.combos ??= [];
+    c.posOffer ??= null;
+    c.campPending ??= false;
+    c.streetPending ??= false;
+    c.romance ??= null;
+    c.settings ??= { romance: true, minigame: true };
+  }
   c.v = SAVE_VERSION;
   return c;
 }

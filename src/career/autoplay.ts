@@ -6,6 +6,7 @@ import { costOf, dateOf, FOCUS, invest, mentorReady, POINT_OF, type ActionId, ty
 import { buy, has, itemDef } from './money';
 import { collegeOffers, declareDraft, enterCollege, stayInCollege } from './college';
 import { resolveEvent } from './events';
+import { answerPosition, applyStreet, CAMPS, campCost, canCamp, runCamp, runStreet, type CampDef } from './extras';
 import { applyMatch, playMatch } from './match';
 import { contractOffers, signContract } from './pro';
 import { afterGame, playWeek } from './turn';
@@ -128,6 +129,16 @@ export interface AutoWeekResult {
  * 한 주 자동 진행. stop에 걸리는 일이 생기면 그 화면은 남겨 두고 멈춘다
  * (경기면 경기를 치르기 전에, 드래프트면 결과를 안 지운 채로).
  */
+/** 전지훈련: 잘 키우기는 돈이 되면 해외 스킬캠프, 아니면 산·은사. 단순은 공짜만 */
+export function autoCamp(c: Career, policy: AutoPolicy): CampDef['id'] | null {
+  const order: CampDef['id'][] = policy === 'good' ? ['skill', 'mountain', 'mentor'] : ['mountain', 'mentor'];
+  for (const id of order) {
+    const d = CAMPS.find((x) => x.id === id)!;
+    if (canCamp(c, d) && (policy === 'good' || campCost(c, d) === 0)) return id;
+  }
+  return null;
+}
+
 export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean; spread?: boolean; stop?: StopAt; path?: 'draft' | 'college' } = {}): AutoWeekResult {
   const stop = opts.stop ?? 'none';
   const yearBefore = dateOf(c.week).year;
@@ -136,6 +147,9 @@ export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean
   const notes = [...r.notes];
   if (c.pendingEvent) resolveEvent(c, c.pendingEvent, 0);
   c.pendingEvent = null;
+  if (c.streetPending) notes.push(...applyStreet(c, runStreet(c)));
+  if (c.campPending) notes.push(...runCamp(c, autoCamp(c, policy)));
+  if (c.posOffer) notes.push(...answerPosition(c, true));
   let games = 0;
   if (stop === 'game' && c.pendingGame) return { stopped: 'game', notes, games };
   if (stop === 'national' && c.pendingGame?.special === 'national') return { stopped: 'national', notes, games };

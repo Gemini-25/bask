@@ -57,7 +57,12 @@ export interface SimOptions {
   minMinutes?: Record<number, number>;
   /** 몇 반칙에 퇴장 (기본 5, 해외 리그 6) */
   foulOut?: number;
+  /** 콤비 (R6): 두 선수 번호와 종류. 같이 코트에 있으면 서로 더 찾고 더 잘 된다 */
+  combos?: { a: number; b: number; kind: ComboKind }[];
 }
+
+export type ComboKind = 'alley' | 'pnr' | 'kick' | 'giveGo';
+export const COMBO_LABEL: Record<ComboKind, string> = { alley: '앨리웁 콤비', pnr: '픽앤롤 콤비', kick: '킥아웃 콤비', giveGo: '기브앤고 콤비' };
 
 export function simulateGame(a: Team, b: Team, seed: number, opts: SimOptions = {}): GameResult {
   return new GameSim(a, b, seed, opts).run();
@@ -129,6 +134,8 @@ type Phase =
       /** 성공 확률과 견제 (개발자 패널 확률 표시용) */
       prob: number;
       contest: number;
+      /** 콤비 패스를 받아 쐈다 */
+      combo?: boolean;
     }
   | {
       k: 'pass';
@@ -290,6 +297,8 @@ class GameSim {
   private clockRunning = false;
   private elapsed = 0;
   private favor: Record<number, number> = {};
+  /** 콤비: "작은pid-큰pid" → 종류 */
+  private comboOf = new Map<string, ComboKind>();
   /** 연속 성공 (인 더 존) */
   private streak: number[] = [];
   private minMin: Record<number, number> = {};
@@ -375,6 +384,7 @@ class GameSim {
     const n = this.players.length;
     this.energy = this.players.map((_, k) => opts.energy?.[k] ?? 100);
     this.favor = opts.favor ?? {};
+    for (const cb of opts.combos ?? []) this.comboOf.set(`${Math.min(cb.a, cb.b)}-${Math.max(cb.a, cb.b)}`, cb.kind);
     this.streak = this.players.map(() => 0);
     this.minMin = opts.minMinutes ?? {};
     this.pf = new Array<number>(n).fill(0);
@@ -1637,6 +1647,12 @@ class GameSim {
   }
 
   /** 팀 슛 중 이 선수 비중 (경기 초반엔 0에 가깝게) */
+  /** 두 선수가 콤비인가 (선수 번호) */
+  private combo(a: number, b: number): ComboKind | undefined {
+    if (!this.comboOf.size) return undefined;
+    return this.comboOf.get(`${Math.min(a, b)}-${Math.max(a, b)}`);
+  }
+
   /** 혼자 너무 많이 쐈으면 동료를 찾는다 (M11: 리그 득점이 한 명에게 덜 몰리게) */
   private hogPenalty(pid: number): number {
     const sh = this.share(pid);
@@ -1789,7 +1805,8 @@ class GameSim {
     const toward = (m.vx * (H.x - m.x) + m.vy * (H.y - m.y)) / Math.max(0.01, dm);
     if (toward < 2.2) return false;
     if (!canDunk(m.pl, 1.0) || m.pl.r.jump < 55) return false;
-    if (h.pl.r.passing + h.pl.r.vision < 110) return false;
+    const alley = this.combo(h.pid, m.pid) === 'alley';
+    if (h.pl.r.passing + h.pl.r.vision < (alley ? 90 : 110)) return false;
     for (const d of this.mates((1 - m.team) as Side)) {
       const near = Math.min(dist(d.x, d.y, m.x, m.y), dist(d.x, d.y, H.x, H.y));
       if (near < 1.6 && d.stun <= 0) return false;
@@ -1828,6 +1845,14 @@ class GameSim {
     if (this.doubleFor === h.i && this.doubler >= 0 && this.P[this.doubler].man === m.i) v += 0.12;
     if (this.lastPass && this.lastPass.from === m.i && this.t - this.lastPass.t < 2) v -= 0.06;
     v += (h.pl.r.teamwork - 50) * 0.0008;
+    // 콤비는 서로를 먼저 본다 (기브앤고는 돌려받는 패스도)
+    const cb = this.combo(h.pid, m.pid);
+    if (cb) {
+      v += 0.12;
+      if (cb === 'giveGo' && this.lastPass && this.lastPass.from === m.i && this.t - this.lastPass.t < 2) v += 0.14;
+      if (cb === 'kick' && Lm.u > 6.5) v += 0.08;
+      if (cb === 'alley' && lob) v += 0.1;
+    }
     v -= clamp((this.share(m.pid) - 0.25) * 0.9, 0, 0.2);
     return v;
   }
@@ -1919,6 +1944,9 @@ class GameSim {
     cAdj = Math.min(1, cAdj * (1 + FX.lockdown[lv(dd0.pl, 'lockdown')]));
     let p = si.pOpen * contestFactor(si.kind, cAdj) * this.form(h, si) * this.abilityShot(h);
     const assist = this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 3.2 ? this.lastPass.from : -1;
+    // 콤비 패스를 받아 쏘면 조금 더 들어간다
+    const comboShot = assist >= 0 && !!this.combo(this.P[assist].pid, h.pid);
+    if (comboShot) p = Math.min(0.97, p * 1.08);
     const fast = this.possLive && this.t - this.possStart < 7;
     const wasDrive = this.lastDrive;
     this.lastDrive = false;
@@ -2026,6 +2054,7 @@ class GameSim {
       alley: ph.alley,
       prob: p,
       contest: cAdj,
+      combo: comboShot,
     };
   }
 
@@ -2070,7 +2099,8 @@ class GameSim {
         dunk: ph.dunk,
         prob: ph.prob,
         contest: ph.contest,
-        text: `${h.pl.name} ${fb}${ao}${label} 성공${ast}${fouled ? ' + 앤드원!' : ''}`,
+        combo: ph.combo || undefined,
+        text: `${h.pl.name} ${fb}${ao}${label} 성공${ast}${fouled ? ' + 앤드원!' : ''}${ph.combo ? ' · 콤비 플레이!' : ''}`,
       });
       const H = this.hoop(h.team);
       this.ball.x = H.x;
@@ -2361,10 +2391,12 @@ class GameSim {
     const screener = [...mates].filter((p) => p.i !== h.i && POS_GROUP[p.pl.pos] !== 'G').sort((a, b) => b.pl.r.screen - a.pl.r.screen)[0];
     const shooter = [...mates].filter((p) => p.i !== h.i && !this.isBig(p)).sort((a, b) => b.pl.r.three - a.pl.r.three)[0];
     const avg = mates.reduce((s, p) => s + creation(p), 0) / 5;
+    // 픽앤롤 콤비 (R6): 짝이 스크린을 걸어 주고, 더 자주 한다
+    const pnrMate = mates.find((p) => p.i !== h.i && this.combo(h.pid, p.pid) === 'pnr');
     // 지역방어에는 아이솔·픽앤롤이 덜 통한다
     const vsZone = this.zoneOn((1 - off) as Side);
     const w = [
-      tac.pnr * (vsZone ? 0.6 : 1),
+      tac.pnr * (vsZone ? 0.6 : 1) * (pnrMate ? 2.5 : 1),
       tac.iso * clamp(1 + (creation(star) - avg) / 12, 0.4, 2) * (vsZone ? 0.4 : 1),
       tac.post * (big.pl.r.postUp >= 55 ? 1.2 : 0.2),
       tac.motion * (vsZone ? 1.5 : 1),
@@ -2376,8 +2408,9 @@ class GameSim {
     this.cnt.plays[nm] = (this.cnt.plays[nm] ?? 0) + 1;
     const L = this.loc(off, h.x, h.y);
     const side = Math.abs(L.v) > 1.5 ? -Math.sign(L.v) : this.rng.chance(0.5) ? 1 : -1;
-    if (k === 0 && screener) {
-      this.play = { k: 'pnr', scr: screener.i, side, stage: 'go', t: this.t, pop: screener.pl.r.three >= 60 && this.rng.chance(0.5), screened: false };
+    const scr = pnrMate ?? screener;
+    if (k === 0 && scr) {
+      this.play = { k: 'pnr', scr: scr.i, side, stage: 'go', t: this.t, pop: scr.pl.r.three >= 60 && this.rng.chance(0.5), screened: false };
     } else if (k === 1) this.play = { k: 'iso', star: star.i, t: this.t };
     else if (k === 2) this.play = { k: 'post', star: big.i, t: this.t };
     else if (k === 4 && shooter && screener) {

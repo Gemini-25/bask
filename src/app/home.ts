@@ -41,6 +41,8 @@ import { leagueTeamName, nextProGame, teamName } from '../career/pro';
 import { canRetire, hofScore, HOF_SCORE, RETIRE_FORCE_AGE, RETIRE_MIN_AGE } from '../career/legacy';
 import { yearLabel } from '../career/college';
 import { traitDef } from '../career/personality';
+import { COMBO_LABEL } from '../sim/engine';
+import { ROMANCE_LABEL, romanceOn } from '../career/romance';
 import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, toast } from './dom';
@@ -178,7 +180,11 @@ export class Home {
   private abilityChips() {
     const ab = this.c!.me.abilities ?? {};
     const list = (Object.entries(ab) as [AbilityId, number][]).filter(([, n]) => n);
-    const traits = (this.c!.traits ?? []).map((t) => `<span class="ab trait" title="${esc(traitDef(t).desc)}">성격 · ${traitDef(t).label}</span>`).join('');
+    const c = this.c!;
+    const traits =
+      (c.traits ?? []).map((t) => `<span class="ab trait" title="${esc(traitDef(t).desc)}">성격 · ${traitDef(t).label}</span>`).join('') +
+      (c.combos ?? []).map((cb) => `<span class="ab combo" title="둘이 같이 뛰면 이 플레이를 더 자주, 더 잘 한다">🤝 ${esc(cb.name)} · ${COMBO_LABEL[cb.kind]}</span>`).join('') +
+      (romanceOn(c) && c.romance ? `<span class="ab love" title="호감도 ${Math.round(c.romance.affection)}">💗 ${esc(c.romance.name)} · ${ROMANCE_LABEL[c.romance.status]}</span>` : '');
     if (!list.length) return traits ? `<div class="abs">${traits}</div>` : '';
     return `<div class="abs">${traits}${list.map(([id, n]) => `<span class="ab ${abilityDef(id).bad ? 'bad' : ''}" title="${esc(abilityDef(id).desc)}">${abilityDef(id).label}${abilityDef(id).bad ? '' : ` <b>${stars(n)}</b>`}</span>`).join('')}</div>`;
   }
@@ -259,6 +265,12 @@ export class Home {
       <h4 class="sub">집 꾸미기 <small class="muted">훈련·휴식 효과</small></h4><div class="items">${shop('house')}</div>
       <h4 class="sub">응원단 <small class="muted">홈 경기장이 바뀌고, 홈 경기 인기가 하나에 5%씩 더 오른다</small></h4><div class="items">${shop('cheer')}</div>
       <h4 class="sub">SNS 반응</h4><ul class="sns">${sns || '<li class="muted">아직 조용하다. 경기에서 활약하면 반응이 생긴다.</li>'}</ul>
+      ${romanceOn(c) && c.romance ? `<h4 class="sub">💗 ${esc(c.romance.name)} <small class="muted">${ROMANCE_LABEL[c.romance.status]}</small></h4><div class="lovebar"><i style="width:${Math.round(c.romance.affection)}%"></i></div><p class="hint">호감도 ${Math.round(c.romance.affection)}. 같이 있으면 컨디션이 잘 안 떨어진다.</p>` : ''}
+      <h4 class="sub">설정</h4>
+      <div class="sets">
+        <label><input type="checkbox" data-set="minigame" ${c.settings?.minigame !== false ? 'checked' : ''}> 훈련 미니게임 <small class="muted">개인 훈련(슈팅·돌파)과 웨이트에서 직접 해 본다. 결과에 따라 포인트 ×0.8~1.3, 건너뛰면 ×1.0</small></label>
+        <label><input type="checkbox" data-set="romance" ${romanceOn(c) ? 'checked' : ''}> 연애 이벤트 <small class="muted">끄면 연애 이벤트가 안 나오고 표시도 숨긴다</small></label>
+      </div>
       ${c.pro ? `<h4 class="sub">은퇴</h4>${canRetire(c) ? `<p class="hint">명예의 전당 점수 ${hofScore(c)} / ${HOF_SCORE}. 은퇴하면 이 커리어는 끝나고 2세로 이어 할 수 있다.</p><button type="button" data-retire>은퇴 선언</button>` : `<p class="hint">${RETIRE_MIN_AGE}살부터 스스로 은퇴할 수 있다. ${RETIRE_FORCE_AGE}살이 되면 무조건 은퇴. (지금 명예의 전당 점수 ${hofScore(c)} / ${HOF_SCORE})</p>`}` : ''}`;
   }
 
@@ -418,7 +430,8 @@ export class Home {
         const role = i < 5 ? '주전' : i === 5 ? '식스맨' : '벤치';
         const me = p.id === 'me';
         const fr = me ? '' : this.heart(c.friends[p.id] ?? 0);
-        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${ageCol(p)}</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}</td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
+        const cb = c.combos?.find((x) => x.mate === p.id);
+        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${ageCol(p)}</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}${cb ? ` <b class="tagcb" title="${COMBO_LABEL[cb.kind]}">🤝</b>` : ''}</td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
       })
       .join('');
     const out = c.roster
@@ -426,7 +439,10 @@ export class Home {
       .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}</td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td><td class="hrt">${this.heart(c.friends[e.player.id] ?? 0)}</td></tr>`)
       .join('');
     const meOut = c.injury ? `<tr class="me dim"><td>부상</td><td>${c.prefPos}</td><td></td><td class="nm"><span class="no">${c.me.number}</span>${esc(c.me.name)} <b class="tagme">나</b></td><td>${c.me.body.heightCm}</td><td>${myOverall(c).toFixed(0)}</td><td></td></tr>` : '';
-    return `<p class="muted coach">감독 <b class="ink">${esc(c.coach)}</b> · 신뢰도 ${Math.round(c.trust)}</p><div class="tablewrap"><table class="ttable"><tr><th>역할</th><th>포지션</th><th>${c.pro ? '나이' : '학년'}</th><th class="nm">선수</th><th>키</th><th>종합</th><th>친밀도</th></tr>${rows}${meOut}${out}</table></div>
+    const combos = (c.combos ?? []).length
+      ? `<p class="combos">${c.combos.map((cb) => `🤝 <b>${esc(cb.name)}</b> ${COMBO_LABEL[cb.kind]}`).join(' · ')}</p>`
+      : `<p class="hint">친밀도가 ${80} 넘는 팀원과는 콤비가 생긴다 (두 명까지). 같이 코트에 있으면 그 플레이를 더 자주, 더 잘 한다.</p>`;
+    return `<p class="muted coach">감독 <b class="ink">${esc(c.coach)}</b> · 신뢰도 ${Math.round(c.trust)}</p>${combos}<div class="tablewrap"><table class="ttable"><tr><th>역할</th><th>포지션</th><th>${c.pro ? '나이' : '학년'}</th><th class="nm">선수</th><th>키</th><th>종합</th><th>친밀도</th></tr>${rows}${meOut}${out}</table></div>
       <p class="hint">감독은 포지션마다 종합 능력치가 가장 높은 선수를 주전으로 쓴다. 선호 포지션이 아니어도 팀 사정에 따라 다른 자리에 설 수 있다. 연습경기에선 신입생도 식스맨으로 기회를 받는다.</p>`;
   }
 
@@ -523,6 +539,14 @@ export class Home {
       if (this.map) this.map.walkTo(placeOf(id).id, go);
       else go();
       return;
+    }
+    const st = t.closest('[data-set]') as HTMLInputElement | null;
+    if (st) {
+      c.settings ??= { romance: true, minigame: true };
+      c.settings[st.dataset.set as 'romance' | 'minigame'] = st.checked;
+      this.act.save(true);
+      this.renderCard();
+      return this.renderTab();
     }
     if (t.closest('[data-retire]')) {
       if (confirm('정말 은퇴할까? 은퇴식을 하면 되돌릴 수 없어')) this.act.retire();

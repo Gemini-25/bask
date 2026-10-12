@@ -22,8 +22,11 @@ import type { SnsPost } from './fans';
 import type { League } from './league';
 import type { Season } from './season';
 import { traitMood, traitPointMult, traitSocial, type TraitId } from './personality';
+import { romanceMood } from './romance';
+import type { Combo } from './combos';
+import type { Romance } from './romance';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const WEEKS_PER_YEAR = 48;
 export const MAX_RATING = 99;
 /** 선수 만들 때 자유 포인트로 올릴 수 있는 최대치 */
@@ -242,7 +245,27 @@ export interface Career {
   pathPending: 'hs' | 'college' | null;
   /** 성격 (M6, M12): 1~2개 */
   traits: TraitId[];
+  /** 콤비 (R6, M13) */
+  combos: Combo[];
+  /** 감독이 권한 포지션 전향 (M13) */
+  posOffer: Position | null;
+  lastPosOffer?: number;
+  posChanges?: number;
+  /** 전지훈련 고를 차례 (L8), 마지막으로 간 해 */
+  campPending: boolean;
+  campYear?: number;
+  /** 3x3 길거리 대회에 나가기로 했다 (L8) */
+  streetPending: boolean;
+  /** 연애 (R4, M13) */
+  romance: Romance | null;
+  /** 설정: 연애 이벤트, 훈련 미니게임 (T4) */
+  settings: CareerSettings;
   counts: Partial<Record<ActionId, number>>;
+}
+
+export interface CareerSettings {
+  romance: boolean;
+  minigame: boolean;
 }
 
 /** 지금 팀원 (고교 선수단 또는 프로 팀) */
@@ -426,6 +449,12 @@ export function createCareer(spec: CreateSpec, seed: number): Career {
     proFromYear: 3,
     pathPending: null,
     traits: spec.trait ? [spec.trait] : [],
+    combos: [],
+    posOffer: null,
+    campPending: false,
+    streetPending: false,
+    romance: null,
+    settings: { romance: true, minigame: true },
     counts: {},
   };
   c.rival = createRival(c, rng.fork(11));
@@ -589,7 +618,8 @@ export interface WeekResult {
 }
 
 /** 한 주를 보낸다 */
-export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
+/** bonus: 훈련 미니게임 결과 배율 (0.8~1.3, 안 하면 1) */
+export function doWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): WeekResult {
   const a = actionById(id);
   if (!canDo(c, a)) throw new Error(`지금은 할 수 없는 행동: ${a.label}`);
   const rng = Rng.fromState(c.rng);
@@ -601,7 +631,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   const conditionBefore = c.condition;
 
   // 포인트
-  const mult = CONDITION_MULT[c.condition] * growthMult(c) * (c.injury && id !== 'rehab' ? 0.5 : 1) * houseMult(c, id) * traitPointMult(c, id);
+  const mult = CONDITION_MULT[c.condition] * growthMult(c) * (c.injury && id !== 'rehab' ? 0.5 : 1) * houseMult(c, id) * traitPointMult(c, id) * bonus;
   if (a.cost) c.money -= a.cost;
   const gained: Points = { P: 0, T: 0, M: 0 };
   for (const k of ['P', 'T', 'M'] as const) gained[k] = stoch(rng, a.pts[k] * mult * rng.range(0.85, 1.15));
@@ -610,7 +640,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   if (id === 'solo' || id === 'mentor' || id === 'trainer') {
     const f = FOCUS.find((x) => x.id === focus) ?? FOCUS[0];
     const big = id === 'mentor' ? 2.2 : id === 'trainer' ? 1.5 : 1;
-    for (const k of f.keys) addXp(c, k, ((0.5 * big) / f.keys.length) * CONDITION_MULT[c.condition] * rng.range(0.8, 1.2), ups);
+    for (const k of f.keys) addXp(c, k, ((0.5 * big) / f.keys.length) * CONDITION_MULT[c.condition] * bonus * rng.range(0.8, 1.2), ups);
     if (id === 'mentor') {
       c.mentor.last = c.week;
       notes.push(`${c.mentor.name} 선생님: "${rng.pick(['기본이 전부다.', '몸이 기억할 때까지.', '좋아, 그 감각이야.', '오늘은 여기까지. 쉬는 것도 훈련이다.'])}"`);
@@ -692,7 +722,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   }
 
   // 컨디션: 지치면 떨어지고, 쉬거나 놀면 오른다
-  const drift = a.mood + (c.fatigue > 70 ? -0.45 : c.fatigue > 55 ? -0.15 : c.fatigue < 25 ? 0.15 : 0) + (injured ? -1 : 0) + traitMood(c);
+  const drift = a.mood + (c.fatigue > 70 ? -0.45 : c.fatigue > 55 ? -0.15 : c.fatigue < 25 ? 0.15 : 0) + (injured ? -1 : 0) + traitMood(c) + romanceMood(c);
   const roll = rng.normal(drift, 0.6);
   if (roll > 0.65) c.condition = Math.min(4, c.condition + 1);
   else if (roll < -0.65) c.condition = Math.max(0, c.condition - 1);

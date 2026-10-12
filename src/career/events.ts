@@ -9,6 +9,7 @@ import { addTrait, traitDef, type TraitId } from './personality';
 import { avgFriendship } from './people';
 import { signContract } from './pro';
 import { schoolById } from './schools';
+import { addAffection, meet, romanceOn, setStatus, type RomanceStatus } from './romance';
 
 export interface Effect {
   P?: number;
@@ -35,6 +36,12 @@ export interface Effect {
   trade?: boolean;
   /** 성격이 하나 생긴다 (두 개까지) */
   trait?: TraitId;
+  /** 3x3 길거리 대회에 나간다 */
+  street?: boolean;
+  /** 연애: 만나기, 호감도, 관계 바뀜 */
+  meet?: boolean;
+  love?: number;
+  loveStatus?: RomanceStatus;
 }
 
 export interface Choice {
@@ -296,12 +303,13 @@ export const EVENTS: EventDef[] = [
   {
     id: 'street3x3',
     title: '3x3 대회 초대장',
-    text: '동네 3x3 길거리 대회 초대장이 왔다. 상품은 최신 농구공!',
+    text: '동네 3x3 길거리 대회 초대장이 왔다. 8팀이 나와서 21점 먼저 내는 토너먼트! 같이 나갈 팀원도 둘 있다.',
     cooldown: 30,
-    weight: 25,
-    when: (c) => (month(c) === 1 || month(c) === 2) && !c.injury,
+    weight: 60,
+    // 비시즌 여름에 한 번: 고교·대학은 7~8월, 프로는 비시즌 (시즌 전)
+    when: (c) => !c.injury && (c.pro ? c.week % 48 >= 2 && c.week % 48 <= 7 : month(c) === 7 || month(c) === 8),
     choices: [
-      { label: '나간다', effect: { fatigue: 10, chance: { p: 0.45, ok: { T: 6, condition: 1, xp: { ballHandling: 0.3 }, text: '우승! 새 공을 품에 안았다.' }, fail: { T: 3, text: '4강에서 졌다. 상대가 대학생이었다...' } } } },
+      { label: '나간다', hint: '토너먼트를 바로 치른다', effect: { street: true } },
       { label: '안 나간다', effect: { fatigue: -4 } },
     ],
   },
@@ -326,6 +334,81 @@ export const EVENTS: EventDef[] = [
     weight: 15,
     when: (c) => avgFriendship(c) >= 45,
     choices: [{ label: '좋아!', effect: { xp: { teamwork: 0.5, passing: 0.2 }, condition: 1 } }],
+  },
+  // ───────────── 연애 (R4, M13). 설정에서 끄면 안 나온다 ─────────────
+  {
+    id: 'loveMeet',
+    title: '두근두근',
+    text: '연습이 끝나고 나오는데, 매번 관중석에서 보던 사람이 수건을 건넨다. "오늘 3점슛 멋있었어요."',
+    cooldown: 30,
+    weight: 10,
+    when: (c) => romanceOn(c) && !c.romance && c.week >= 10,
+    choices: [
+      { label: '이름을 물어본다', effect: { meet: true, M: 3, condition: 1, text: '{love}. 이름을 몇 번이고 되뇌었다.' } },
+      { label: '고개만 숙이고 지나간다', effect: { xp: { focus: 0.2 }, text: '지금은 농구만 생각하자.' } },
+    ],
+  },
+  {
+    id: 'loveDate',
+    title: '{love}의 연락',
+    text: '{love}에게서 문자가 왔다. "이번 주말에 시간 돼요?"',
+    cooldown: 8,
+    weight: 14,
+    when: (c) => romanceOn(c) && !!c.romance && c.romance.status !== 'married',
+    choices: [
+      { label: '영화 보러 간다', hint: '피로 -6', effect: { love: 12, fatigue: -6, condition: 1, money: -3, text: '팝콘을 나눠 먹었다. 경기 생각이 하나도 안 났다.' } },
+      { label: '같이 공원 코트에 간다', effect: { love: 7, T: 3, text: '{love}이(가) 리바운드를 잡아 줬다. 슛이 더 잘 들어간다.' } },
+      { label: '훈련 때문에 미룬다', effect: { love: -8, T: 2, text: '"다음엔 꼭이요." 답장이 짧다.' } },
+    ],
+  },
+  {
+    id: 'loveConfess',
+    title: '고백',
+    text: '{love}와(과) 걷는 밤길. 지금 말하지 않으면 계속 이대로일 것 같다.',
+    once: false,
+    cooldown: 12,
+    weight: 60,
+    when: (c) => romanceOn(c) && c.romance?.status === 'crush' && c.romance.affection >= 50,
+    choices: [
+      { label: '"좋아해요."', effect: { chance: { p: 0.75, ok: { loveStatus: 'dating', M: 6, condition: 2 }, fail: { love: -15, condition: -1, text: '"조금만 더 생각해 볼게요..."' } } } },
+      { label: '아직은...', effect: { love: -3 } },
+    ],
+  },
+  {
+    id: 'loveCheer',
+    title: '응원 온 {love}',
+    text: '관중석에 {love}이(가) 손팻말을 들고 앉아 있다. "{me} 화이팅!"',
+    cooldown: 10,
+    weight: 12,
+    when: (c) => romanceOn(c) && (c.romance?.status === 'dating' || c.romance?.status === 'married') && lastGames(c, 1).some((g) => g.kind === 'official'),
+    choices: [
+      { label: '손을 흔든다', effect: { love: 5, condition: 1, xp: { competitive: 0.2 } } },
+      { label: '경기에 집중한다', effect: { love: 1, xp: { focus: 0.3 } } },
+    ],
+  },
+  {
+    id: 'loveFight',
+    title: '말다툼',
+    text: '"요즘 연습 얘기밖에 안 하잖아." {love}이(가) 서운해한다.',
+    cooldown: 20,
+    weight: 6,
+    when: (c) => romanceOn(c) && c.romance?.status === 'dating',
+    choices: [
+      { label: '먼저 사과한다', effect: { love: 4, M: 2, fatigue: 3 } },
+      { label: '"나 지금 중요한 때야."', effect: { love: -14, condition: -1, xp: { focus: 0.3 } } },
+    ],
+  },
+  {
+    id: 'loveProposal',
+    title: '반지',
+    text: '{love}와(과) 만난 지 꽤 됐다. 주머니 속 반지 상자가 무겁다.',
+    cooldown: 24,
+    weight: 60,
+    when: (c) => romanceOn(c) && c.romance?.status === 'dating' && c.romance.affection >= 85 && !!c.pro && (c.me.age ?? 0) >= 25 && c.week - c.romance.met >= 96,
+    choices: [
+      { label: '청혼한다', effect: { loveStatus: 'married', M: 10, condition: 2, money: -500, pop: 3 } },
+      { label: '아직 때가 아니다', effect: { love: -2 } },
+    ],
   },
 ];
 
@@ -435,7 +518,8 @@ export function fill(c: Career, text: string, mate?: string) {
     .replace(/\{rivalSchool\}/g, c.rival ? rivalWhere(c) : '')
     .replace(/\{mate\}/g, mateName)
     .replace(/\{mentor\}/g, c.mentor.name)
-    .replace(/\{school\}/g, schoolById(c.school).name);
+    .replace(/\{school\}/g, schoolById(c.school).name)
+    .replace(/\{love\}/g, c.romance?.name ?? '그 사람');
 }
 
 /** 선택지를 고르면 효과를 적용하고 결과 글을 돌려준다 */
@@ -469,6 +553,16 @@ export function resolveEvent(c: Career, ev: PendingEvent, choice: number): strin
       for (const [k, v] of Object.entries(e.xp)) addXp(c, k as RatingKey, v!, ups);
       for (const [k, n] of Object.entries(ups)) out.push(`${RATING_LABEL[k as RatingKey]} +${n}`);
     }
+    if (e.street) c.streetPending = true;
+    if (e.meet && !c.romance) meet(c, rng);
+    if (e.love) {
+      const t = addAffection(c, e.love);
+      if (t) out.push(t);
+    }
+    if (e.loveStatus) {
+      const t = setStatus(c, e.loveStatus);
+      if (t) out.push(t);
+    }
     if (e.trait && addTrait(c, e.trait)) out.push(`성격이 생겼다: ${traitDef(e.trait).label} (${traitDef(e.trait).desc})`);
     if (e.text) out.unshift(fill(c, e.text, ev.mate));
   };
@@ -491,6 +585,7 @@ export function effectHint(e: Effect): string {
   if (e.money) parts.push(`돈 ${e.money > 0 ? '+' : ''}${e.money}만`);
   if (e.trade) parts.push('다른 팀으로');
   if (e.trait) parts.push(`성격: ${traitDef(e.trait).label}`);
+  if (e.love) parts.push(`호감 ${e.love > 0 ? '+' : ''}${e.love}`);
   if (e.xp) parts.push(Object.keys(e.xp).map((k) => `${RATING_LABEL[k as RatingKey]} 경험치`).join(', '));
   return parts.join(' · ');
 }

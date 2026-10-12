@@ -3,12 +3,14 @@
 import { Rng, randomSeed } from '../core/rng';
 import { ABILITIES, type AbilityId } from '../data/abilities';
 import { DUNKS, dunkList } from '../data/dunks';
-import { overall, type Player } from '../data/player';
+import { overall, POSITIONS, type Player } from '../data/player';
 import { RATING_GROUPS, RATING_KEYS, type RatingKey } from '../data/ratings';
 import { allStarGame, callUp, runAllStar } from '../career/allstar';
 import { autoWeek, type AutoPolicy, type StopAt } from '../career/autoplay';
 import { ACTIONS, dateText, MAX_RATING, teammates, type ActionId, type Career } from '../career/career';
 import { EVENTS, forceEvent } from '../career/events';
+import { checkCombos, COMBO_FRIEND } from '../career/combos';
+import { meet, setStatus } from '../career/romance';
 import { leagueTeam } from '../career/league';
 import { devFlags } from '../career/overseas';
 import { seasonBase } from '../career/pro';
@@ -290,6 +292,13 @@ export class DevPanel {
         <button type="button" data-dv="ceremony" ${pro && c.league?.awards?.length ? '' : 'disabled'}>지난 시상식 다시</button>
         <button type="button" data-dv="retire" ${pro ? '' : 'disabled'}>은퇴 결정 지금</button>
       </div></div>
+      <div class="dvgrp"><h5>M13</h5><div class="dvrow">
+        <button type="button" data-dv="street">3x3 길거리 대회 지금</button>
+        <button type="button" data-dv="camp">전지훈련 지금</button>
+        <button type="button" data-dv="posOffer">포지션 전향 제안</button>
+        <button type="button" data-dv="combo">가장 친한 팀원과 콤비</button>
+        <button type="button" data-dv="love">연애 시작 (썸 → 연애)</button>
+      </div></div>
       <div class="dvgrp"><h5>이벤트 ${EVENTS.length}개 (조건 무시)</h5><ul class="dvevents">${list}</ul></div>`;
   }
 
@@ -546,6 +555,33 @@ export class DevPanel {
       case 'retire':
         c.retirePending = 'choice';
         break;
+      case 'street':
+        c.streetPending = true;
+        break;
+      case 'camp':
+        c.campPending = true;
+        break;
+      case 'posOffer': {
+        const others = POSITIONS.filter((p) => p !== c.prefPos).sort((a, b) => overall(c.me, b) - overall(c.me, a));
+        c.posOffer = others[0];
+        c.lastPosOffer = c.week;
+        break;
+      }
+      case 'combo': {
+        const best = [...teammates(c)].sort((a, b) => (c.friends[b.player.id] ?? 0) - (c.friends[a.player.id] ?? 0))[0];
+        if (!best) return;
+        c.friends[best.player.id] = Math.max(c.friends[best.player.id] ?? 0, COMBO_FRIEND);
+        toast(checkCombos(c).join(' ') || '콤비가 이미 있거나 두 명이 찼어');
+        break;
+      }
+      case 'love': {
+        const rng = Rng.fromState(c.rng);
+        if (!c.romance) meet(c, rng);
+        c.rng = rng.state;
+        c.romance!.affection = Math.max(c.romance!.affection, 60);
+        setStatus(c, 'dating');
+        break;
+      }
       case 'copy':
         void navigator.clipboard?.writeText(exportCareer(c)).then(
           () => toast('복사했어'),
@@ -566,7 +602,7 @@ export class DevPanel {
     this.host.save();
     this.host.refresh();
     this.render();
-    if (['allstar', 'national', 'contract', 'abroad', 'ceremony', 'retire'].includes(act)) this.host.afterWeek();
+    if (['allstar', 'national', 'contract', 'abroad', 'ceremony', 'retire', 'street', 'camp', 'posOffer'].includes(act)) this.host.afterWeek();
   }
 
   private snapshot(n: number, op: 'take' | 'load') {

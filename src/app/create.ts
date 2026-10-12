@@ -54,7 +54,7 @@ export function renderCreate(onDone: (spec: CreateSpec, seed: number) => void, o
   root.innerHTML = `
   <div class="create">
     <div class="cform">
-      ${legacy ? `<section class="csec legacy"><h2>${legacy.generation}대째 농구 가문</h2><p>${esc(legacy.parent)}의 피를 이어받았다. 자유 포인트 <b>+${legacy.points}</b> · 잠재력 <b>+${legacy.potential}</b>${legacy.money ? ` · 용돈 <b>${moneyText(legacy.money)} 원</b>` : ''}</p></section>` : ''}
+      ${legacy ? `<section class="csec legacy"><h2>${legacy.generation}대째 농구 가문</h2><p>${esc(legacy.parent)}${legacy.spouse ? `와(과) ${esc(legacy.spouse)}` : ''}의 피를 이어받았다. 자유 포인트 <b>+${legacy.points}</b> · 잠재력 <b>+${legacy.potential}</b>${legacy.money ? ` · 용돈 <b>${moneyText(legacy.money)} 원</b>` : ''}</p></section>` : ''}
       <section class="csec"><h2>1. 기본</h2>
         <div class="row"><label for="cName">이름</label><input id="cName" maxlength="8" value="${esc(st.name)}" /><button type="button" id="cNameRnd" title="다른 이름">🎲</button>
           <label for="cNum">등번호</label><input id="cNum" type="number" min="0" max="99" value="${st.number}" class="num" /></div>

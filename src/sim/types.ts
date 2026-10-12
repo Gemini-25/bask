@@ -74,6 +74,8 @@ export interface GameEvent {
   prob?: number;
   /** 슛 견제 정도 (0 노마크 ~ 1 꽉 막힘) */
   contest?: number;
+  /** 콤비 플레이로 넣었다 */
+  combo?: boolean;
   quarter: number;
   clock: number;
   score: [number, number];

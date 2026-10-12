@@ -13,6 +13,7 @@ import { allStarTeam, DREAM, KOREA, koreaTeam, MAGIC, NATIONS, nationTeam, recor
 import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
 import { traitGameBoost, traitSocial } from './personality';
+import { comboOpts } from './combos';
 import { afterGameFans, gainPopularity, interviewFor, type SnsPost } from './fans';
 import { leagueTeam } from './league';
 import { cheerBoost, gearBoost, has } from './money';
@@ -165,6 +166,8 @@ export function myTeam(c: Career, official = c.pendingGame?.kind === 'official',
 
 const PRACTICE_FAVOR = 4;
 const PRACTICE_MINUTES = 15;
+/** 콤비 짝 교체 가산점 (종합 능력치 점수) */
+const COMBO_FAVOR = 3;
 
 export function playMatch(c: Career, seed?: number): MatchSetup {
   const pg = c.pendingGame ?? { kind: 'practice', opponent: c.school, label: '연습경기', home: true };
@@ -185,7 +188,12 @@ export function playMatch(c: Career, seed?: number): MatchSetup {
   const minMinutes = myPid >= 0 && !official ? { [myPid]: PRACTICE_MINUTES } : {};
   // 해외 리그는 쿼터 12분, 6반칙 퇴장
   const rules = c.overseas && pg.pro && !pg.special ? OVERSEAS_RULES : {};
-  const game = simulateGame(a, b, s, { energy, favor, minMinutes, ...rules });
+  const players = [...a.players, ...b.players];
+  const combos = pg.special ? [] : comboOpts(c, players, myPid);
+  // 감독도 콤비 짝을 나와 같이 더 쓴다
+  const fv: Record<number, number> = { ...favor };
+  for (const cb of combos) fv[cb.b] = (fv[cb.b] ?? 0) + COMBO_FAVOR;
+  const game = simulateGame(a, b, s, { energy, favor: fv, minMinutes, combos, ...rules });
   return { kind: pg.kind, pro: pg.pro, special: pg.special, label: pg.label, tour: pg.tour, game, myPid, home, opponent: oppId, seed: s, started: meIndex >= 0 && meIndex < 5, pos: meIndex >= 0 ? (home ? a : b).players[meIndex].pos : null };
 }
 

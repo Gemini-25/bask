@@ -662,8 +662,8 @@ export class CourtScene extends Phaser.Scene {
         const p = at(e.player);
         const col = shade(looks[e.team].fill, 0.4);
         const dunkName = e.dunk && e.dunk !== 'one' ? `${DUNK_LABEL[e.dunk]}!` : '덩크!';
-        const label = e.alleyOop ? '앨리웁!' : e.andOne ? '앤드원!' : e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2';
-        const big = e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3;
+        const label = e.combo ? '콤비!' : e.alleyOop ? '앨리웁!' : e.andOne ? '앤드원!' : e.shot === 'dunk' ? dunkName : e.pts === 3 ? '3점!' : '+2';
+        const big = e.combo || e.alleyOop || e.andOne || e.shot === 'dunk' || e.pts === 3;
         if (big) this.emote(e.player, 'note');
         if (loud) sound.play(e.shot === 'dunk' ? 'dunk' : 'swish');
         if (loud && big && calm) sound.play('cheer');
@@ -682,7 +682,7 @@ export class CourtScene extends Phaser.Scene {
         const clutch = e.quarter >= 4 && e.clock < 180 && Math.abs(e.score[0] - e.score[1]) <= 5;
         const buzzer = e.clock < 0.6;
         const mine = e.player === this.host.focus && (e.shot === 'dunk' || e.pts === 3);
-        const worth = e.alleyOop || (buzzer && e.pts >= 2) || (clutch && big) || mine;
+        const worth = e.alleyOop || (buzzer && e.pts >= 2) || (clutch && big) || mine || (e.combo && (e.player === this.host.focus || e.other === this.host.focus));
         if (worth && calm && e.tick - this.lastCutIn > 300) {
           this.lastCutIn = e.tick;
           this.cutIn(e, buzzer ? '버저비터!' : label.replace('+2', '득점!'));

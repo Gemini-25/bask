@@ -5,6 +5,8 @@ import { RATING_KEYS } from '../data/ratings';
 import { dateOf, doWeek, WEEKS_PER_YEAR, type ActionId, type Career, type FocusId, type PendingGame, type WeekResult } from './career';
 import { hsHeightAdj, schoolById } from './schools';
 import { checkAbilities } from './abilities';
+import { checkCombos } from './combos';
+import { campDue, checkPosition } from './extras';
 import { rollEvent } from './events';
 import { declareDraft } from './college';
 import { popularityDecay } from './fans';
@@ -26,13 +28,14 @@ export function ensureSeason(c: Career) {
   }
 }
 
-export function playWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
+/** bonus: 훈련 미니게임 결과 배율 (안 하면 1) */
+export function playWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): WeekResult {
   if (!c.pro) ensureSeason(c);
   // 이벤트는 이번 주 상황(지난 경기 결과 포함)으로 정하고, 훈련 결과 다음에 보여준다
   const er = Rng.fromState(c.rng);
   const ev = c.pendingEvent ?? rollEvent(c, er);
   c.rng = er.state;
-  const r = doWeek(c, id, focus);
+  const r = doWeek(c, id, focus, bonus);
   c.pendingEvent = ev;
   r.event = ev;
   const w = c.week - 1;
@@ -71,6 +74,10 @@ export function playWeek(c: Career, id: ActionId, focus?: FocusId): WeekResult {
   }
   // 능력치가 올라 조건을 채운 특수능력 (친밀도·부상 회복 등)
   r.notes.push(...checkAbilities(c));
+  r.notes.push(...checkCombos(c));
+  // 비시즌 전지훈련, 감독의 포지션 전향 제안
+  if (campDue(c, w)) c.campPending = true;
+  checkPosition(c);
   c.peakOvr = Math.max(c.peakOvr ?? 0, Math.round(overall(c.me, c.prefPos)));
   c.pendingGame = g;
   r.game = g;
