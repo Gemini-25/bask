@@ -12,7 +12,7 @@ import { checkAbilities } from './abilities';
 import { allStarTeam, DREAM, KOREA, koreaTeam, MAGIC, NATIONS, nationTeam, recordNational } from './allstar';
 import { recordEngineGame } from './awards';
 import { FOREIGN_INFOS, OVERSEAS_RULES } from './overseas';
-import { traitGameBoost, traitSocial, traitStyle } from './personality';
+import { traitGameBoost, traitInjury, traitSocial, traitStyle, traitUsage } from './personality';
 import { comboOpts } from './combos';
 import { shotMove } from '../data/moves';
 import { afterGameFans, gainPopularity, interviewFor, type SnsPost } from './fans';
@@ -198,7 +198,8 @@ export function playMatch(c: Career, seed?: number): MatchSetup {
   for (const cb of combos) fv[cb.b] = (fv[cb.b] ?? 0) + COMBO_FAVOR;
   // 성격에 따라 동작 성향 (쇼맨은 화려하게, 냉철은 기본기, 다혈질·승부욕은 힘으로)
   const style = myPid >= 0 ? { [myPid]: traitStyle(c) } : {};
-  const game = simulateGame(a, b, s, { energy, favor: fv, minMinutes, combos, style, ...rules });
+  const usage = myPid >= 0 ? { [myPid]: traitUsage(c) } : {};
+  const game = simulateGame(a, b, s, { energy, favor: fv, minMinutes, combos, style, usage, ...rules });
   return { kind: pg.kind, pro: pg.pro, special: pg.special, label: pg.label, tour: pg.tour, game, myPid, home, opponent: oppId, seed: s, started: meIndex >= 0 && meIndex < 5, pos: meIndex >= 0 ? (home ? a : b).players[meIndex].pos : null };
 }
 
@@ -323,6 +324,9 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     st.ast += l.ast;
     st.reb += l.oreb + l.dreb;
     st.stlblk += l.stl + l.blk;
+    st.steals = (st.steals ?? 0) + l.stl;
+    st.blocks = (st.blocks ?? 0) + l.blk;
+    st.minutes = (st.minutes ?? 0) + l.sec / 60;
     st.threesMade += l.tpm;
     st.ftm += l.ftm;
     st.fta += l.fta;
@@ -339,6 +343,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
       // 동작으로 넣은 슛 (M16 특수능력 조건)
       if (e.type === 'made') {
         const mv = e.move;
+        if (e.fastBreak) st.fastMakes = (st.fastMakes ?? 0) + 1;
         if (e.andOne) st.andOnes = (st.andOnes ?? 0) + 1;
         if (mv && (mv === 'putback' || shotMove(mv)?.flashy)) st.moves = (st.moves ?? 0) + 1;
         if (e.poster || mv === 'contactDunk') st.posters = (st.posters ?? 0) + 1;
@@ -360,7 +365,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
     c.fatigue = Math.min(100, c.fatigue + min * 0.55 * light);
     // 많이 뛰고 지쳐 있으면 다칠 수 있다
     const p = (0.006 + (min / 40) * 0.02 * (1 + Math.max(0, fatigueBefore - 50) / 25)) * light;
-    if (rng.chance(p * (c.me.abilities?.glass ? 1.6 : 1) * (has(c, 'knee') ? 0.8 : 1))) {
+    if (rng.chance(p * (c.me.abilities?.glass ? 1.6 : 1) * (has(c, 'knee') ? 0.8 : 1) * traitInjury(c))) {
       const weeks = rng.int(1, 3);
       injured = { name: rng.pick(['발목 염좌', '무릎 타박상', '손목 염좌']), weeks, total: weeks };
       c.injury = injured;

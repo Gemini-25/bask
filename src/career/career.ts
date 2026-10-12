@@ -21,7 +21,7 @@ import type { PendingEvent } from './events';
 import type { SnsPost } from './fans';
 import type { League } from './league';
 import type { Season } from './season';
-import { traitMood, traitPointMult, traitSocial, type TraitId } from './personality';
+import { traitFatigue, traitInjury, traitMood, traitPay, traitPointMult, traitSocial, type TraitId } from './personality';
 import { romanceMood } from './romance';
 import type { Combo } from './combos';
 import type { Romance } from './romance';
@@ -660,7 +660,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): Wee
     notes.push(`아르바이트비 ${pay}만 원을 받았다.`);
   }
   if (id === 'ad') {
-    const pay = Math.round(300 + (c.popularity ?? 0) * 15);
+    const pay = Math.round((300 + (c.popularity ?? 0) * 15) * traitPay(c));
     c.money += pay;
     gainPopularity(c, 1);
     notes.push(`광고 촬영비 ${pay}만 원을 받았다.`);
@@ -702,7 +702,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): Wee
 
   // 피로: 훈련으로 쌓이고, 매주 조금씩 자연 회복
   const natural = 6 * (0.7 + (c.me.r.recovery / 100) * 0.6) + houseRest(c);
-  c.fatigue = clamp(c.fatigue + fatigueGain(c, a) - natural, 0, 100);
+  c.fatigue = clamp(c.fatigue + fatigueGain(c, a) * (a.fatigue > 0 ? traitFatigue(c, id) : 1) - natural, 0, 100);
 
   // 부상
   let injured: Injury | null = null;
@@ -714,7 +714,7 @@ export function doWeek(c: Career, id: ActionId, focus?: FocusId, bonus = 1): Wee
       c.injury = null;
       healed = true;
     }
-  } else if (rng.chance(injuryRisk({ ...c, fatigue: fatigueBefore }, a) * (id === 'trainer' ? 0.7 : 1) * (has(c, 'knee') ? 0.8 : 1))) {
+  } else if (rng.chance(injuryRisk({ ...c, fatigue: fatigueBefore }, a) * (id === 'trainer' ? 0.7 : 1) * (has(c, 'knee') ? 0.8 : 1) * traitInjury(c))) {
     const inj = INJURIES[rng.weighted(INJURIES.map((x) => x.w))];
     const weeks = rng.int(inj.weeks[0], inj.weeks[1]);
     injured = { name: inj.name, weeks, total: weeks };

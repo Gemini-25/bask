@@ -1,5 +1,6 @@
 // 인기·팬 (L2)과 인터뷰 (L3): 경기 결과로 인기가 오르내리고, SNS 반응 글이 쌓인다.
 import { clamp } from '../core/math';
+import type { RatingKey } from '../data/ratings';
 import { Rng } from '../core/rng';
 import type { Career, GameLine } from './career';
 import { traitPop, type TraitId } from './personality';
@@ -64,7 +65,7 @@ export function popularityDecay(c: Career) {
 
 export interface InterviewChoice {
   label: string;
-  effect: { pop?: number; trust?: number; friends?: number; xp?: Partial<Record<'teamwork' | 'leadership' | 'competitive' | 'composure', number>> };
+  effect: { pop?: number; trust?: number; friends?: number; xp?: Partial<Record<RatingKey, number>> };
   reply: string;
 }
 
@@ -76,6 +77,14 @@ const TRAIT_ANSWER: Partial<Record<TraitId, InterviewChoice>> = {
   hothead: { label: '"다음엔 더 박살 내겠습니다!"', effect: { pop: 2, trust: -2 }, reply: '상대 팀 팬들이 술렁였다.' },
   leader: { label: '"다 같이 만든 승리입니다."', effect: { friends: 3, trust: 1 }, reply: '라커룸에서 박수가 터졌다.' },
   competitor: { label: '"아직 배고픕니다."', effect: { xp: { competitive: 0.4 }, pop: 1 }, reply: '눈빛이 달랐다.' },
+  // M18
+  selfish: { label: '"제가 이겼습니다."', effect: { pop: 2, friends: -3 }, reply: '팀원들 표정이 굳었다.' },
+  unselfish: { label: '"제 패스를 넣어 준 동료들이 대단하죠."', effect: { friends: 4 }, reply: '동료들이 머리를 쓰다듬었다.' },
+  mediaStar: { label: '(카메라를 보며) "다들 보고 있죠?"', effect: { pop: 4 }, reply: '클립이 SNS에 퍼졌다.' },
+  perfectionist: { label: '"자유투 하나 놓친 게 아직 아쉽습니다."', effect: { xp: { freeThrow: 0.3 }, trust: 1 }, reply: '기자들이 웃었다. 감독님은 웃지 않았다.' },
+  sniper: { label: '"림이 바다만 해 보였어요."', effect: { pop: 2, xp: { three: 0.2 } }, reply: '오늘의 명언으로 뽑혔다.' },
+  defender: { label: '"상대 에이스 몇 점 넣었죠?"', effect: { xp: { perimeterD: 0.3 }, trust: 1 }, reply: '상대 팀 라커룸이 조용해졌다.' },
+  socialite: { label: '"오늘 밤엔 다 같이 고기 먹으러 갑니다!"', effect: { friends: 3, pop: 1 }, reply: '팀 단톡방이 불이 났다.' },
 };
 
 export function interviewFor(grade: string, official: boolean, traits: TraitId[] = []): { q: string; choices: InterviewChoice[] } | null {

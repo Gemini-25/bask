@@ -34,10 +34,15 @@ export interface CareerStats {
   fades?: number;
   euros?: number;
   andOnes?: number;
+  /** M18: 스틸, 블록, 속공 득점 성공, 출전 분 */
+  steals?: number;
+  blocks?: number;
+  fastMakes?: number;
+  minutes?: number;
 }
 
 export function emptyStats(): CareerStats {
-  return { games: 0, clutchMade: 0, clutchMiss: 0, ankles: 0, threesMade: 0, ast: 0, reb: 0, stlblk: 0, ftm: 0, fta: 0, foulOuts: 0, big: 0, injuries: 0, lastInjury: -99, recentPf: [], ftAfter: { m: 0, a: 0 }, moves: 0, posters: 0, stepbacks: 0, fades: 0, euros: 0, andOnes: 0 };
+  return { games: 0, clutchMade: 0, clutchMiss: 0, ankles: 0, threesMade: 0, ast: 0, reb: 0, stlblk: 0, ftm: 0, fta: 0, foulOuts: 0, big: 0, injuries: 0, lastInjury: -99, recentPf: [], ftAfter: { m: 0, a: 0 }, moves: 0, posters: 0, stepbacks: 0, fades: 0, euros: 0, andOnes: 0, steals: 0, blocks: 0, fastMakes: 0, minutes: 0 };
 }
 
 /** 단계별 조건: [기록 하한, 능력치 하한] × 3단계 */
@@ -57,6 +62,13 @@ const GOOD: { id: AbilityId; stat: (c: Career) => number; key: RatingKey; need: 
   { id: 'fadeaway', stat: (c) => c.stats.fades ?? 0, key: 'midRange', need: [[8, 60], [30, 70], [80, 80]], how: '페이드어웨이 성공 + 미드레인지' },
   { id: 'euro', stat: (c) => c.stats.euros ?? 0, key: 'agility', need: [[8, 55], [30, 65], [80, 75]], how: '유로스텝·스쿱·리버스·더블 클러치 성공 + 민첩성' },
   { id: 'contact', stat: (c) => c.stats.andOnes ?? 0, key: 'strength', need: [[4, 55], [15, 65], [40, 75]], how: '앤드원 + 근력' },
+  // M18
+  { id: 'floorGeneral', stat: (c) => c.stats.ast, key: 'passing', need: [[80, 60], [250, 70], [550, 80]], how: '어시스트 + 패스' },
+  { id: 'rimProtector', stat: (c) => c.stats.blocks ?? 0, key: 'block', need: [[15, 58], [50, 68], [120, 78]], how: '블록 + 블록 능력치' },
+  { id: 'deadeye', stat: (c) => c.stats.threesMade, key: 'composure', need: [[40, 58], [120, 68], [260, 78]], how: '3점 성공 + 침착성' },
+  { id: 'workhorse', stat: (c) => Math.round(c.stats.minutes ?? 0), key: 'stamina', need: [[600, 60], [1800, 70], [4000, 80]], how: '출전 시간(분) + 지구력' },
+  { id: 'pickpocket', stat: (c) => c.stats.steals ?? 0, key: 'steal', need: [[20, 58], [70, 68], [160, 78]], how: '스틸 + 스틸 능력치' },
+  { id: 'transition', stat: (c) => c.stats.fastMakes ?? 0, key: 'speed', need: [[15, 60], [50, 70], [120, 80]], how: '속공 득점 + 스피드' },
 ];
 
 /** 다음 단계까지 남은 조건 (화면 안내용) */
@@ -116,6 +128,9 @@ export function checkAbilities(c: Career): string[] {
   const now = dunkList(c.me);
   for (const d of now) if (!(c.dunks ??= []).includes(d)) out.push(`덩크 해금: ${DUNK_LABEL[d]}!`);
   c.dunks = now;
+  // M18 나쁜 버릇: 어시스트가 거의 없으면 터널 시야, 스틸·블록이 거의 없으면 게으른 수비
+  bad('tunnel', s.games >= 20 && s.ast / s.games < 0.8 && c.me.r.vision < 40, c.me.r.vision >= 50 && s.games >= 20 && s.ast / s.games >= 1.5);
+  bad('lazyD', s.games >= 20 && s.stlblk / s.games < 0.3 && c.me.r.hustle < 40, c.me.r.hustle >= 50);
   bad('foulProne', s.foulOuts >= 2 && s.recentPf.length >= 3 && s.recentPf.slice(-3).some((p) => p >= 5), s.recentPf.length >= 5 && s.recentPf.slice(-5).every((p) => p <= 2));
   return out;
 }

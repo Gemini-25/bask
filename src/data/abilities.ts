@@ -1,7 +1,7 @@
 // 특수능력 (S8, S9): 좋은 능력은 ★1~3으로 진화하고, 나쁜 능력은 조건을 채우면 사라진다.
 import type { Player } from './player';
 
-export type AbilityId = 'clutch' | 'ankle' | 'lockdown' | 'rebound' | 'quickRelease' | 'noLook' | 'zone' | 'moodMaker' | 'genius' | 'poster' | 'stepback' | 'fadeaway' | 'euro' | 'contact' | 'glass' | 'chicken' | 'ftPhobia' | 'foulProne';
+export type AbilityId = 'clutch' | 'ankle' | 'lockdown' | 'rebound' | 'quickRelease' | 'noLook' | 'zone' | 'moodMaker' | 'genius' | 'poster' | 'stepback' | 'fadeaway' | 'euro' | 'contact' | 'floorGeneral' | 'rimProtector' | 'deadeye' | 'workhorse' | 'pickpocket' | 'transition' | 'glass' | 'chicken' | 'ftPhobia' | 'foulProne' | 'tunnel' | 'lazyD';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -26,10 +26,19 @@ export const ABILITIES: AbilityDef[] = [
   { id: 'fadeaway', label: '페이드어웨이 장인', desc: '뒤로 떨어지며 던져 블록을 거의 안 당한다' },
   { id: 'euro', label: '유로스텝 마스터', desc: '유로스텝·스쿱·리버스·더블 클러치로 골밑을 뚫는다' },
   { id: 'contact', label: '컨택트 피니셔', desc: '몸싸움을 이기고 넣는다. 앤드원이 잘 난다' },
+  // M18
+  { id: 'floorGeneral', label: '야전사령관', desc: '내 패스를 받은 동료의 슛이 더 잘 들어간다' },
+  { id: 'rimProtector', label: '림 프로텍터', desc: '골밑을 지키면 상대 슛이 어려워지고 블록이 는다' },
+  { id: 'deadeye', label: '데드아이', desc: '수비가 붙어도 점프슛이 흔들리지 않는다' },
+  { id: 'workhorse', label: '철인', desc: '경기 중 체력이 천천히 떨어진다' },
+  { id: 'pickpocket', label: '소매치기', desc: '드리블·패스를 잘 가로챈다' },
+  { id: 'transition', label: '속공 머신', desc: '속공 마무리가 더 잘 된다' },
   { id: 'glass', label: '유리몸', desc: '다치기 쉽다', bad: true },
   { id: 'chicken', label: '새가슴', desc: '막판 접전에서 슛과 자유투가 흔들린다', bad: true },
   { id: 'ftPhobia', label: '자유투 공포증', desc: '자유투 성공률이 크게 떨어진다', bad: true },
   { id: 'foulProne', label: '파울 트러블', desc: '파울을 자주 한다', bad: true },
+  { id: 'tunnel', label: '터널 시야', desc: '동료가 잘 안 보인다. 패스를 덜 한다', bad: true },
+  { id: 'lazyD', label: '게으른 수비', desc: '맡은 선수를 느슨하게 막는다', bad: true },
 ];
 
 export function abilityDef(id: AbilityId) {
@@ -62,4 +71,13 @@ export const FX = {
   geniusAnkle: [1, 1.15, 1.3, 1.45],
   /** 컨택트 피니셔: 파울 당해도 넣는 확률 배율 */
   contactAndOne: [1, 1.15, 1.25, 1.35],
+  /** M18: 야전사령관 (패스 받은 슛 성공률), 림 프로텍터 (골밑 견제·블록), 데드아이 (점프슛 견제 줄이기),
+   *  철인 (체력 소모), 소매치기 (스틸), 속공 머신 (속공 성공률) */
+  floorGeneral: [0, 0.025, 0.04, 0.055],
+  rimProtector: [0, 0.15, 0.27, 0.4],
+  rimDeny: [0, 0.04, 0.07, 0.1],
+  deadeye: [0, 0.08, 0.14, 0.2],
+  workhorse: [0, 0.12, 0.2, 0.28],
+  pickpocket: [0, 0.3, 0.5, 0.7],
+  transition: [0, 0.035, 0.06, 0.085],
 };

@@ -73,6 +73,8 @@ export interface SimOptions {
   combos?: { a: number; b: number; kind: ComboKind }[];
   /** 동작 성향 (M16, 성격): 선수 번호 → 화려한 동작·힘 동작·기본기 무게 배율 */
   style?: Record<number, MoveStyle>;
+  /** 슛 욕심 (M18, 성격): 선수 번호 → 팀 슛 몫을 이만큼 더 (이기적 +, 이타적 -) */
+  usage?: Record<number, number>;
 }
 
 export type ComboKind = 'alley' | 'pnr' | 'kick' | 'giveGo';
@@ -330,6 +332,7 @@ class GameSim {
   /** 콤비: "작은pid-큰pid" → 종류 */
   private comboOf = new Map<string, ComboKind>();
   private styleOf: Record<number, MoveStyle> = {};
+  private usage: Record<number, number> = {};
   /** 슈퍼스타 정도 (0~0.15): 종합이 같은 팀 다른 선수들보다 얼마나 높은가 */
   private star: number[] = [];
   /** 분석 (M17) */
@@ -421,6 +424,7 @@ class GameSim {
     this.favor = opts.favor ?? {};
     for (const cb of opts.combos ?? []) this.comboOf.set(`${Math.min(cb.a, cb.b)}-${Math.max(cb.a, cb.b)}`, cb.kind);
     this.styleOf = opts.style ?? {};
+    this.usage = opts.usage ?? {};
     this.adv = { drives: this.players.map(() => 0), drivePass: this.players.map(() => 0), driveTov: this.players.map(() => 0) };
     // 같은 팀 상위 8명 (자기 빼고) 평균보다 종합이 15 넘게 높으면 공을 더 잡는다
     this.star = this.players.map((pl, k) => {
@@ -817,7 +821,7 @@ class GameSim {
       const r = p.pl.r;
       if (live) {
         const v2 = p.vx * p.vx + p.vy * p.vy;
-        const drain = (0.02 + 0.004 * v2) * (1.5 - r.stamina / 100);
+        const drain = (0.02 + 0.004 * v2) * (1.5 - r.stamina / 100) * (1 - FX.workhorse[lv(p.pl, 'workhorse')]);
         this.energy[p.pid] = Math.max(0, this.energy[p.pid] - drain * DT);
       } else {
         this.energy[p.pid] = Math.min(100, this.energy[p.pid] + 0.04 * DT);
@@ -1484,7 +1488,7 @@ class GameSim {
       const ahead = ((d.x - h.x) * (H.x - h.x) + (d.y - h.y) * (H.y - h.y)) / Math.max(0.01, dist(h.x, h.y, H.x, H.y));
       // 드리블 중 스틸
       if (ahead > -0.2) {
-        let lam = clamp(0.004 + ((ex(d.pl.r.steal) - ex(h.pl.r.ballHandling)) / 100) * 0.008, 0.0006, 0.016);
+        let lam = clamp(0.004 + ((ex(d.pl.r.steal) - ex(h.pl.r.ballHandling)) / 100) * 0.008, 0.0006, 0.016) * (1 + FX.pickpocket[lv(d.pl, 'pickpocket')]);
         if (this.act.k === 'drive') lam *= 1.8;
         if (trapped || this.doubleFor === h.i) lam *= 2.5;
         if (this.rng.chance(lam * DT)) {
@@ -1712,7 +1716,7 @@ class GameSim {
   /** 혼자 너무 많이 쐈으면 동료를 찾는다 (M11: 리그 득점이 한 명에게 덜 몰리게) */
   private hogPenalty(pid: number): number {
     // 슈퍼스타 (동료보다 압도적으로 잘하는 선수)는 더 많이 쏴도 된다
-    const sh = this.share(pid) - this.star[pid];
+    const sh = this.share(pid) - this.star[pid] - (this.usage[pid] ?? 0);
     return clamp((sh - 0.21) * 1.6, 0, 0.35) + clamp((sh - 0.29) * 4, 0, 0.8);
   }
 
@@ -1760,7 +1764,7 @@ class GameSim {
       const dd = Math.max(0.3, dist(d.x, d.y, s.x, s.y) - Math.min(2.2, look * d.maxSpd * 0.45));
       const reach = ((d.pl.body.heightCm + d.pl.body.wingspanCm) / 2 - 197) / 100;
       // 외곽 수비가 좋을수록 같은 거리에서도 더 꽉 막는다
-      let cd = clamp((2.0 + reach - dd) / 1.5, 0, 1) * (1 + (ex(d.pl.r.perimeterD) - 55) / 200);
+      let cd = clamp((2.0 + reach - dd) / 1.5, 0, 1) * (1 + (ex(d.pl.r.perimeterD) - 55) / 200) * (lv(d.pl, 'lazyD') ? 0.85 : 1);
       if (dd > 0.01) {
         const dot = ((d.x - s.x) * fx + (d.y - s.y) * fy) / (dd * fl);
         if (dot < -0.3) cd *= 0.4;
@@ -1780,7 +1784,7 @@ class GameSim {
         if (rimD > 2.2 || d.stun > 0) continue;
         const ahead = ((d.x - s.x) * fx + (d.y - s.y) * fy) / fl;
         if (ahead < -0.2) continue;
-        const cr = clamp((2.2 - rimD) / 1.4, 0, 1) * (0.25 + ex(d.pl.r.block) / 300 + (d.pl.body.heightCm - 195) / 150) * (1 - dh / 5);
+        const cr = clamp((2.2 - rimD) / 1.4, 0, 1) * (0.25 + ex(d.pl.r.block) / 300 + (d.pl.body.heightCm - 195) / 150) * (1 - dh / 5) * (1 + FX.rimProtector[lv(d.pl, 'rimProtector')]);
         if (cr > c1) {
           c2 = c1;
           c1 = cr;
@@ -1831,7 +1835,7 @@ class GameSim {
       const move = d.maxSpd * Math.max(0, Math.min(0.35, s * ft) - 0.12) * 0.45;
       const eff = Math.max(0, sd - 0.25 - move);
       if (eff > 1.2) continue;
-      let pr = 0.12 * Math.exp(-eff / 0.2) * (0.6 + (ex(d.pl.r.steal) / 100) * 0.5 + (d.pl.r.iq / 100) * 0.2);
+      let pr = 0.12 * Math.exp(-eff / 0.2) * (0.6 + (ex(d.pl.r.steal) / 100) * 0.5 + (d.pl.r.iq / 100) * 0.2) * (perceived ? 1 : 1 + FX.pickpocket[lv(d.pl, 'pickpocket')] * 0.6);
       if (d.stun > 0) pr *= 0.3;
       // 패스하는 선수 바로 앞 수비는 피해서 던진다 (바운드 패스, 머리 위로)
       if (s < 0.3) pr *= 0.25;
@@ -1904,6 +1908,7 @@ class GameSim {
     if (this.doubleFor === h.i && this.doubler >= 0 && this.P[this.doubler].man === m.i) v += 0.12;
     if (this.lastPass && this.lastPass.from === m.i && this.t - this.lastPass.t < 2) v -= 0.06;
     v += (h.pl.r.teamwork - 50) * 0.0008;
+    if (lv(h.pl, 'tunnel')) v -= 0.06;
     // 콤비는 서로를 먼저 본다 (기브앤고는 돌려받는 패스도)
     const cb = this.combo(h.pid, m.pid);
     if (cb) {
@@ -2095,12 +2100,16 @@ class GameSim {
     cAdj *= mfx.c ?? 1;
     // 엘리트 슈터·피니셔는 견제를 덜 탄다 (그 슛 능력치 85부터)
     cAdj *= 1 - clamp((h.pl.r[SHOT_KEY[si.kind]] - 85) / 100, 0, 0.14);
+    if (si.kind === 'mid' || si.kind === 'three') cAdj *= 1 - FX.deadeye[lv(h.pl, 'deadeye')];
     let p = si.pOpen * contestFactor(si.kind, cAdj) * this.form(h, si) * this.abilityShot(h) * (mfx.p ?? 1);
     const assist = this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 3.2 ? this.lastPass.from : -1;
     // 콤비 패스를 받아 쏘면 조금 더 들어간다
     const comboShot = assist >= 0 && !!this.combo(this.P[assist].pid, h.pid);
     if (comboShot) p = Math.min(0.97, p * 1.08);
+    // M18 특수능력: 야전사령관의 패스, 속공 머신
+    if (assist >= 0) p *= 1 + FX.floorGeneral[lv(this.P[assist].pl, 'floorGeneral')];
     const fast = this.possLive && this.t - this.possStart < 7;
+    if (fast) p *= 1 + FX.transition[lv(h.pl, 'transition')];
     const wasDrive = this.lastDrive;
     this.lastDrive = false;
     this.cnt.shotTimeSum += this.t - this.possStart;
@@ -2126,6 +2135,8 @@ class GameSim {
       }
     }
     const meta = { ctx, def: d.pid, rim: rimP >= 0 ? rimP : undefined, passer: assist >= 0 ? this.P[assist].pid : undefined };
+    // 림 프로텍터 (M18)가 골밑을 지키면 골밑 슛이 덜 들어간다
+    if (rimP >= 0) p *= 1 - FX.rimDeny[lv(this.players[rimP], 'rimProtector')];
     if (c1 > 0.3 && dist(d.x, d.y, h.x, h.y) < 2.5) this.jumpFx(d, 0.25 + d.pl.r.jump / 400, 0.45, ACT.CONTEST);
 
     // 차징: 돌파하다 자리 잡은 도움 수비와 부딪힌다
@@ -2157,7 +2168,7 @@ class GameSim {
       let pb = c1 * (0.04 + (ex(b.pl.r.block) / 100) * 0.2 + ((b.pl.body.heightCm - h.pl.body.heightCm) / 100) * 0.25 + ((ex(b.pl.r.jump) - 50) / 100) * 0.05 + Math.max(0, b.pl.r.block - 80) * 0.004) * (1 + Math.max(0, b.pl.r.block - 75) / 40);
       if (!near) pb *= 0.25;
       if (si.kind === 'dunk') pb *= 0.6;
-      pb *= mfx.block ?? 1;
+      pb *= (mfx.block ?? 1) * (1 + FX.rimProtector[lv(b.pl, 'rimProtector')] * 1.5);
       // 인유어페이스: 블록하러 뜬 수비 위로 찍는다
       if (mv === 'poster') {
         poster = true;
