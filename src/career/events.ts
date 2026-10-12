@@ -382,6 +382,14 @@ function pickMate(c: Career, e: EventDef, rng: Rng): string | undefined {
   return rng.pick(list).player.id;
 }
 
+/** 개발자 패널: 조건을 안 보고 이 이벤트를 지금 일으킨다 */
+export function forceEvent(c: Career, id: string, rng: Rng): PendingEvent | null {
+  const e = eventById(id);
+  if (!e) return null;
+  (c.seenEvents ??= {})[e.id] = c.week;
+  return { id: e.id, mate: pickMate(c, e, rng) };
+}
+
 export function eventById(id: string) {
   return EVENTS.find((e) => e.id === id);
 }

@@ -122,6 +122,9 @@ type Phase =
       fouler: number;
       alley: boolean;
       dunk?: DunkStyle;
+      /** 성공 확률과 견제 (개발자 패널 확률 표시용) */
+      prob: number;
+      contest: number;
     }
   | {
       k: 'pass';
@@ -154,6 +157,7 @@ type Phase =
       stage: 'setup' | 'flight' | 'after';
       made: boolean;
       tech: boolean;
+      prob?: number;
     }
   | { k: 'break'; t: number; dur: number; sx: number; sy: number }
   | { k: 'outro'; t: number; winner: Side }
@@ -1097,7 +1101,8 @@ class GameSim {
         if (clutch) p += (r.composure - 50) * 0.002 + lv(s.pl, 'clutch') * 0.01 - (lv(s.pl, 'chicken') ? 0.05 : 0);
         if (lv(s.pl, 'ftPhobia')) p -= 0.12;
         p *= 0.94 + 0.06 * this.fit(s);
-        ph.made = this.rng.chance(clamp(p, 0.3, 0.97));
+        ph.prob = clamp(p, 0.3, 0.97);
+        ph.made = this.rng.chance(ph.prob);
         this.jumpFx(s, 0.08, 0.5, ACT.SHOOT);
         ph.stage = 'flight';
         ph.t = this.t;
@@ -1115,6 +1120,7 @@ class GameSim {
         other: -1,
         pts: ph.made ? 1 : 0,
         made: ph.made,
+        prob: ph.prob,
         ftN: ph.n,
         ftOf: ph.of,
         text: `${s.pl.name} 자유투 ${ph.of > 1 ? `${ph.n}/${ph.of} ` : ''}${ph.made ? '성공' : '실패'}`,
@@ -1918,6 +1924,8 @@ class GameSim {
           y: h.y,
           blocked: true,
           fastBreak: fast,
+          prob: p,
+          contest: cAdj,
           text: `${b.pl.name} 블록! (${h.pl.name}의 ${SHOT_LABEL[si.kind]})`,
         });
         const H = this.hoop(h.team);
@@ -1951,6 +1959,8 @@ class GameSim {
       fast,
       fouler: fouled ? d.i : -1,
       alley: ph.alley,
+      prob: p,
+      contest: cAdj,
     };
   }
 
@@ -1993,6 +2003,8 @@ class GameSim {
         andOne: fouled,
         alleyOop: ph.alley,
         dunk: ph.dunk,
+        prob: ph.prob,
+        contest: ph.contest,
         text: `${h.pl.name} ${fb}${ao}${label} 성공${ast}${fouled ? ' + 앤드원!' : ''}`,
       });
       const H = this.hoop(h.team);
@@ -2032,6 +2044,8 @@ class GameSim {
       x: ph.sx,
       y: ph.sy,
       fastBreak: ph.fast,
+      prob: ph.prob,
+      contest: ph.contest,
       text: `${h.pl.name} ${label} 실패`,
     });
     if (this.buzzer) {

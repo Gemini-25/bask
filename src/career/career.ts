@@ -210,6 +210,8 @@ export interface Career {
   retired: RetireSummary | null;
   /** 2세 커리어면 부모 정보 */
   legacy: LegacyBonus | null;
+  /** 개발자 패널로 값을 바꾼 적이 있다 (🔧) */
+  dev?: boolean;
   counts: Partial<Record<ActionId, number>>;
 }
 

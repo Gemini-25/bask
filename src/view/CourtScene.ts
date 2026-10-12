@@ -7,6 +7,7 @@ import { sx, sy, szy, VIEW_H, VIEW_W, ZH } from './iso';
 import type { Playback } from './playback';
 import { shade } from './pixel';
 import { sound } from './sound';
+import { DEV } from './devflags';
 
 export interface TeamLook {
   fill: string;
@@ -352,6 +353,14 @@ export class CourtScene extends Phaser.Scene {
           }
           const em = this.emotes.get(pid);
           if (em && this.clock < em.until) drawEmote(ctx, px, top - 3, em.k, this.clock);
+          if (DEV.stamina) {
+            ctx.font = '7px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#0b0d12';
+            ctx.fillText(String(Math.round(energy)), px + 1, py + 13);
+            ctx.fillStyle = energy < 45 ? '#ff8a7a' : energy < 70 ? '#ffd76a' : '#bff7c4';
+            ctx.fillText(String(Math.round(energy)), px, py + 12);
+          }
           if (energy < 70) {
             ctx.fillStyle = 'rgba(11,13,18,0.85)';
             ctx.fillRect(px - 6, py + 4, 13, 3);
@@ -568,6 +577,11 @@ export class CourtScene extends Phaser.Scene {
     };
     const calm = speed <= 4;
     const loud = speed <= 8;
+    if (DEV.prob && e.prob !== undefined && e.player >= 0 && speed <= 16) {
+      const p = at(e.player);
+      const pct = `${Math.round(e.prob * 100)}%${e.contest !== undefined ? ` 견제 ${Math.round(e.contest * 100)}` : ''}`;
+      this.popText(p.x, p.y + 22, pct, '#7df9ff');
+    }
     switch (e.type) {
       case 'made': {
         const p = at(e.player);

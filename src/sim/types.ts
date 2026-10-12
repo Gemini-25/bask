@@ -68,6 +68,10 @@ export interface GameEvent {
   switched?: boolean;
   /** 덩크 종류 */
   dunk?: DunkStyle;
+  /** 슛·자유투 성공 확률 (0~1, 개발자 패널 확률 표시) */
+  prob?: number;
+  /** 슛 견제 정도 (0 노마크 ~ 1 꽉 막힘) */
+  contest?: number;
   quarter: number;
   clock: number;
   score: [number, number];

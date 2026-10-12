@@ -5,6 +5,7 @@ import { boxScore, minutesText, type BoxScore } from '../sim/stats';
 import type { DefScheme, GameEvent, GameResult, Side } from '../sim/types';
 import { winProbSeries } from '../sim/winprob';
 import { ShotChart, WinChart } from './charts';
+import { DEV } from './devflags';
 import type { TeamLook } from './CourtScene';
 import type { Playback, PlayMode } from './playback';
 
@@ -68,7 +69,7 @@ export class Ui {
     $('btnRestart').onclick = () => act.restart();
     $('btnNew').onclick = () => act.newGame();
     const sp = $('speeds');
-    sp.innerHTML = SPEEDS.map((s, i) => `<button type="button" data-speed="${s}" title="단축키 ${i + 1}">${s}x</button>`).join('');
+    this.setSpeedList(SPEEDS);
     sp.onclick = (e) => {
       const b = (e.target as HTMLElement).closest('button');
       if (b) act.setSpeed(Number(b.dataset.speed));
@@ -243,6 +244,11 @@ export class Ui {
     }
   }
 
+  /** 배속 버튼 (개발자 패널이 32x·64x·100x를 더한다) */
+  setSpeedList(list: number[]) {
+    $('speeds').innerHTML = list.map((s, i) => `<button type="button" data-speed="${s}" title="${i < 5 ? `단축키 ${i + 1}` : '개발자 배속'}">${s}x</button>`).join('');
+  }
+
   private teamTag(team: 0 | 1) {
     const t = this.game!.teams[team];
     return `<span class="tag" style="background:${this.looks![team].fill};color:${this.looks![team].num}">${esc(t.short)}</span>`;
@@ -261,7 +267,8 @@ export class Ui {
       const time = `${quarterText(e.quarter)} ${clockText(e.clock)}`;
       const side = BANNER_TYPES.has(e.type) && e.type !== 'timeout' ? '' : this.teamTag(e.team);
       const sc = e.type === 'made' || (e.type === 'ft' && e.made) ? `<b class="sc">${e.score[0]}:${e.score[1]}</b>` : '';
-      li.innerHTML = `<span class="t">${time}</span>${side}<span class="m">${esc(e.text)}</span>${sc}`;
+      const prob = DEV.prob && e.prob !== undefined ? ` <small class="prob">${Math.round(e.prob * 100)}%</small>` : '';
+      li.innerHTML = `<span class="t">${time}</span>${side}<span class="m">${esc(e.text)}${prob}</span>${sc}`;
       frag.prepend(li);
     }
     ul.prepend(frag);

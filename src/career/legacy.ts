@@ -35,6 +35,8 @@ export interface RetireSummary {
   color: string;
   gender: Career['gender'];
   retiredAt: number;
+  /** 개발자 패널을 쓴 커리어 */
+  dev?: boolean;
 }
 
 const PRO_FROM = 3 * WEEKS_PER_YEAR;
@@ -111,6 +113,7 @@ export function retire(c: Career, teamName: (id: string) => string, teamColor: (
     color: teamColor(lastTeam),
     gender: c.gender,
     retiredAt: c.week,
+    dev: !!c.dev,
   };
   c.retired = s;
   return s;
@@ -225,7 +228,8 @@ export function checkAchievements(c: Career): Achievement[] {
   const got = unlockedAchievements();
   const fresh = ACHIEVEMENTS.filter((a) => !got[a.id] && a.test(c));
   if (!fresh.length) return [];
-  for (const a of fresh) got[a.id] = Date.now();
+  // 개발자 패널을 쓴 커리어는 음수로 남겨서 🔧를 붙인다
+  for (const a of fresh) got[a.id] = c.dev ? -Date.now() : Date.now();
   writeJson(ACH_KEY, got);
   return fresh;
 }

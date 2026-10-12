@@ -2,7 +2,8 @@ import Phaser from 'phaser';
 import galmuri11 from 'galmuri/dist/Galmuri11.woff2?url';
 import galmuri11Bold from 'galmuri/dist/Galmuri11-Bold.woff2?url';
 import { renderCreate } from './app/create';
-import { $, closeModal, download, modal, onScreen, pickFile, show, toast } from './app/dom';
+import { $, closeModal, download, modal, modalOpen, onScreen, pickFile, screen, show, toast } from './app/dom';
+import { DevPanel } from './app/dev';
 import { sound } from './view/sound';
 import { allStarModal, awardsModal, contractModal, draftModal, eventModal, preGameModal, renderResult, retireModal, retireSummaryModal, weekModal } from './app/flow';
 import { checkAchievements, enshrine, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
@@ -24,7 +25,7 @@ import { CourtScene, type SceneHost, type TeamLook } from './view/CourtScene';
 import { VIEW_H, VIEW_W } from './view/iso';
 import { colorDistance, numberColorFor, shade } from './view/pixel';
 import { Playback, type PlayMode } from './view/playback';
-import { Ui } from './view/ui';
+import { SPEEDS, Ui } from './view/ui';
 import './view/style.css';
 import './app/app.css';
 
@@ -315,7 +316,7 @@ function afterWeek() {
 function toHome() {
   const c = career!;
   if (!c.pro) ensureSeason(c);
-  show('home', `${c.me.name} · ${c.pro ? leagueTeamName(c) : schoolById(c.school).name}`);
+  show('home', `${c.dev ? '🔧 ' : ''}${c.me.name} · ${c.pro ? leagueTeamName(c) : schoolById(c.school).name}`);
   home.render(c);
   afterWeek();
 }
@@ -448,6 +449,49 @@ function toTitle() {
     },
   });
 }
+
+// ───────────────────────── 개발자 패널 (K9) ─────────────────────────
+
+const dev = new DevPanel({
+  career: () => career,
+  setCareer(c) {
+    career = c;
+    match = null;
+    report = null;
+    save();
+    toHome();
+  },
+  refresh() {
+    if (career && screen() === 'home') home.render(career);
+  },
+  save,
+  afterWeek() {
+    if (career && screen() === 'home' && !modalOpen()) afterWeek();
+  },
+  screen,
+  pb: () => host.pb,
+  reroll(seed) {
+    if (screen() !== 'game') return false;
+    if (watching === 'exhibition') {
+      startExhibition(seed);
+      return true;
+    }
+    if (!career || !match || report) return false;
+    match = playMatch(career, seed);
+    watchMatch();
+    return true;
+  },
+  exhibition: (seed) => startExhibition(seed),
+  fastSpeeds(on) {
+    ui.setSpeedList(on ? [...SPEEDS, 32, 64, 100] : SPEEDS);
+    if (!on && speed > 16) {
+      speed = 16;
+      if (host.pb) host.pb.speed = speed;
+    }
+    ui.setControls(paused, speed);
+  },
+});
+onScreen(() => dev.update());
 
 async function boot() {
   await loadFonts();

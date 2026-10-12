@@ -1575,3 +1575,172 @@ ol.picks li.rv {
   max-height: 150px;
   overflow-y: auto;
 }
+
+/* M9: 개발자 패널 */
+.devpanel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(400px, 100vw);
+  background: #10131b;
+  box-shadow: -2px 0 0 0 #7df9ff55, -8px 0 24px rgba(0, 0, 0, 0.5);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+.devpanel[hidden] {
+  display: none;
+}
+.dvhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.dvhead b {
+  color: #7df9ff;
+}
+.dvhead small {
+  color: var(--muted);
+  flex: 1;
+}
+.dvhead button {
+  margin-left: auto;
+}
+.dvtabs {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 2px;
+  padding: 6px;
+}
+.dvtabs button {
+  padding: 4px 0;
+  font-size: 12px;
+}
+.dvtabs button.on {
+  background: #1d3a44;
+  box-shadow: 0 0 0 1px #7df9ff;
+}
+.dvbody {
+  overflow-y: auto;
+  padding: 6px 10px 20px;
+  flex: 1;
+}
+.dvgrp {
+  margin: 8px 0;
+}
+.dvgrp h5 {
+  margin: 6px 0 4px;
+  color: #7df9ff;
+  font-size: 12px;
+}
+.dvrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin: 4px 0;
+}
+.dvrow button,
+.dvevents button,
+.dvt button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.dvf {
+  display: inline-grid;
+  grid-template-columns: 6.5em 4.5em;
+  gap: 4px;
+  align-items: center;
+  margin: 1px 6px 1px 0;
+}
+.dvf.wide {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  margin: 3px 0;
+}
+.dvf span {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.devpanel input[type='number'],
+.devpanel select {
+  background: #1b202c;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font: inherit;
+  padding: 1px 4px;
+  width: 100%;
+}
+.devpanel input.sm {
+  width: 4.5em;
+}
+.devpanel input.md {
+  width: 8em;
+}
+.dvsum {
+  margin: 4px 0;
+}
+.dvsum b {
+  color: var(--led);
+}
+.dvlog,
+.dvevents {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.dvlog li {
+  color: var(--muted);
+  font-size: 11px;
+}
+.dvevents li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.dvevents small {
+  margin-left: auto;
+}
+.dvt td,
+.dvt th {
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.snap {
+  flex: 1;
+  color: var(--muted);
+}
+#btnDev {
+  margin-right: 4px;
+}
+.log .prob {
+  color: #7df9ff;
+}
+.devpanel.mini {
+  bottom: auto;
+  width: 260px;
+}
+.devpanel.mini .dvtabs,
+.devpanel.mini .dvbody,
+.devpanel.mini .dvhead small {
+  display: none;
+}
+.dvhead button {
+  padding: 2px 8px;
+}
+.dvhead button + button {
+  margin-left: 0;
+}
+@media (min-width: 900px) {
+  body.devopen #app {
+    margin-right: 400px;
+  }
+}

@@ -7,7 +7,7 @@ import { myTeam } from './match';
 import { grantTrophies, seasonAwards, synthLines } from './awards';
 import { offerFor } from './money';
 import { withRival } from './people';
-import { homecomingOffers, idleSeason, joinTeam, moveLeague, overseasOffer } from './overseas';
+import { devFlags, homecomingOffers, idleSeason, joinTeam, moveLeague, overseasOffer } from './overseas';
 import { RETIRE_FORCE_AGE, RETIRE_MIN_AGE } from './legacy';
 
 export function leagueTeamName(c: Career) {
@@ -195,6 +195,7 @@ export function contractOffers(c: Career): { mine: Offer; others: Offer[]; abroa
 }
 
 export function signContract(c: Career, o: Offer) {
+  devFlags.forceAbroad = false;
   if (o.abroad || o.home) moveLeague(c, !!o.abroad, seasonBase(c));
   if (c.pro!.team !== o.team || o.abroad || o.home) {
     joinTeam(c, o.team);

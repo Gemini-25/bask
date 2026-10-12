@@ -84,12 +84,12 @@ function legacyHtml() {
         .slice(0, 12)
         .map(
           (h) =>
-            `<li class="${h.hof ? 'hof' : ''}"><b>${h.hof ? '🏛 ' : ''}#${h.number} ${esc(h.name)}</b><span>${h.seasons}시즌 · ${h.games ? (h.pts / h.games).toFixed(1) : '0.0'}점 · 트로피 ${h.trophies.length}개${h.retiredBy ? ` · ${esc(h.retiredBy)} 영구결번` : ''}</span></li>`,
+            `<li class="${h.hof ? 'hof' : ''}"><b>${h.hof ? '🏛 ' : ''}#${h.number} ${esc(h.name)}${h.dev ? ' 🔧' : ''}</b><span>${h.seasons}시즌 · ${h.games ? (h.pts / h.games).toFixed(1) : '0.0'}점 · 트로피 ${h.trophies.length}개${h.retiredBy ? ` · ${esc(h.retiredBy)} 영구결번` : ''}</span></li>`,
         )
         .join('')
     : '<li class="muted">아직 은퇴한 선수가 없다.</li>';
   return `<div class="legacy-box">
     <section><h3>명예의 전당</h3><ul class="hall">${hallRows}</ul></section>
-    <section><h3>업적 <small>${n} / ${ACHIEVEMENTS.length}</small></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<span class="ach ${got[a.id] ? 'on' : ''}" title="${esc(a.desc)}">${got[a.id] ? '🏅' : '🔒'} ${esc(a.label)}</span>`).join('')}</div></section>
+    <section><h3>업적 <small>${n} / ${ACHIEVEMENTS.length}</small></h3><div class="achs">${ACHIEVEMENTS.map((a) => `<span class="ach ${got[a.id] ? 'on' : ''}" title="${esc(a.desc)}">${got[a.id] ? (got[a.id] < 0 ? '🔧' : '🏅') : '🔒'} ${esc(a.label)}</span>`).join('')}</div></section>
   </div>`;
 }

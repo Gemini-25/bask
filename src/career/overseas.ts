@@ -53,12 +53,15 @@ export function createForeignLeague(rng: Rng, gender: Gender): League {
 
 const avg = (t: LeagueTeam) => t.players.slice(0, 8).reduce((s, p) => s + overall(p), 0) / 8;
 
+/** 개발자 패널: 다음 재계약에 해외 제안을 무조건 넣는다 */
+export const devFlags = { forceAbroad: false };
+
 /** 해외 진출 제안 (재계약 때, 능력이 되면) */
 export function overseasOffer(c: Career, base: number, rng: Rng): Offer | null {
   if (c.overseas) return null;
   const ovr = overall(c.me, c.prefPos);
   // 능력치가 되거나, MVP를 받았으면 해외 구단이 찾아온다
-  if (ovr < OVERSEAS_OVR && !c.trophies.some((t) => /시즌 MVP$/.test(t))) return null;
+  if (ovr < OVERSEAS_OVR && !c.trophies.some((t) => /시즌 MVP$/.test(t)) && !devFlags.forceAbroad) return null;
   const team = rng.pick(FOREIGN_INFOS).id;
   return { team, salary: Math.round((base * 1.7) / 100) * 100, years: 2, abroad: true };
 }
