@@ -32,6 +32,7 @@ import {
   DUNK_LABEL,
   MOVE_LABEL,
   type DunkStyle,
+  type PlayKind,
   type ShotMove,
   type ShotCtx,
 } from './types';
@@ -338,6 +339,8 @@ class GameSim {
   private possStart = 0;
   private possLive = false;
   private lastPass: { from: number; to: number; t: number; fancy?: boolean } | null = null;
+  /** 이번 공격에서 마지막으로 부른 작전 (M22: 슛·실책에 붙인다) */
+  private lastPlay: { k: PlayKind; t: number } | null = null;
   /** 지금 날아가는 패스가 화려한 패스 (비하인드 백·노룩) */
   private fancyPass = false;
   private nextThink = 0;
@@ -535,7 +538,8 @@ class GameSim {
     sp.pl = this.players[pid];
     sp.maxSpd = 5.6 + (r.speed - 50) * 0.035;
     sp.acc = 6 + (r.accel - 50) * 0.06;
-    sp.tau = 0.1 + ((100 - (r.iq * 0.4 + r.agility * 0.35 + r.perimeterD * 0.25)) / 100) * 0.32;
+    // 수비 반응 (M22: 농구 IQ 비중을 키움): 읽고 먼저 움직인다
+    sp.tau = 0.07 + ((100 - (r.iq * 0.55 + r.agility * 0.25 + r.perimeterD * 0.2)) / 100) * 0.38;
   }
 
   run(): GameResult {
@@ -646,7 +650,32 @@ class GameSim {
   }
   /** player/other가 이미 선수 번호일 때 */
   private emitPid(e: Omit<GameEvent, 'tick' | 'quarter' | 'clock' | 'score'>) {
-    this.events.push({ ...e, tick: this.tick, quarter: this.quarter, clock: Math.max(0, this.clock), score: [this.score[0], this.score[1]] });
+    // 작전 (M22): 슛·실책·자유투엔 이번 공격에서 돌린 작전을 붙인다 (없으면 속공 또는 없음)
+    let play = e.play;
+    if (!play && (e.type === 'made' || e.type === 'miss' || e.type === 'turnover' || e.type === 'ft')) {
+      if (this.lastPlay && this.lastPlay.t >= this.possStart) play = this.lastPlay.k;
+      else if (e.fastBreak || (this.possLive && this.t - this.possStart < 7)) play = 'transition';
+    }
+    this.events.push({ ...e, play, tick: this.tick, quarter: this.quarter, clock: Math.max(0, this.clock), score: [this.score[0], this.score[1]] });
+  }
+
+  /** 작전 시작을 알린다 (M22) */
+  private callPlay(k: PlayKind, h: SP, other: SP | null, pop = false) {
+    this.lastPlay = { k, t: this.t };
+    const nm = (p: SP | null) => p?.pl.name ?? '';
+    const text =
+      k === 'pnr'
+        ? `작전: 픽앤롤 · ${nm(other)} 스크린 → ${pop ? '팝 (밖으로)' : '롤 (골밑으로)'}`
+        : k === 'iso'
+          ? `작전: 아이솔레이션 · ${nm(h)} 1대1, 나머지는 반대쪽으로 빠진다`
+          : k === 'post'
+            ? `작전: 포스트업 · ${nm(other ?? h)} 골밑에서 등지고`
+            : k === 'pindown'
+              ? `작전: 핀다운 · ${nm(other)} 스크린 → ${nm(h)} 3점`
+              : k === 'dho'
+                ? `작전: 핸드오프 · ${nm(other)} → ${nm(h)}`
+                : '작전: 모션 오펜스 · 컷과 패스로 빈 곳을 찾는다';
+    this.emit({ type: 'play', team: h.team, player: h.i, other: other?.i ?? -1, pts: 0, play: k, pop: pop || undefined, text });
   }
 
   private addScore(team: Side, pts: number) {
@@ -1707,7 +1736,13 @@ class GameSim {
       const c0 = this.contest(h, 0.3).c;
       const si = shotInfo(h.pl, L.u, L.v, post, c0, rg);
       const c = this.contest(h, si.kind === 'three' ? 0.32 : 0.25).c;
-      let ev = si.pOpen * contestFactor(si.kind, c) * si.pts * this.form(h, si);
+      // 농구 IQ (M22): 낮으면 견제를 얕보고 제 슛을 과신한다, 높으면 좋은 슛을 기다린다
+      // (기준은 리그 평균 IQ 52)
+      const cSeen = c * clamp(1 + (r.iq - 52) / 160, 0.7, 1);
+      let ev = si.pOpen * contestFactor(si.kind, cSeen) * si.pts * this.form(h, si);
+      ev += (Math.max(0, 52 - r.iq) / 100) * 0.14;
+      // 시간 감각: IQ가 높으면 샷클락이 줄 때 공격을 버리지 않고, 낮으면 시간을 흘려보낸다
+      if (tLeft < 7) ev += ((r.iq - 52) / 100) * clamp((7 - tLeft) / 7, 0, 1) * 0.25;
       // 골밑 슛은 파울을 얻어 자유투가 생기기도 한다
       if (si.kind === 'layup' || si.kind === 'dunk' || si.kind === 'hook') ev += c * 0.18;
       ev += (55 - r.teamwork) * 0.0015;
@@ -1745,7 +1780,7 @@ class GameSim {
 
     // 3) 패스: 동료 중 가장 좋아 보이는 한 명만 후보로 (IQ가 낮으면 잘못 볼 수 있다)
     {
-      const noise = 0.03 + ((100 - r.iq) / 100) * 0.06;
+      const noise = 0.006 + ((100 - r.iq) / 100) * 0.11;
       let best: SP | null = null;
       let bestV = -Infinity;
       let bestSeen = -Infinity;
@@ -1779,7 +1814,7 @@ class GameSim {
       opts.push({ v, go: () => this.holdAction(h), label: 'hold' });
     }
 
-    const T = 0.03 + ((100 - r.iq) / 100) * 0.08;
+    const T = 0.006 + ((100 - r.iq) / 100) * 0.13;
     let max = -Infinity;
     for (const o of opts) max = Math.max(max, o.v);
     const k = this.rng.weighted(opts.map((o) => Math.exp((o.v - max) / T)));
@@ -1878,7 +1913,8 @@ class GameSim {
         if (rimD > 2.2 || d.stun > 0) continue;
         const ahead = ((d.x - s.x) * fx + (d.y - s.y) * fy) / fl;
         if (ahead < -0.2) continue;
-        const cr = clamp((2.2 - rimD) / 1.4, 0, 1) * (0.25 + ex(d.pl.r.block) / 300 + (d.pl.body.heightCm - 195) / 150) * (1 - dh / 5) * (1 + FX.rimProtector[lv(d.pl, 'rimProtector')]);
+        // 도움 수비 (M22): 자리를 잘 잡는 수비가 골밑을 더 잘 지킨다
+        const cr = clamp((2.2 - rimD) / 1.4, 0, 1) * (0.25 + ex(d.pl.r.block) / 300 + (d.pl.body.heightCm - 195) / 150) * (1 - dh / 5) * (1 + FX.rimProtector[lv(d.pl, 'rimProtector')]) * (1 + (d.pl.r.helpD + d.pl.r.iq - 102) / 300);
         if (cr > c1) {
           c2 = c1;
           c1 = cr;
@@ -2250,6 +2286,9 @@ class GameSim {
     if (si.kind !== 'dunk' && si.kind !== 'layup') cAdj *= 1 - FX.quickRelease[lv(h.pl, 'quickRelease')];
     cAdj = Math.min(1, cAdj * (1 + FX.lockdown[lv(dd0.pl, 'lockdown')]));
     cAdj *= mfx.c ?? 1;
+    // 받을 준비 (M22): 오프볼이 좋으면 받자마자 쏘는 슛에 수비가 덜 붙어 있다
+    const caughtNow = !!this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 1.1;
+    if (caughtNow && (si.kind === 'three' || si.kind === 'mid')) cAdj *= 1 - clamp((h.pl.r.offBall - 56) / 180, -0.15, 0.18);
     // 엘리트 슈터·피니셔는 견제를 덜 탄다 (그 슛 능력치 85부터)
     cAdj *= 1 - clamp((h.pl.r[SHOT_KEY[si.kind]] - 85) / 100, 0, 0.14);
     if (si.kind === 'mid' || si.kind === 'three') cAdj *= 1 - FX.deadeye[lv(h.pl, 'deadeye')];
@@ -2756,7 +2795,7 @@ class GameSim {
         ey = lerp(sy, ey, pr.s);
         dur = Math.max(0.12, dist(sx, sy, ex, ey) / spd);
       } else if (!inbound) {
-        const pOob = 0.004 + ((100 - h.pl.r.passing) / 100) * 0.01 + ((100 - h.pl.r.focus) / 100) * 0.004;
+        const pOob = 0.004 + ((100 - h.pl.r.passing) / 100) * 0.01 + ((100 - h.pl.r.focus) / 100) * 0.004 + ((52 - h.pl.r.iq) / 100) * 0.006;
         if (this.rng.chance(pOob)) {
           oob = true;
           const ang = Math.atan2(ey - sy, ex - sx) + this.rng.normal(0, 0.5);
@@ -2848,14 +2887,26 @@ class GameSim {
     const side = Math.abs(L.v) > 1.5 ? -Math.sign(L.v) : this.rng.chance(0.5) ? 1 : -1;
     const scr = pnrMate ?? screener;
     if (k === 0 && scr) {
-      this.play = { k: 'pnr', scr: scr.i, side, stage: 'go', t: this.t, pop: scr.pl.r.three >= 60 && this.rng.chance(0.5), screened: false };
-    } else if (k === 1) this.play = { k: 'iso', star: star.i, t: this.t };
-    else if (k === 2) this.play = { k: 'post', star: big.i, t: this.t };
-    else if (k === 4 && shooter && screener) {
+      const pop = scr.pl.r.three >= 60 && this.rng.chance(0.5);
+      this.play = { k: 'pnr', scr: scr.i, side, stage: 'go', t: this.t, pop, screened: false };
+      this.callPlay('pnr', h, scr, pop);
+    } else if (k === 1) {
+      this.play = { k: 'iso', star: star.i, t: this.t };
+      this.callPlay('iso', star, null);
+    } else if (k === 2) {
+      this.play = { k: 'post', star: big.i, t: this.t };
+      this.callPlay('post', h, big);
+    } else if (k === 4 && shooter && screener) {
       const sv = Math.sign(this.loc(off, shooter.x, shooter.y).v) || 1;
       this.play = { k: 'pindown', shooter: shooter.i, scr: screener.i, side: sv, stage: 'go', t: this.t, screened: false };
-    } else if (k === 5 && screener) this.play = { k: 'dho', big: screener.i, guard: h.i, side, stage: 'entry', t: this.t };
-    else this.play = { k: 'motion', t: this.t };
+      this.callPlay('pindown', shooter, screener);
+    } else if (k === 5 && screener) {
+      this.play = { k: 'dho', big: screener.i, guard: h.i, side, stage: 'entry', t: this.t };
+      this.callPlay('dho', h, screener);
+    } else {
+      this.play = { k: 'motion', t: this.t };
+      this.callPlay('motion', h, null);
+    }
   }
 
   private updatePlay(h: SP) {
@@ -2926,7 +2977,10 @@ class GameSim {
       this.cnt.switches++;
       this.emit({ type: 'screen', team: s.team, player: s.i, other: d.i, pts: 0, switched: true, text: `${s.pl.name}의 스크린, 수비 스위치` });
       // 키 작은 수비가 빅맨을 맡게 되면 포스트로 공을 넣는다
-      if (s.pl.body.heightCm - d.pl.body.heightCm >= 10 && s.pl.r.postUp >= 50) this.play = { k: 'post', star: s.i, t: this.t };
+      if (s.pl.body.heightCm - d.pl.body.heightCm >= 10 && s.pl.r.postUp >= 50) {
+        this.play = { k: 'post', star: s.i, t: this.t };
+        this.callPlay('post', s, s);
+      }
       return;
     }
     d.stun = clamp(0.35 + (s.pl.r.screen + s.pl.r.strength - d.pl.r.agility - d.pl.r.iq) / 250, 0.2, 0.9);
@@ -3022,7 +3076,7 @@ class GameSim {
       if (!sp || sp.kind === 'dunker' || sp.kind === 'block') continue;
       const d = this.defenderOf(p.i);
       const watching = dist(d.x, d.y, p.x, p.y) > 2.4;
-      const pc = 0.012 + (p.pl.r.offBall / 100) * 0.025 + (watching ? 0.04 : 0) + (this.play?.k === 'motion' ? 0.015 : 0);
+      const pc = 0.007 + (p.pl.r.offBall / 100) ** 2 * 0.06 + (watching ? 0.04 : 0) + (this.play?.k === 'motion' ? 0.015 : 0);
       if (this.rng.chance(pc)) {
         const L = this.loc(off, p.x, p.y);
         p.cut = 1.8;
@@ -3065,6 +3119,11 @@ class GameSim {
         if (taken.has(k)) return;
         if (Math.hypot(s.u - Lb.u, s.v - Lb.v) < 3.0) return;
         let c = Math.hypot(L.u - s.u, L.v - s.v) * 0.35 + this.spotPref(p, s.kind) + (k === p.spot ? -1.5 : 0);
+        // 위치선정 (M22): 오프볼이 좋으면 수비가 비운 자리를 찾아가고, 나쁘면 수비 옆에 선다
+        const w = this.wrl(off, s.u, s.v);
+        let open = 9;
+        for (const d of this.mates((1 - off) as Side)) open = Math.min(open, dist(d.x, d.y, w.x, w.y));
+        c -= clamp((p.pl.r.offBall - 56) / 45, -0.6, 1) * clamp(open - 1.5, 0, 3.5) * 0.9;
         if (isoSide && play?.k === 'iso' && p.i !== play.star && Math.sign(s.v) === isoSide && s.kind !== 'corner') c += 5;
         if (c < bc) {
           bc = c;
@@ -3506,12 +3565,14 @@ class GameSim {
       const by = my + uy * sag * tight;
       const helpX = lerp(this.ball.x, H.x, 0.55);
       const helpY = lerp(this.ball.y, H.y, 0.55);
-      let w = clamp((db - 5) / 9, 0, 0.45) * (0.65 + p.pl.r.helpD / 200);
+      let w = clamp((db - 5) / 9, 0, 0.45) * (0.4 + p.pl.r.helpD / 100);
       // 코너 슈터와 좋은 슈터한테서는 멀리 떨어지지 않는다
       const Lman = this.loc(off, mx, my);
       if (Lman.u < 3.2 && Math.abs(Lman.v) > 5.5) w *= 0.55;
       if (m.pl.r.three >= 60) w *= 0.7;
       else if (m.pl.r.three < 42) w = Math.min(0.6, w * 1.3 + 0.1);
+      // 위치선정 (M22): 오프볼이 좋으면 함부로 떠나지 못하고, 나쁘면 버려 두고 도움 수비를 간다
+      w *= clamp(1 - (m.pl.r.offBall - 56) / 80, 0.55, 1.5);
       // 그래비티 (M17): 슈퍼스타는 공이 없어도 딱 붙고, 공 가진 슈퍼스타 쪽으로는 도움 수비가 몰린다
       const threat = this.star[m.pid] / STAR_MAX;
       w *= 1 - threat * 0.7;
@@ -3587,7 +3648,9 @@ class GameSim {
     for (const p of this.P) {
       const onDef = p.team !== off;
       const f = this.fit(p);
-      const tau = (onDef ? p.tau : 0.07) * (1.3 - 0.3 * f);
+      let tau = (onDef ? p.tau : 0.07) * (1.3 - 0.3 * f);
+      // 위치선정 (M22): 오프볼이 좋은 선수를 막으면 따라붙는 반응이 늦다 (공 없는 선수만)
+      if (onDef && p.man >= 0 && this.ball.holder !== p.man) tau *= clamp(1 + (this.P[p.man].pl.r.offBall - 56) / 110, 0.75, 1.4);
       const k = Math.min(1, DT / tau);
       p.tx += (p.gx - p.tx) * k;
       p.ty += (p.gy - p.ty) * k;

@@ -33,6 +33,8 @@ export type EventType =
   | 'timeout'
   | 'defense'
   | 'ejected'
+  /** 작전 시작 (M22): player = 공 가진 선수, other = 스크린·포스트·슈터 등 짝 */
+  | 'play'
   /** 공을 쳐냈다 (player = 쳐낸 선수, other = 공 가졌던 선수), 루즈볼을 공격팀이 다시 잡았다 (offensive) */
   | 'loose';
 
@@ -84,6 +86,10 @@ export interface GameEvent {
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
   fancy?: boolean;
+  /** 작전 (M22): 'play' 이벤트의 작전, 슛·실책·자유투는 그 공격에서 돌린 작전 */
+  play?: PlayKind;
+  /** 픽앤롤에서 스크리너가 굴러 들어가지 않고 밖으로 빠진다 (팝) */
+  pop?: boolean;
   /** 분석 (M17): 슛 상황, 맡은 수비, 골밑을 지킨 수비, 패스해 준 선수 (안 들어간 슛도) */
   ctx?: ShotCtx;
   def?: number;
@@ -94,6 +100,10 @@ export interface GameEvent {
   score: [number, number];
   text: string;
 }
+
+/** 공격 작전 (M22) */
+export type PlayKind = 'pnr' | 'iso' | 'post' | 'motion' | 'pindown' | 'dho' | 'transition';
+export const PLAY_LABEL: Record<PlayKind, string> = { pnr: '픽앤롤', iso: '아이솔레이션', post: '포스트업', motion: '모션 오펜스', pindown: '핀다운', dho: '핸드오프', transition: '속공' };
 
 /** 화면에서 그릴 선수 동작 (Recording.act) */
 export const ACT = {

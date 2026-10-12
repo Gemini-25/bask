@@ -1,15 +1,15 @@
 import Phaser from 'phaser';
 import { COURT } from '../sim/court';
 import { DEEP_DIST, LOGO_DIST } from '../sim/shooting';
-import { ACT, DUNK_LABEL, FLAG_STUN, type GameEvent } from '../sim/types';
+import { ACT, DUNK_LABEL, FLAG_CUT, FLAG_STUN, PLAY_LABEL, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
-import { LABELS } from './labels';
+import { LABELS, TACTICS } from './labels';
 import { drawArena, drawCheerBanner, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type ArenaDeco, type CrowdMood } from './arena';
 import { drawBall, drawBenchFigure, drawFigure, drawFigureRig, reachPx, type Facing, type Kit } from './character';
 import { hasTrail, isOneShot } from './anims';
 import { sx, sy, szy, VIEW_H, VIEW_W, ZH } from './iso';
 import type { Playback } from './playback';
-import { drawDigits, shade } from './pixel';
+import { colorDistance, drawDigits, luminance, shade } from './pixel';
 import { sound } from './sound';
 import { DEV } from './devflags';
 
@@ -143,6 +143,10 @@ export class CourtScene extends Phaser.Scene {
   private lastCarry: { x: number; y: number; cur: number } | null = null;
   /** 슛 이벤트 (틱 순서): 날아가는 공이 딥쓰리인지 알려고 */
   private shotEvents: GameEvent[] = [];
+  /** 작전 (M22): 작전 시작 이벤트, 공격이 끝나는 틱 (득점·실책·수비 리바운드·쿼터 끝) */
+  private playEvents: GameEvent[] = [];
+  private endTicks: number[] = [];
+  private playTag?: Phaser.GameObjects.Text;
   private zoomUntil = 0;
   private clock = 0;
   private lastCutIn = -9999;
@@ -276,6 +280,8 @@ export class CourtScene extends Phaser.Scene {
     this.prevLineup = null;
     this.confetti = [];
     this.shotEvents = pb.game.events.filter((e) => e.type === 'made' || e.type === 'miss');
+    this.playEvents = pb.game.events.filter((e) => e.type === 'play');
+    this.endTicks = pb.game.events.filter((e) => e.type === 'made' || e.type === 'turnover' || (e.type === 'rebound' && !e.offensive) || e.type === 'quarterEnd').map((e) => e.tick);
     this.lastCarry = null;
     this.mood = { homeCheer: 0, awayCheer: 0, wave: -1 };
     this.lastTick = pb.cur;
@@ -370,6 +376,9 @@ export class CourtScene extends Phaser.Scene {
       }
       ctx.restore();
     }
+
+    // 작전 표시 (M22): 지금 돌리는 작전의 스크린·롤·컷 경로
+    this.drawTactics(ctx, fr, pb.cur);
 
     const items: Drawable[] = [];
     for (const side of [0, 1] as const) {
@@ -1026,6 +1035,112 @@ export class CourtScene extends Phaser.Scene {
       default:
         break;
     }
+  }
+
+  /** 지금 돌리는 작전 (공격이 끝나면 없다) */
+  private activePlay(cur: number): GameEvent | null {
+    let e: GameEvent | null = null;
+    for (const p of this.playEvents) {
+      if (p.tick > cur) break;
+      e = p;
+    }
+    if (!e || cur - e.tick > 90) return null;
+    const end = this.endTicks.find((t) => t > e!.tick);
+    return end !== undefined && end <= cur ? null : e;
+  }
+
+  private drawTactics(ctx: CanvasRenderingContext2D, fr: ReturnType<Playback['sample']>, cur: number) {
+    const pb = this.host.pb!;
+    const e = TACTICS.on ? this.activePlay(cur) : null;
+    if (!e) {
+      this.playTag?.setVisible(false);
+      return;
+    }
+    // 팀 색이 바닥색과 비슷하면 노란색으로
+    const fill = this.host.looks[e.team].fill;
+    const col = luminance(fill) > 0.6 || colorDistance(fill, '#c99a5b') < 90 ? '#ffd23f' : shade(fill, 0.25);
+    const slot = (pid: number) => (pid >= 0 ? pb.slotOf(pid, cur) : -1);
+    const at = (k: number) => ({ x: sx(fr.px[k * 2]), y: sy(fr.px[k * 2 + 1]), wx: fr.px[k * 2], wy: fr.px[k * 2 + 1] });
+    const side = this.hoopSide(e.team, e.quarter);
+    const hx = side ? COURT.length - COURT.hoopFromBaseline : COURT.hoopFromBaseline;
+    const rim = { x: sx(hx), y: sy(7.5) };
+    // 바닥 위에서도 보이게 진한 그림자를 먼저 깔고 그린다
+    const SHADOW = 'rgba(20,12,6,0.7)';
+    const dash = (a: { x: number; y: number }, b: { x: number; y: number }, c: string, arrow = true) => {
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d < 4) return;
+      const ux = (b.x - a.x) / d;
+      const uy = (b.y - a.y) / d;
+      for (const [col, oy] of [
+        [SHADOW, 1],
+        [c, 0],
+      ] as [string, number][]) {
+        ctx.fillStyle = col;
+        for (let k = 0; k < d - 4; k += 5) {
+          const t = k / d;
+          ctx.fillRect(Math.round(a.x + (b.x - a.x) * t), Math.round(a.y + (b.y - a.y) * t) + oy, 3, 2);
+        }
+        if (!arrow) continue;
+        for (let k = 0; k < 6; k++) {
+          ctx.fillRect(Math.round(b.x - ux * k - uy * k * 0.6), Math.round(b.y - uy * k + ux * k * 0.6) + oy, 2, 2);
+          ctx.fillRect(Math.round(b.x - ux * k + uy * k * 0.6), Math.round(b.y - uy * k - ux * k * 0.6) + oy, 2, 2);
+        }
+      }
+    };
+    const ring = (p: { x: number; y: number }, c: string) => {
+      for (const [col, oy] of [
+        [SHADOW, 1],
+        [c, 0],
+      ] as [string, number][]) {
+        ctx.fillStyle = col;
+        for (let a = 0; a < Math.PI * 2; a += 0.16) ctx.fillRect(Math.round(p.x + Math.cos(a) * 10), Math.round(p.y + 1 + Math.sin(a) * 4) + oy, 2, 1);
+      }
+    };
+    const hs = slot(e.player);
+    const os = slot(e.other);
+    const h = hs >= 0 ? at(hs) : null;
+    const o = os >= 0 ? at(os) : null;
+    // 바닥에 그리는 거라 살짝 투명하게
+    ctx.globalAlpha = 0.85;
+    if (h) ring(h, col);
+    switch (e.play) {
+      case 'pnr':
+        if (o && h) {
+          dash(o, h, col, false);
+          // 롤 (골밑으로) 또는 팝 (3점 라인 쪽으로)
+          const to = e.pop ? { x: sx(hx + (side ? -1 : 1) * 6.4), y: sy(7.5 + Math.sign(o.wy - 7.5 || 1) * 2.5) } : rim;
+          dash(o, to, '#ffffff');
+        }
+        break;
+      case 'pindown':
+        if (o && h) {
+          dash(o, h, col, false);
+          const wing = { x: sx(hx + (side ? -1 : 1) * 5.2), y: sy(7.5 + Math.sign(h.wy - 7.5 || 1) * 5.0) };
+          dash(h, wing, '#ffffff');
+        }
+        break;
+      case 'dho':
+        if (o && h) dash(o, h, '#ffffff');
+        break;
+      case 'post':
+        if (o) {
+          ring(o, '#ffffff');
+          dash(o, rim, col);
+        }
+        break;
+      default:
+        break;
+    }
+    // 컷하는 선수는 골밑으로 화살표 (어느 작전이든)
+    for (let k = e.team === 0 ? 0 : 5, n = k + 5; k < n; k++) if (fr.flags[k] & FLAG_CUT) dash(at(k), rim, '#9ff0ff');
+    ctx.globalAlpha = 1;
+    // 작전 이름표
+    if (!this.playTag) this.playTag = this.world(this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '10px', color: '#ffffff', stroke: '#0b0d12', strokeThickness: 3, resolution: 3 }).setOrigin(0.5, 1).setDepth(160));
+    const label = `${PLAY_LABEL[e.play!]}${e.play === 'pnr' ? (e.pop ? ' · 팝' : ' · 롤') : ''}`;
+    if (this.playTag.text !== label) this.playTag.setText(label);
+    const anchor = e.play === 'post' && o ? o : h;
+    if (anchor) this.playTag.setColor(col).setPosition(anchor.x, anchor.y - (LABELS.mode === 'off' ? 44 : 54)).setVisible(true);
+    else this.playTag.setVisible(false);
   }
 
   /** 이 자리의 동작이 시작한 칸과 끝나는 칸, 공이 마지막으로 손에 있던 칸 (M21) */

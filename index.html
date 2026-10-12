@@ -59,6 +59,9 @@
             <button type="button" data-label="number" title="단축키 L">번호</button>
             <button type="button" data-label="name" title="단축키 L">이름</button>
             <button type="button" data-label="off" title="단축키 L">끔</button>
+            <span class="lbl sep">작전 표시</span>
+            <button type="button" data-tactics="on" title="스크린·롤·컷 화살표와 작전 이름 (단축키 T)">켬</button>
+            <button type="button" data-tactics="off" title="단축키 T">끔</button>
           </div>
         </div>
         <aside class="panel">
@@ -68,6 +71,7 @@
             <button type="button" data-tab="player">선수</button>
             <button type="button" data-tab="shots">샷차트</button>
             <button type="button" data-tab="flow">흐름</button>
+            <button type="button" data-tab="tactics">작전</button>
           </nav>
           <div class="tab" id="tab-log"><ul class="log" id="log"></ul></div>
           <div class="tab" id="tab-box" hidden></div>
@@ -77,6 +81,7 @@
           </div>
           <div class="tab" id="tab-shots" hidden></div>
           <div class="tab" id="tab-flow" hidden><h3 class="ctitle">승리 확률</h3></div>
+          <div class="tab" id="tab-tactics" hidden></div>
         </aside>
       </div>
       <footer class="foot">노란 화살표 = 고른 선수, 발밑 막대 = 지친 선수의 체력, 머리 위 별 = 앵클 브레이크·스크린에 걸린 선수. 단축키: Space 재생/정지 · 1~5 배속 · Q 쿼터 넘기기 · H 하이라이트 · N 새 경기 (데모)</footer>

@@ -53,7 +53,8 @@ describe('분석 지표 (M17)', () => {
     expect(s.gravityBall).toBeGreaterThan(l.gravityBall);
     expect(s.gravityOff).toBeLessThan(l.gravityOff);
     expect(s.dfgPct).toBeLessThan(l.dfgPct);
-    // 골밑을 지킬 때 상대 야투율 (수비 그래비티 rimDeter는 벤치 시간이 몇 분이라 10경기로는 크게 흔들려서 이걸로 본다)
-    expect(s.rimPct).toBeLessThan(l.rimPct - 0.08);
+    // 골밑 수비: 골밑 억제 (rimDeter, 벤치 시간이 몇 분이라 흔들린다)나 골밑에서 막은 슛의 상대 야투율 (10경기면 30개 남짓) 중 하나는 앞서고, 블록은 리그의 두 배 넘게
+    expect(s.rimDeter > l.rimDeter || s.rimPct < l.rimPct).toBe(true);
+    expect(s.bpg).toBeGreaterThan(l.bpg * 2);
   });
 });

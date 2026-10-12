@@ -355,6 +355,10 @@ button:focus-visible {
 .log li.ft .m {
   color: #d9e4ff;
 }
+.log li.play .m {
+  color: #8fd0ff;
+  font-size: 11px;
+}
 .log li.ft.missed .m,
 .log li.sub .m,
 .log li.defense .m {
@@ -756,4 +760,18 @@ tr.tot td {
 }
 .tab[hidden] {
   display: none !important;
+}
+
+/* M22: 작전 표시 구분 */
+.controls .lbl.sep {
+  margin-left: 12px;
+}
+#tab-tactics h3 {
+  margin: 10px 0 4px;
+  font-size: 13px;
+}
+#tab-tactics .hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }

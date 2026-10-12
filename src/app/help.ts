@@ -28,7 +28,7 @@ export function helpModal() {
       </ul>
       <h3>단축키</h3>
       <ul class="keys">
-        <li><kbd>Space</kbd> 재생/정지 · <kbd>1</kbd>~<kbd>5</kbd> 배속 · <kbd>Q</kbd> 쿼터 넘기기 · <kbd>H</kbd> 하이라이트 · <kbd>L</kbd> 이름표 · <kbd>N</kbd> 새 경기 (데모)</li>
+        <li><kbd>Space</kbd> 재생/정지 · <kbd>1</kbd>~<kbd>5</kbd> 배속 · <kbd>Q</kbd> 쿼터 넘기기 · <kbd>H</kbd> 하이라이트 · <kbd>L</kbd> 이름표 · <kbd>T</kbd> 작전 표시 · <kbd>N</kbd> 새 경기 (데모)</li>
         <li><kbd>\`</kbd> 개발자 패널 (능력치 치트, 에디터, 날짜 점프, 고급 기록). 값을 바꾸면 🔧 표시가 남는다</li>
         <li><kbd>Esc</kbd> 창 닫기</li>
       </ul>

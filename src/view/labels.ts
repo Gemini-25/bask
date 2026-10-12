@@ -29,3 +29,22 @@ export function nextLabelMode(): LabelMode {
   setLabelMode(m);
   return m;
 }
+
+// 작전 표시 (M22): 스크린·롤·컷 화살표와 작전 이름. 켬 / 끔
+const TKEY = 'bask.tactics';
+function loadT(): boolean {
+  try {
+    return localStorage.getItem(TKEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+export const TACTICS: { on: boolean } = { on: typeof localStorage === 'undefined' ? true : loadT() };
+export function setTactics(on: boolean) {
+  TACTICS.on = on;
+  try {
+    localStorage.setItem(TKEY, on ? 'on' : 'off');
+  } catch {
+    // 저장이 안 돼도 이번엔 바뀐다
+  }
+}

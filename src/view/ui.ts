@@ -1,5 +1,6 @@
 import { POSITION_LABEL } from '../data/player';
-import { LABELS, nextLabelMode, setLabelMode, type LabelMode } from './labels';
+import { LABELS, nextLabelMode, setLabelMode, setTactics, TACTICS, type LabelMode } from './labels';
+import { tacticsHtml } from './tactics';
 import { grade, RATING_GROUPS } from '../data/ratings';
 import { SCHEME_LABEL } from '../sim/engine';
 import { boxScore, minutesText, type BoxScore } from '../sim/stats';
@@ -26,7 +27,7 @@ export function quarterText(q: number): string {
   return q <= 4 ? `${q}Q` : `OT${q - 4}`;
 }
 
-const LOG_TYPES = new Set(['tip', 'quarterStart', 'quarterEnd', 'gameEnd', 'made', 'miss', 'rebound', 'turnover', 'ankle', 'foul', 'ft', 'sub', 'timeout', 'defense', 'ejected', 'loose']);
+const LOG_TYPES = new Set(['tip', 'quarterStart', 'quarterEnd', 'gameEnd', 'made', 'miss', 'rebound', 'turnover', 'ankle', 'foul', 'ft', 'sub', 'timeout', 'defense', 'ejected', 'loose', 'play']);
 const BANNER_TYPES = new Set(['quarterStart', 'quarterEnd', 'gameEnd', 'timeout']);
 
 export interface UiActions {
@@ -68,6 +69,7 @@ export class Ui {
     $('labels').onclick = (e) => {
       const b = (e.target as HTMLElement).closest('button');
       if (b?.dataset.label) setLabelMode(b.dataset.label as LabelMode);
+      if (b?.dataset.tactics) setTactics(b.dataset.tactics === 'on');
       this.syncLabels();
     };
     this.syncLabels();
@@ -106,6 +108,9 @@ export class Ui {
       else if (e.key === 'l' || e.key === 'L') {
         nextLabelMode();
         this.syncLabels();
+      } else if (e.key === 't' || e.key === 'T') {
+        setTactics(!TACTICS.on);
+        this.syncLabels();
       }
       else if (e.key === 'n' || e.key === 'N') act.newGame();
     });
@@ -117,11 +122,11 @@ export class Ui {
     this.tab = tab;
     this.lastChart = 0;
     for (const b of $('tabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.tab === tab);
-    for (const t of ['log', 'box', 'player', 'shots', 'flow']) $(`tab-${t}`).hidden = t !== tab;
+    for (const t of ['log', 'box', 'player', 'shots', 'flow', 'tactics']) $(`tab-${t}`).hidden = t !== tab;
   }
 
   private syncLabels() {
-    for (const b of $('labels').querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.label === LABELS.mode);
+    for (const b of $('labels').querySelectorAll<HTMLElement>('button')) b.classList.toggle('on', b.dataset.label ? b.dataset.label === LABELS.mode : (b.dataset.tactics === 'on') === TACTICS.on);
   }
 
   setMode(mode: PlayMode, hint = '') {
@@ -192,6 +197,8 @@ export class Ui {
     for (const e of this.game!.events) {
       if (e.tick > tick) break;
       if (e.type === 'defense' && e.team === team && e.scheme) s = e.scheme;
+      // 프레스는 그 수비 한 번 (엔진은 대인방어로 돌아갈 때 따로 알리지 않는다)
+      else if (s === 'press' && ((e.team !== team && (e.type === 'made' || e.type === 'turnover')) || (e.team === team && e.type === 'rebound' && !e.offensive))) s = 'man';
     }
     return s;
   }
@@ -240,9 +247,10 @@ export class Ui {
     }
     this.renderPlayerCard(lineup.pids, fr.energy);
 
-    if ((this.tab === 'shots' || this.tab === 'flow') && now - this.lastChart > 400) {
+    if ((this.tab === 'shots' || this.tab === 'flow' || this.tab === 'tactics') && now - this.lastChart > 400) {
       this.lastChart = now;
       if (this.tab === 'shots') this.shots.update(pb.cur, this.focus);
+      else if (this.tab === 'tactics') $('tab-tactics').innerHTML = tacticsHtml(game, pb.cur, this.looks!, lineup.pids);
       else this.flow.update(pb.cur);
     }
   }
@@ -279,6 +287,7 @@ export class Ui {
       let cls = e.type;
       if (e.type === 'made' && (e.pts === 3 || e.shot === 'dunk' || e.andOne || e.alleyOop)) cls += ' big';
       if (e.type === 'ft' && !e.made) cls += ' missed';
+      if (e.type === 'play' && !TACTICS.on) continue;
       li.className = cls;
       const time = `${quarterText(e.quarter)} ${clockText(e.clock)}`;
       const side = BANNER_TYPES.has(e.type) && e.type !== 'timeout' ? '' : this.teamTag(e.team);
