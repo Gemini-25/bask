@@ -20,6 +20,7 @@ import { sound } from '../view/sound';
 import { trainingScene } from './scenes';
 import { figureCanvas } from './figure';
 import { archetype, DEF_LABEL, lineupRoles, ROLE_DESC, ROLE_LABEL } from '../sim/roles';
+import { tendencyOf } from '../sim/tendency';
 import { fatigueColor, pointsHtml } from './home';
 
 function upsHtml(ups: Partial<Record<RatingKey, number>>) {
@@ -103,7 +104,8 @@ export function myRoleHtml(m: MatchSetup): string {
     return `<div class="chg role"><span>역할</span><b>${ROLE_LABEL[r]}</b><small>벤치에서 나오면: ${esc(ROLE_DESC[r])}</small></div>`;
   }
   const r = lineupRoles(five(side), five(1 - side))[slot - side * 5];
-  return `<div class="chg role"><span>역할</span><b>${ROLE_LABEL[r.key]}</b><small>${esc(r.jobs.join(' · '))}</small></div>
+  const tl = tendencyOf(m.game.players[m.myPid]).labels;
+  return `<div class="chg role"><span>역할</span><b>${ROLE_LABEL[r.key]}</b><small>${esc(r.jobs.join(' · '))}</small>${tl.length ? `<small>성향: ${esc(tl.join(' · '))}</small>` : ''}</div>
     <div class="chg role"><span>수비</span><b>${DEF_LABEL[r.def]}</b>${r.guards ? `<small>막을 상대: #${r.guards.number} ${esc(r.guards.name)} (${r.guards.pos})</small>` : ''}</div>`;
 }
 

@@ -21,6 +21,8 @@ export interface Tactics {
   switch: number;
   /** 포스트업·에이스에게 더블팀 가는 비율 */
   double: number;
+  /** 감독이 경기 중에 얼마나 잘 바꾸나 (M28, 0~1, 없으면 0.55) */
+  adapt?: number;
 }
 
 export interface TeamInfo {
@@ -39,16 +41,16 @@ export interface Team extends TeamInfo {
 
 // 가상 리그 10팀 (W3, W6)
 export const TEAM_INFOS: TeamInfo[] = [
-  { id: 'SEO', city: '서울', name: '스카이호크스', short: '서울', color: '#3d8fe0', color2: '#e8f2ff', tactics: { pace: 0.6, pnr: 0.4, iso: 0.2, post: 0.1, motion: 0.3, pindown: 0.15, dho: 0.15, zone: 0.05, zoneType: '23', press: 0.05, switch: 0.4, double: 0.2 } },
-  { id: 'BUS', city: '부산', name: '씨라이언즈', short: '부산', color: '#f08a2c', color2: '#1d2a4a', tactics: { pace: 0.7, pnr: 0.3, iso: 0.3, post: 0.1, motion: 0.3, pindown: 0.1, dho: 0.1, zone: 0.1, zoneType: '32', press: 0.25, switch: 0.3, double: 0.3 } },
-  { id: 'INC', city: '인천', name: '썬더볼츠', short: '인천', color: '#f2cc2e', color2: '#1b1b1b', tactics: { pace: 0.5, pnr: 0.5, iso: 0.1, post: 0.2, motion: 0.2, pindown: 0.1, dho: 0.2, zone: 0.05, zoneType: '23', press: 0.05, switch: 0.2, double: 0.2 } },
-  { id: 'DAE', city: '대구', name: '블레이즈', short: '대구', color: '#e0473d', color2: '#fff2ea', tactics: { pace: 0.6, pnr: 0.3, iso: 0.4, post: 0.1, motion: 0.2, pindown: 0.1, dho: 0.1, zone: 0.05, zoneType: '23', press: 0.15, switch: 0.5, double: 0.15 } },
-  { id: 'GWA', city: '광주', name: '팬서스', short: '광주', color: '#2b2b33', color2: '#d9b25a', tactics: { pace: 0.4, pnr: 0.3, iso: 0.2, post: 0.3, motion: 0.2, pindown: 0.1, dho: 0.1, zone: 0.35, zoneType: '23', press: 0.05, switch: 0.1, double: 0.35 } },
-  { id: 'DJN', city: '대전', name: '코메츠', short: '대전', color: '#8a5cd6', color2: '#f3ecff', tactics: { pace: 0.5, pnr: 0.3, iso: 0.2, post: 0.1, motion: 0.4, pindown: 0.25, dho: 0.2, zone: 0.1, zoneType: '32', press: 0.1, switch: 0.3, double: 0.2 } },
-  { id: 'ULS', city: '울산', name: '웨일즈', short: '울산', color: '#1fa5a0', color2: '#e6fffb', tactics: { pace: 0.4, pnr: 0.4, iso: 0.1, post: 0.3, motion: 0.2, pindown: 0.1, dho: 0.15, zone: 0.2, zoneType: '23', press: 0.05, switch: 0.15, double: 0.3 } },
-  { id: 'SUW', city: '수원', name: '그리핀스', short: '수원', color: '#3fa34d', color2: '#f0ffe8', tactics: { pace: 0.5, pnr: 0.4, iso: 0.2, post: 0.2, motion: 0.2, pindown: 0.15, dho: 0.1, zone: 0.1, zoneType: '23', press: 0.1, switch: 0.35, double: 0.2 } },
-  { id: 'CHW', city: '창원', name: '스톰', short: '창원', color: '#5fc4e8', color2: '#0f2733', tactics: { pace: 0.8, pnr: 0.3, iso: 0.2, post: 0.1, motion: 0.4, pindown: 0.2, dho: 0.1, zone: 0.05, zoneType: '32', press: 0.35, switch: 0.4, double: 0.15 } },
-  { id: 'JEJ', city: '제주', name: '오션스', short: '제주', color: '#e86aa0', color2: '#fff0f6', tactics: { pace: 0.6, pnr: 0.3, iso: 0.3, post: 0.1, motion: 0.3, pindown: 0.15, dho: 0.15, zone: 0.15, zoneType: '32', press: 0.1, switch: 0.25, double: 0.25 } },
+  { id: 'SEO', city: '서울', name: '스카이호크스', short: '서울', color: '#3d8fe0', color2: '#e8f2ff', tactics: { pace: 0.6, pnr: 0.4, iso: 0.2, post: 0.1, motion: 0.3, pindown: 0.15, dho: 0.15, zone: 0.05, zoneType: '23', press: 0.05, switch: 0.4, double: 0.2, adapt: 0.65 } },
+  { id: 'BUS', city: '부산', name: '씨라이언즈', short: '부산', color: '#f08a2c', color2: '#1d2a4a', tactics: { pace: 0.7, pnr: 0.3, iso: 0.3, post: 0.1, motion: 0.3, pindown: 0.1, dho: 0.1, zone: 0.1, zoneType: '32', press: 0.25, switch: 0.3, double: 0.3, adapt: 0.5 } },
+  { id: 'INC', city: '인천', name: '썬더볼츠', short: '인천', color: '#f2cc2e', color2: '#1b1b1b', tactics: { pace: 0.5, pnr: 0.5, iso: 0.1, post: 0.2, motion: 0.2, pindown: 0.1, dho: 0.2, zone: 0.05, zoneType: '23', press: 0.05, switch: 0.2, double: 0.2, adapt: 0.7 } },
+  { id: 'DAE', city: '대구', name: '블레이즈', short: '대구', color: '#e0473d', color2: '#fff2ea', tactics: { pace: 0.6, pnr: 0.3, iso: 0.4, post: 0.1, motion: 0.2, pindown: 0.1, dho: 0.1, zone: 0.05, zoneType: '23', press: 0.15, switch: 0.5, double: 0.15, adapt: 0.45 } },
+  { id: 'GWA', city: '광주', name: '팬서스', short: '광주', color: '#2b2b33', color2: '#d9b25a', tactics: { pace: 0.4, pnr: 0.3, iso: 0.2, post: 0.3, motion: 0.2, pindown: 0.1, dho: 0.1, zone: 0.35, zoneType: '23', press: 0.05, switch: 0.1, double: 0.35, adapt: 0.75 } },
+  { id: 'DJN', city: '대전', name: '코메츠', short: '대전', color: '#8a5cd6', color2: '#f3ecff', tactics: { pace: 0.5, pnr: 0.3, iso: 0.2, post: 0.1, motion: 0.4, pindown: 0.25, dho: 0.2, zone: 0.1, zoneType: '32', press: 0.1, switch: 0.3, double: 0.2, adapt: 0.6 } },
+  { id: 'ULS', city: '울산', name: '웨일즈', short: '울산', color: '#1fa5a0', color2: '#e6fffb', tactics: { pace: 0.4, pnr: 0.4, iso: 0.1, post: 0.3, motion: 0.2, pindown: 0.1, dho: 0.15, zone: 0.2, zoneType: '23', press: 0.05, switch: 0.15, double: 0.3, adapt: 0.55 } },
+  { id: 'SUW', city: '수원', name: '그리핀스', short: '수원', color: '#3fa34d', color2: '#f0ffe8', tactics: { pace: 0.5, pnr: 0.4, iso: 0.2, post: 0.2, motion: 0.2, pindown: 0.15, dho: 0.1, zone: 0.1, zoneType: '23', press: 0.1, switch: 0.35, double: 0.2, adapt: 0.5 } },
+  { id: 'CHW', city: '창원', name: '스톰', short: '창원', color: '#5fc4e8', color2: '#0f2733', tactics: { pace: 0.8, pnr: 0.3, iso: 0.2, post: 0.1, motion: 0.4, pindown: 0.2, dho: 0.1, zone: 0.05, zoneType: '32', press: 0.35, switch: 0.4, double: 0.15, adapt: 0.6 } },
+  { id: 'JEJ', city: '제주', name: '오션스', short: '제주', color: '#e86aa0', color2: '#fff0f6', tactics: { pace: 0.6, pnr: 0.3, iso: 0.3, post: 0.1, motion: 0.3, pindown: 0.15, dho: 0.15, zone: 0.15, zoneType: '32', press: 0.1, switch: 0.25, double: 0.25, adapt: 0.4 } },
 ];
 
 const BENCH: Position[] = ['PG', 'SG', 'SF', 'PF', 'C', 'SF', 'PG'];

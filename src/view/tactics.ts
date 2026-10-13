@@ -2,6 +2,7 @@
 import { PLAY_LABEL, type DefScheme, type GameResult, type PlayKind } from '../sim/types';
 import type { TeamLook } from './CourtScene';
 import { DEF_LABEL, lineupRoles, ROLE_DESC, ROLE_LABEL } from '../sim/roles';
+import { tendencyOf } from '../sim/tendency';
 
 const SCHEME: Record<DefScheme, string> = { man: '대인방어', zone23: '2-3 지역방어', zone32: '3-2 지역방어', press: '풀코트 프레스' };
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -34,8 +35,11 @@ export function tacticsHtml(g: GameResult, cur: number, looks: [TeamLook, TeamLo
     if (!j) judge.set(pid, (j = { shots: 0, xfg: 0, open: 0, tov: 0, ast: 0 }));
     return j;
   };
+  // 감독 조정 (M28): 지금까지 한 조정 (최근 것부터)
+  const adjs: { t: 0 | 1; when: string; text: string }[] = [];
   for (const e of g.events) {
     if (e.tick > cur) break;
+    if (e.type === 'adjust' && e.adj !== 'twoForOne') adjs.push({ t: e.team as 0 | 1, when: `${e.quarter <= 4 ? `${e.quarter}Q` : `OT${e.quarter - 4}`} ${Math.floor(e.clock / 60)}:${String(Math.floor(e.clock % 60)).padStart(2, '0')}`, text: e.text });
     if (e.type === 'defense' && e.scheme) scheme[e.team] = e.scheme;
     // 프레스는 한 번의 수비 (하프라인을 넘으면 대인방어로 돌아간다: 엔진은 그때 따로 알리지 않는다)
     const ended = e.type === 'made' || e.type === 'turnover' || (e.type === 'rebound' && !e.offensive);
@@ -118,13 +122,21 @@ export function tacticsHtml(g: GameResult, cur: number, looks: [TeamLook, TeamLo
       for (const [o, n] of u?.guarded ?? []) if (n > gn) [gp, gn] = [o, n];
       const opp = r.guards ? `#${r.guards.number} ${esc(r.guards.name)}` : '';
       const seen = gp >= 0 ? `가장 많이 막은 슛: #${g.players[gp].number} ${esc(g.players[gp].name)} ${gn}개` : '';
-      return `<tr data-p="${pid}"><td class="nm">${tag(g.teamOf[pid] as 0 | 1)} ${esc(p.name)} <small class="muted">${p.pos}</small></td><td class="nm rl" title="${esc(ROLE_DESC[r.key])}"><b>${ROLE_LABEL[r.key]}</b><small>${esc(r.jobs.join(' · '))}</small>${did ? `<small class="did">이번 경기: ${did}</small>` : ''}</td><td class="nm rl"><b>${DEF_LABEL[r.def]}</b>${opp ? `<small>막는 상대 ${opp}</small>` : ''}${seen ? `<small>${seen}</small>` : ''}</td></tr>`;
+      const tl = tendencyOf(p).labels;
+      return `<tr data-p="${pid}"><td class="nm">${tag(g.teamOf[pid] as 0 | 1)} ${esc(p.name)} <small class="muted">${p.pos}</small></td><td class="nm rl" title="${esc(ROLE_DESC[r.key])}"><b>${ROLE_LABEL[r.key]}</b><small>${esc(r.jobs.join(' · '))}</small>${tl.length ? `<small>성향: ${esc(tl.join(' · '))}</small>` : ''}${did ? `<small class="did">이번 경기: ${did}</small>` : ''}</td><td class="nm rl"><b>${DEF_LABEL[r.def]}</b>${opp ? `<small>막는 상대 ${opp}</small>` : ''}${seen ? `<small>${seen}</small>` : ''}</td></tr>`;
     })
     .join('');
   const team = (t: 0 | 1) => `<h3>${tag(t)} ${esc(g.teams[t].city)} ${esc(g.teams[t].name)}</h3>
     <div class="tablewrap"><table><tr><th class="nm">공격 작전</th><th title="작전을 부른 횟수">부름</th><th title="공격 수 (야투 + 실책 + 자유투×0.44)">공격</th><th>득점</th><th title="공격당 득점 (1.00이면 리그 평균 근처, 1.10 넘으면 아주 잘 통함)">공격당</th><th>야투</th></tr>${playRows(t)}</table></div>
     <div class="tablewrap"><table><tr><th class="nm">수비 전술</th><th>상대 공격</th><th>실점</th><th title="상대 공격당 득점 (낮을수록 잘 막음)">공격당</th><th>상대 야투</th></tr>${schemeRows(t)}</table></div>`;
-  return `<h3>지금 코트 위 선수의 역할</h3>
+  const adjHtml = adjs.length
+    ? `<h3>감독 조정</h3><div class="tablewrap"><table>${adjs
+        .slice(-12)
+        .reverse()
+        .map((a) => `<tr><td class="nm">${tag(a.t)} <small class="muted">${a.when}</small></td><td class="nm">${esc(a.text.replace(/^.*? 감독: /, ''))}</td></tr>`)
+        .join('')}</table></div><p class="hint">감독은 경기 흐름을 보고 바꾼다: 상대 에이스가 터지면 집중 견제 (더블팀·가장 잘 막는 수비수), 3점이 터지면 외곽 밀착, 골밑을 내주면 지역방어, 크게 지면 전면 강압 수비, 손이 뜨거운 선수에게 몰아주고, 미스매치를 찾아 공략한다. 쿼터 막판엔 2포1, 마지막 공격은 에이스에게. 감독마다 알아채는 정도가 다르다.</p>`
+    : '';
+  return `${adjHtml}<h3>지금 코트 위 선수의 역할</h3>
     <div class="tablewrap"><table class="roles"><tr><th class="nm">선수</th><th class="nm" title="공격 역할, 맡은 일, 이번 경기에서 작전 중 실제로 한 일 (횟수)">공격</th><th class="nm">수비</th></tr>${roleRows}</table></div>
     <p class="hint">역할은 감독이 작전을 짤 때 쓰는 기준 그대로다: 볼핸들링+패스가 가장 좋은 선수가 공을 몰고, 혼자 만드는 힘이 가장 센 선수가 아이솔레이션을 맡는다. 가드가 아닌 선수 중 스크린이 가장 좋은 선수가 스크리너 (3점 60 넘으면 팝), 수비는 상대 위협 순서대로 맞는 수비수를 붙인다. 이름표를 '역할'로 바꾸면 코트 위에서도 보인다 (단축키 L).</p>
     ${team(0)}${team(1)}

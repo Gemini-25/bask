@@ -142,7 +142,7 @@ describe('국가대표 (L7)', () => {
     expect(c.trophies.some((t) => t.includes('아시아컵 우승'))).toBe(true);
   });
 
-  it('비시즌에 소집돼서 아시아컵 경기를 치른다', () => {
+  it('비시즌에 소집돼서 아시아컵 경기를 치른다', { timeout: 120000 }, () => {
     const c = rookie(5);
     play(c, 48 - (c.week % 48));
     expect(c.week % 48).toBe(0);

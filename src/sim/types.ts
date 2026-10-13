@@ -14,6 +14,8 @@ export type TurnoverKind =
   | 'shotClock'
   | 'eightSec'
   | 'outOfBounds';
+/** 감독 조정 (M28): 에이스 집중 견제, 외곽 밀착, 지역방어로 골밑 봉쇄, 전면 강압 수비, 뜨거운 손에게 몰아주기, 슛 난조, 미스매치 공략, 막판 작전, 일부러 파울 */
+export type AdjKind = 'focus' | 'tight3' | 'zone' | 'press' | 'feed' | 'cold' | 'mismatch' | 'late' | 'twoForOne' | 'foul3';
 export type FoulKind = 'shooting' | 'reach' | 'block' | 'charge' | 'loose' | 'screen' | 'holding' | 'technical' | 'intentional';
 export type DefScheme = 'man' | 'zone23' | 'zone32' | 'press';
 
@@ -33,6 +35,10 @@ export type EventType =
   | 'bounce'
   /** 몸싸움 (M27): player = 이긴 선수, other = 진 선수. contact = 어떤 몸싸움 */
   | 'contact'
+  /** 감독 조정 (M28): team = 조정한 팀, player = 대상 선수 (없으면 -1), adj = 무엇을 */
+  | 'adjust'
+  /** 수비를 읽었다 (M28): player = 읽은 선수, read = 무엇을 */
+  | 'read'
   | 'screen'
   | 'foul'
   | 'ft'
@@ -103,6 +109,10 @@ export interface GameEvent {
   fumble?: boolean;
   /** 몸싸움 (M27): 돌파하며 밀고 들어감, 돌파가 막힘, 포스트에서 밀어붙임, 포스트에서 버팀 */
   contact?: 'shove' | 'stop' | 'backdown' | 'hold';
+  /** 감독 조정 (M28) */
+  adj?: AdjKind;
+  /** 수비 읽기 (M28): 달려드는 수비를 보고 돌파, 도움 수비가 오면 빼 주기 (밖으로 킥아웃, 골밑으로 덤프오프) */
+  read?: 'closeout' | 'kick' | 'dump';
   /** 체이스다운 블록 (M21) */
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
@@ -406,4 +416,7 @@ export interface Counters {
   beats?: number;
   /** 몸싸움 (M27): 밀고 들어감·막힘·포스트 밀어붙이기·버팀 */
   contacts?: number;
+  /** 감독 조정 (M28), 수비 읽기 */
+  adjusts?: number;
+  reads?: number;
 }

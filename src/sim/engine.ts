@@ -14,6 +14,7 @@ import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
 import { carryScore, creation as creationOf } from './roles';
 import { leapOf } from './leap';
+import { tendencyOf, type Tendency } from './tendency';
 import { G, missBounce, pickMiss, predictCatch, stepBall, type BallBody, type Hits, type MissKind } from './ball';
 import { DRIBBLES, type DribbleDef } from '../data/dribbles';
 import { canDunk, contestFactor, DEEP_DIST, elite, legend, missCut, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
@@ -40,6 +41,7 @@ import {
   type ShotMove,
   type ShotCtx,
   type Leap,
+  type AdjKind,
 } from './types';
 import { DUNK_MOVES, moveShotLabel, SHOT_MOVES, shotMove, type MoveWhen, type ShotMoveDef } from '../data/moves';
 import type { RatingKey } from '../data/ratings';
@@ -104,6 +106,18 @@ export interface MoveStyle {
 export function simulateGame(a: Team, b: Team, seed: number, opts: SimOptions = {}): GameResult {
   return new GameSim(a, b, seed, opts).run();
 }
+
+/** 감독 조정 (M28): 집중 견제할 상대 (선수 번호), 외곽 밀착, 지역방어를 언제까지, 전면 강압 수비, 몰아줄 선수와 언제까지, 덜 줄 선수 */
+interface Adj {
+  focus: number;
+  tight3: boolean;
+  zoneUntil: number;
+  press: boolean;
+  feed: number;
+  feedUntil: number;
+  cold: number;
+}
+const newAdj = (): Adj => ({ focus: -1, tight3: false, zoneUntil: 0, press: false, feed: -1, feedUntil: 0, cold: -1 });
 
 /** 코트 위 한 자리 (0~9). 교체되면 pid와 pl이 바뀐다. */
 interface SP {
@@ -421,9 +435,33 @@ class GameSim {
   private touches: { a: number; b: number; j: number; nx: number; ny: number }[] = [];
   private contactAt = new Map<number, number>();
   private massK = new Float64Array(10);
+  private radK = new Float64Array(10);
+  /** 체력 (속도 향상용, M28): 선수별 소모·회복 배율, 이번 틱에 코트에 있었나 */
+  private drainK: number[] = [];
+  private restK: number[] = [];
+  private courtMark: number[] = [];
   /** 공 속도 (M26, 공중일 때), 마지막 패스 위험 계산에서 길목 자리 */
   private bv = { x: 0, y: 0, z: 0 };
   private lastRiskS = 0.5;
+  /** 성향 (M28): 선수 번호 → 성향 */
+  private tend: Tendency[] = [];
+  /** 감독 조정용 기록 (M28): 선수별 득점·야투 성공, 팀별 3점 (성공, 시도)·골밑 득점, 최근 득점 */
+  private ptsBy: number[] = [];
+  private fgmBy: number[] = [];
+  private tp: [number, number][] = [
+    [0, 0],
+    [0, 0],
+  ];
+  private paint = [0, 0];
+  private recent: { e: number; pid: number; pts: number }[] = [];
+  /** 감독 조정 (M28): 팀별 지금 하고 있는 조정, 마지막으로 따져 본 시각, 이미 알린 조정 */
+  private adj = [newAdj(), newAdj()];
+  private adjAt = [-99, -99];
+  private adjDone = new Set<string>();
+  /** 이번 공격에 막판 작전을 불렀나 (공격 시작 시각), 수비 읽기로 고른 패스 */
+  private lateCalled = -1;
+  private readPass: 'kick' | 'dump' | null = null;
+  private readDrive = false;
   /** 몸싸움을 이기고 밀고 들어간 선수 (M27: 마무리가 좋고 파울을 얻는다) */
   private shove: { by: number; t: number } | null = null;
   /** 포스트업을 시작한 자리 (M27) */
@@ -569,6 +607,9 @@ class GameSim {
     this.out = new Array<boolean>(n).fill(false);
     // 경기마다 슛 감각이 조금씩 다르다. 일관성이 낮을수록 기복이 크다.
     this.hot = this.players.map((pl) => clamp(1 + this.rng.normal(0, ((100 - pl.r.consistency) / 100) * 0.1), 0.85, 1.15));
+    this.tend = this.players.map((pl) => tendencyOf(pl));
+    this.ptsBy = new Array<number>(n).fill(0);
+    this.fgmBy = new Array<number>(n).fill(0);
     this.P = [];
     for (let i = 0; i < 10; i++) {
       const team = (i < 5 ? 0 : 1) as Side;
@@ -756,6 +797,18 @@ class GameSim {
       else if (e.fastBreak || (this.possLive && this.t - this.possStart < 7)) play = 'transition';
     }
     this.events.push({ ...e, play, tick: this.tick, quarter: this.quarter, clock: Math.max(0, this.clock), score: [this.score[0], this.score[1]] });
+    // 감독 조정용 기록 (M28)
+    if (e.player >= 0 && (e.type === 'made' || (e.type === 'ft' && e.made))) {
+      const pts = e.type === 'made' ? e.pts : 1;
+      this.ptsBy[e.player] += pts;
+      this.recent.push({ e: this.elapsed, pid: e.player, pts });
+      if (e.type === 'made') this.fgmBy[e.player]++;
+      if (e.type === 'made' && (e.shot === 'layup' || e.shot === 'dunk' || e.shot === 'hook')) this.paint[e.team] += e.pts;
+    }
+    if ((e.type === 'made' || e.type === 'miss') && e.pts === 3) {
+      this.tp[e.team][1]++;
+      if (e.type === 'made') this.tp[e.team][0]++;
+    }
   }
 
   /** 작전 시작을 알린다 (M22) */
@@ -1045,21 +1098,24 @@ class GameSim {
   private updateEnergy() {
     const k = this.ph.k;
     const live = this.clockRunning && k !== 'dead' && k !== 'timeout' && k !== 'ft' && k !== 'break';
-    const onCourt = new Set(this.P.map((p) => p.pid));
+    if (!this.drainK.length) {
+      this.drainK = this.players.map((pl) => (1.5 - pl.r.stamina / 100) * (1 - FX.workhorse[lv(pl, 'workhorse')]));
+      this.restK = this.players.map((pl) => 0.12 * (0.6 + pl.r.recovery / 100));
+      this.courtMark = new Array<number>(this.players.length).fill(-1);
+    }
     for (const p of this.P) {
-      const r = p.pl.r;
+      this.courtMark[p.pid] = this.tick;
       if (live) {
         const v2 = p.vx * p.vx + p.vy * p.vy;
-        const drain = (0.02 + 0.004 * v2) * (1.5 - r.stamina / 100) * (1 - FX.workhorse[lv(p.pl, 'workhorse')]);
+        const drain = (0.02 + 0.004 * v2) * this.drainK[p.pid];
         this.energy[p.pid] = Math.max(0, this.energy[p.pid] - drain * DT);
       } else {
         this.energy[p.pid] = Math.min(100, this.energy[p.pid] + 0.04 * DT);
       }
     }
     for (let pid = 0; pid < this.players.length; pid++) {
-      if (onCourt.has(pid)) continue;
-      const r = this.players[pid].r;
-      this.energy[pid] = Math.min(100, this.energy[pid] + 0.12 * (0.6 + r.recovery / 100) * DT);
+      if (this.courtMark[pid] === this.tick) continue;
+      this.energy[pid] = Math.min(100, this.energy[pid] + this.restK[pid] * DT);
     }
   }
 
@@ -1175,9 +1231,12 @@ class GameSim {
     const lead = this.score[def] - this.score[(1 - def) as Side];
     let s: DefScheme = 'man';
     // 뒤지고 있으면 프레스를 더 자주 건다
-    const pressP = tac.press * (lead < -8 && this.quarter >= 4 ? 2.2 : 1);
+    const A = this.adj[def];
+    const pressP = A.press ? Math.max(0.55, tac.press) : tac.press * (lead < -8 && this.quarter >= 4 ? 2.2 : 1);
     if (fromMade && this.rng.chance(pressP)) s = 'press';
-    else if (this.rng.chance(tac.zone)) s = tac.zoneType === '23' ? 'zone23' : 'zone32';
+    // 감독 조정 (M28): 골밑을 내주면 한동안 2-3 지역방어, 3점이 터지면 지역방어를 접는다
+    else if (this.t < A.zoneUntil && this.rng.chance(0.8)) s = 'zone23';
+    else if (!A.tight3 && this.rng.chance(tac.zone)) s = tac.zoneType === '23' ? 'zone23' : 'zone32';
     if (s === 'press') this.pressUntil = this.t + 9;
     const prev = this.scheme[def];
     this.scheme[def] = s;
@@ -1193,7 +1252,9 @@ class GameSim {
     const off = (1 - def) as Side;
     const ds = this.mates(def);
     const os = this.mates(off);
-    const threat = (p: SP) => p.pl.r.ballHandling + p.pl.r.three + p.pl.r.midRange + p.pl.r.layup + this.fga[p.pid] * 3;
+    // 집중 견제 (M28) 대상이 가장 먼저 (가장 잘 맞는 수비수가 맡는다)
+    const focus = this.adj[def].focus;
+    const threat = (p: SP) => p.pl.r.ballHandling + p.pl.r.three + p.pl.r.midRange + p.pl.r.layup + this.fga[p.pid] * 3 + (p.pid === focus ? 1000 : 0);
     const order = [...os].sort((a, b) => threat(b) - threat(a));
     const used = new Set<number>();
     for (const o of order) {
@@ -1286,6 +1347,8 @@ class GameSim {
     if (!this.maybeTimeout(next, sx, sy)) this.maybeTimeout((1 - next) as Side, sx, sy);
     this.coachSubs(0, false);
     this.coachSubs(1, false);
+    this.coachAdjust(0);
+    this.coachAdjust(1);
   }
 
   private sideSpot(x: number, y: number) {
@@ -1603,6 +1666,86 @@ class GameSim {
   }
 
   /** 상대 연속 득점, 체력 바닥, 막판 접전이면 타임아웃 */
+  /** 감독 조정을 알린다 (M28): 같은 조정은 한 번만 */
+  private sayAdjust(team: Side, key: string, kind: AdjKind, text: string, pid = -1): boolean {
+    const k = `${team}:${key}`;
+    if (this.adjDone.has(k)) return false;
+    this.adjDone.add(k);
+    this.cnt.adjusts = (this.cnt.adjusts ?? 0) + 1;
+    this.emitPid({ type: 'adjust', team, player: pid, other: -1, pts: 0, adj: kind, text: `${this.teamName(team)} 감독: ${text}` });
+    return true;
+  }
+
+  private onCourt(pid: number) {
+    return this.P.some((p) => p.pid === pid);
+  }
+
+  /**
+   * 감독 AI의 경기 중 조정 (M28, 죽은 공마다 40초에 한 번 따져 본다, 감독 능력 adapt만큼 알아챈다):
+   * 상대 에이스가 터지면 집중 견제 (더블팀·가장 맞는 수비수), 3점이 터지면 외곽 밀착 (지역방어를 접는다),
+   * 골밑을 내주면 2-3 지역방어, 크게 지면 전면 강압 수비, 손이 뜨거운 선수에게 몰아주고, 슛 난조인 선수에겐 덜 준다
+   */
+  private coachAdjust(team: Side) {
+    if (this.t - this.adjAt[team] < 40 || this.elapsed < 150) return;
+    this.adjAt[team] = this.t;
+    const opp = (1 - team) as Side;
+    const A = this.adj[team];
+    const adapt = this.teams[team].tactics.adapt ?? 0.55;
+    const prog = clamp(this.elapsed / (this.qLen * 4), 0, 1);
+    // 1) 상대 에이스 집중 견제
+    if (A.focus < 0 || !this.onCourt(A.focus)) {
+      let best = -1;
+      let bp = 0;
+      for (const p of this.mates(opp)) if (this.ptsBy[p.pid] > bp) [best, bp] = [p.pid, this.ptsBy[p.pid]];
+      if (best >= 0 && bp >= 9 + prog * 11 && bp >= this.score[opp] * 0.3 && this.rng.chance(adapt)) {
+        A.focus = best;
+        if (this.sayAdjust(team, `focus${best}`, 'focus', `${this.players[best].name} 집중 견제 (${bp}점) · 더블팀, 가장 잘 막는 수비수`, best)) this.assignDefense(team);
+      }
+    }
+    // 2) 3점이 터지면 외곽 밀착
+    const [m3, a3] = this.tp[opp];
+    if (!A.tight3 && m3 >= 5 && m3 / a3 >= 0.45 && this.rng.chance(adapt)) {
+      A.tight3 = true;
+      A.zoneUntil = 0;
+      this.sayAdjust(team, 'tight3', 'tight3', `3점 경계 (상대 3점 ${m3}/${a3}) · 슈터에게 붙어라, 지역방어 접기`);
+    }
+    // 3) 골밑을 내주면 지역방어
+    if (!A.tight3 && this.t > A.zoneUntil && this.paint[opp] >= 16 + prog * 14 && m3 / Math.max(1, a3) < 0.36 && this.rng.chance(adapt * 0.8)) {
+      A.zoneUntil = this.t + 300;
+      this.sayAdjust(team, `zone${this.quarter}`, 'zone', `골밑 봉쇄 (상대 골밑 ${this.paint[opp]}점) · 2-3 지역방어`);
+    }
+    // 4) 크게 지면 전면 강압 수비
+    const lead = this.score[team] - this.score[opp];
+    if (!A.press && ((this.quarter >= 4 && lead <= -10) || (this.quarter === 3 && lead <= -15)) && this.rng.chance(adapt)) {
+      A.press = true;
+      this.sayAdjust(team, `press${this.quarter}`, 'press', `${-lead}점 차 추격 · 전면 강압 수비`);
+    } else if (A.press && lead > -5) A.press = false;
+    // 5) 손이 뜨거운 선수에게 몰아주기
+    if (this.t > A.feedUntil) {
+      A.feed = -1;
+      const sum = new Map<number, number>();
+      for (const r of this.recent) if (r.e >= this.elapsed - 240 && this.teamOf[r.pid] === team) sum.set(r.pid, (sum.get(r.pid) ?? 0) + r.pts);
+      for (const [pid, v] of sum)
+        if (v >= 9 && this.onCourt(pid) && this.rng.chance(adapt)) {
+          A.feed = pid;
+          A.feedUntil = this.t + 180;
+          this.sayAdjust(team, `feed${pid}q${this.quarter}`, 'feed', `${this.players[pid].name}에게 공 몰아주기 (최근 4분 ${v}점)`, pid);
+          break;
+        }
+    }
+    // 6) 슛 난조인 선수는 덜
+    if (A.cold < 0) {
+      for (const p of this.mates(team)) {
+        const a = this.fga[p.pid];
+        if (a >= 6 && this.fgmBy[p.pid] <= Math.floor(a / 6) && this.rng.chance(adapt * 0.7)) {
+          A.cold = p.pid;
+          this.sayAdjust(team, `cold${p.pid}`, 'cold', `${p.pl.name} 슛 난조 (${this.fgmBy[p.pid]}/${a}) · 다른 선수 쪽으로`, p.pid);
+          break;
+        }
+      }
+    } else if (this.fgmBy[A.cold] > Math.floor(this.fga[A.cold] / 3)) A.cold = -1;
+  }
+
   private maybeTimeout(team: Side, sx: number, sy: number): boolean {
     if (this.timeouts[team] <= 0 || this.t - this.lastTimeoutAt < 30) return false;
     if (this.ph.k !== 'dead' && this.ph.k !== 'ft' && this.ph.k !== 'inbound') return false;
@@ -1640,6 +1783,9 @@ class GameSim {
     }
     this.coachSubs(0, true);
     this.coachSubs(1, true);
+    // 타임아웃에는 감독이 꼭 따져 본다 (M28)
+    this.adjAt[team] = -99;
+    this.coachAdjust(team);
     return true;
   }
 
@@ -1691,6 +1837,19 @@ class GameSim {
       return;
     }
 
+    // 3점 앞선 막판 (M28): 동점 3점을 못 쏘게 일부러 파울 (자유투 2개만 준다). 감독마다 다르다
+    if (this.quarter >= 4 && this.clockRunning && this.clock <= 6 && this.clock > 1.2 && this.score[def] - this.score[off] === 3 && (this.teams[def].tactics.adapt ?? 0.55) >= 0.6 && L.u < 11 && this.mode === 'set') {
+      let f: SP | null = null;
+      for (const d of this.mates(def)) {
+        if (dist(d.x, d.y, h.x, h.y) > 1.6) continue;
+        if (!f || this.pf[d.pid] < this.pf[f.pid]) f = d;
+      }
+      if (f && this.pf[f.pid] < 5) {
+        this.sayAdjust(def, `foul3-${Math.round(this.possStart * 10)}`, 'foul3', '3점 앞선 막판 · 동점 3점을 못 쏘게 일부러 파울');
+        this.callFoul(f.i, h.i, 'intentional');
+        return;
+      }
+    }
     // 막판에 지고 있으면 시계를 멈추려고 일부러 파울
     if (this.quarter >= 4 && this.clock <= 45 && this.clockRunning) {
       const lead = this.score[off] - this.score[def];
@@ -1805,10 +1964,11 @@ class GameSim {
     if (this.zoneOn(def) || this.mode !== 'set') return;
     const tac = this.teams[def].tactics;
     const post = this.act.k === 'post';
-    const star = (this.play?.k === 'iso' && this.play.star === h.i && this.share(h.pid) > 0.27) || this.star[h.pid] > 0.06;
+    const focus = this.adj[def].focus === h.pid;
+    const star = (this.play?.k === 'iso' && this.play.star === h.i && this.share(h.pid) > 0.27) || this.star[h.pid] > 0.06 || focus;
     if (!post && !star) return;
     if (this.doubleFor === -2) return; // 이번 공격엔 안 가기로 했다
-    if (!this.rng.chance(Math.min(0.8, tac.double * (post ? 1 : 0.6) + (this.star[h.pid] / STAR_MAX) * 0.35))) {
+    if (!this.rng.chance(Math.min(0.85, tac.double * (post ? 1 : 0.6) + (this.star[h.pid] / STAR_MAX) * 0.35 + (focus ? 0.08 : 0)))) {
       this.doubleFor = -2;
       return;
     }
@@ -1832,6 +1992,46 @@ class GameSim {
     }
   }
 
+  /**
+   * 막판·상황 판단 (M28): 마지막 공격이면 시간을 끌다가 마지막 몇 초에 에이스에게 (아이솔레이션),
+   * 쿼터 끝 30~40초 전이면 빨리 쏴서 공격을 한 번 더 (2포1), 4쿼터 막판 3점 지면 3점, 1~2점 지면 2점도 된다
+   */
+  private lateGame(): { three: number; two: number; hold: number } {
+    const out = { three: 0, two: 0, hold: 0 };
+    if (!this.clockRunning) return out;
+    const off = this.off;
+    const margin = this.score[off] - this.score[(1 - off) as Side];
+    const clk = this.clock;
+    const q = this.quarter;
+    const final = q >= 4;
+    const adapt = this.teams[off].tactics.adapt ?? 0.55;
+    const lastPoss = clk <= this.shotClock + 0.3 && clk < 26;
+    if (lastPoss && (!final || margin >= -3)) {
+      if (clk > 7.5 && !(final && margin > 0)) out.hold += 0.15 + adapt * 0.45;
+      if (clk <= 8.5 && clk > 2 && this.lateCalled !== this.possStart && this.mode === 'set') {
+        this.lateCalled = this.possStart;
+        const A = this.adj[off];
+        const mates = this.mates(off);
+        const star = (A.feed >= 0 && mates.find((p) => p.pid === A.feed)) || [...mates].sort((a, b) => creationOf(b.pl) - creationOf(a.pl))[0];
+        this.play = { k: 'iso', star: star.i, t: this.t };
+        this.callPlay('iso', star, null);
+        this.sayAdjust(off, `late${q}-${Math.round(this.possStart * 10)}`, 'late', `마지막 공격 · ${star.pl.name}에게 맡긴다 (${Math.ceil(clk)}초)`, star.pid);
+      }
+    }
+    // 2포1: 쿼터 끝 30~40초 전, 공격 초반이면 빨리 좋은 슛을 (한 번 더 공격하려고)
+    if (!lastPoss && clk > 27 && clk < 38 && (!final || Math.abs(margin) > 8) && this.t - this.possStart < 9 && adapt >= 0.5) {
+      out.hold -= 0.02 + adapt * 0.05;
+      this.sayAdjust(off, `2for1q${q}`, 'twoForOne', '2포1 · 빨리 쏘고 공격 한 번 더');
+    }
+    if (final && clk < 14) {
+      if (margin === -3) {
+        out.three += 0.35;
+        out.two -= 0.35;
+      } else if (margin === -1 || margin === -2) out.two += 0.05;
+    } else if (final && clk < 35 && margin <= -4 && margin >= -8) out.three += 0.1;
+    return out;
+  }
+
   /** 공을 가진 선수의 판단 */
   private think(h: SP) {
     const off = this.off;
@@ -1844,6 +2044,14 @@ class GameSim {
     const play = this.play;
     const dH = dist(h.x, h.y, H.x, H.y);
     const doubled = this.doubleFor === h.i && this.doubler >= 0;
+    const tn = this.tend[h.pid];
+    const late = this.lateGame();
+    // 클로즈아웃 읽기 (M28): 막 받았는데 수비가 전속력으로 달려들면 페이크하고 옆으로 치고 나간다
+    const dc = this.defenderOf(h.i);
+    const lp = this.lastPass;
+    const dcd = Math.max(0.01, dist(dc.x, dc.y, h.x, h.y));
+    const closing = !!lp && lp.to === h.i && this.t - lp.t < 1.0 && dcd > 1.0 && dcd < 3.8 && ((h.x - dc.x) * dc.vx + (h.y - dc.y) * dc.vy) / dcd > 3.3;
+    const readK = clamp((r.iq + r.sense - 100) / 100, -0.3, 0.5);
 
     // 1) 슛 (딥쓰리 사거리가 길면 더 멀리서도 쏜다)
     const rg = this.rangeOf(h);
@@ -1865,15 +2073,23 @@ class GameSim {
       ev += (55 - r.teamwork) * 0.0015;
       if (si.kind === 'three') {
         // 수비가 붙은 3점은 꺼린다. 리그 성향상 3점을 아끼는 편 (슈터는 덜 아낀다)
-        ev -= c * 0.15 + clamp(0.1 - (r.three - 50) * 0.004, 0, 0.18);
+        ev -= c * 0.15 + clamp(0.08 - (r.three - 50) * 0.004, 0, 0.16);
       }
       if (play?.k === 'iso' && play.star === h.i) ev += 0.04;
       if (L.u > 9.6 + reach && tLeft > 3) ev -= 0.1; // 너무 먼 슛은 꺼린다
       // 배짱 슈터 (성격)는 딥쓰리를 겁내지 않고, 난사 (나쁜 버릇)는 두세 개 들어가면 무리하게 쏜다
       if (si.three && si.dist >= DEEP_DIST) ev += (this.deepOpt[h.pid] ? 0.03 : 0) + [0, 0.03, 0.06, 0.1][lv(h.pl, 'deepRange')];
       if (lv(h.pl, 'heatChecker') && this.streak[h.pid] >= 2 && (si.kind === 'three' || si.kind === 'mid')) ev += 0.09;
+      // 성향 (M28): 이 선수가 좋아하는 슛
+      ev += si.kind === 'three' ? tn.three * 0.03 : si.kind === 'mid' ? tn.mid * 0.03 : si.kind === 'layup' || si.kind === 'dunk' ? tn.rim * 0.02 : si.kind === 'hook' ? tn.post * 0.025 : 0;
+      // 달려드는 수비에 슛은 손해 (엘리트 슈터는 그냥 쏜다)
+      if (closing && (si.kind === 'three' || si.kind === 'mid') && r[SHOT_KEY[si.kind]] < 75) ev -= 0.02 + readK * 0.04;
+      // 막판 (M28): 3점이 필요하면 3점, 2점이면 된다면 2점
+      ev += si.three ? late.three : late.two;
       // 많이 쐈으면 동료를 찾는다. 팀 슛의 3분의 1을 넘기면 훨씬 강하게
       ev -= this.hogPenalty(h.pid);
+      // 슛 욕심 (성격 이기적·이타적): 쏠 수 있으면 더 쏜다 / 덜 쏜다
+      ev += (this.usage[h.pid] ?? 0) * 0.5;
       if (doubled) ev -= 0.1;
       opts.push({ v: ev, go: () => this.startGather(h, post), label: 'shot-' + si.kind + '@' + c.toFixed(2) });
     }
@@ -1892,7 +2108,16 @@ class GameSim {
       if (this.mode === 'advance' && lane > 0.7) ev += 0.08;
       ev -= this.hogPenalty(h.pid) * 0.75;
       if (doubled) ev -= 0.15;
-      opts.push({ v: ev, go: () => this.startDrive(h), label: 'drive@' + lane.toFixed(2) });
+      ev += tn.rim * 0.03 + late.two * 0.6;
+      if (closing) ev += 0.04 + readK * 0.08;
+      opts.push({
+        v: ev,
+        go: () => {
+          this.readDrive = closing;
+          this.startDrive(h);
+        },
+        label: 'drive@' + lane.toFixed(2) + (closing ? '+read' : ''),
+      });
     }
 
     // 3) 패스: 동료 중 가장 좋아 보이는 한 명만 후보로 (IQ가 낮으면 잘못 볼 수 있다)
@@ -1901,10 +2126,19 @@ class GameSim {
       let best: SP | null = null;
       let bestV = -Infinity;
       let bestSeen = -Infinity;
+      // 도움 수비 읽기 (M28): 돌파하는데 도움 수비가 붙으면, 그 수비가 버린 선수가 비었다
+      const hp = this.helper >= 0 ? this.P[this.helper] : null;
+      const helpOn = this.act.k === 'drive' && !!hp && hp.man >= 0 && dist(hp.x, hp.y, h.x, h.y) < 2.6 && hp.stun <= 0;
+      let readTo = -1;
       for (const m of this.mates(off)) {
         if (m.i === h.i) continue;
-        const v = this.passValue(h, m, tLeft);
+        let v = this.passValue(h, m, tLeft);
         if (v === null) continue;
+        v += tn.pass * 0.025;
+        if (helpOn && hp!.man === m.i) {
+          v += 0.07 * (0.5 + r.vision / 100) + readK * 0.04;
+          readTo = m.i;
+        }
         const seen = v + this.rng.normal(0, noise);
         if (seen > bestSeen) {
           bestSeen = seen;
@@ -1914,7 +2148,15 @@ class GameSim {
       }
       if (best) {
         const m = best;
-        opts.push({ v: bestV, go: () => this.startPass(h, m, false), label: 'pass' + m.i });
+        const read = readTo === m.i;
+        opts.push({
+          v: bestV,
+          go: () => {
+            if (read) this.readPass = dist(m.x, m.y, H.x, H.y) < 2.6 ? 'dump' : 'kick';
+            this.startPass(h, m, false);
+          },
+          label: 'pass' + m.i + (read ? '+read' : ''),
+        });
       }
     }
 
@@ -1928,6 +2170,7 @@ class GameSim {
       if (doubled) v -= 0.2;
       // 막판에 이기고 있으면 시간을 끈다
       if (this.quarter >= 4 && this.clock < 60 && this.score[off] > this.score[(1 - off) as Side] && this.shotClock > 5) v += 0.2;
+      v += late.hold;
       opts.push({ v, go: () => this.holdAction(h), label: 'hold' });
     }
 
@@ -1962,7 +2205,10 @@ class GameSim {
   /** 혼자 너무 많이 쐈으면 동료를 찾는다 (M11: 리그 득점이 한 명에게 덜 몰리게) */
   private hogPenalty(pid: number): number {
     // 슈퍼스타 (동료보다 압도적으로 잘하는 선수)는 더 많이 쏴도 된다
-    const sh = this.share(pid) - this.star[pid] - (this.usage[pid] ?? 0);
+    // 감독 조정 (M28): 손이 뜨거운 선수에게 몰아주고, 슛 난조인 선수는 덜
+    const A = this.adj[this.teamOf[pid]];
+    const coach = (A.feed === pid && this.t < A.feedUntil ? 0.1 : 0) - (A.cold === pid ? 0.08 : 0);
+    const sh = this.share(pid) - this.star[pid] - (this.usage[pid] ?? 0) - coach;
     return clamp((sh - 0.21) * 1.6, 0, 0.35) + clamp((sh - 0.29) * 4, 0, 0.8);
   }
 
@@ -2214,6 +2460,15 @@ class GameSim {
     this.cnt.drives++;
     this.adv.drives[h.pid]++;
     this.act = { k: 'drive', u: 0, v: 0, t: this.t };
+    // 클로즈아웃을 읽고 치고 나간다 (M28): 달려든 수비는 멈추지 못하고 한 발 늦는다
+    if (this.readDrive) {
+      this.readDrive = false;
+      const d = this.defenderOf(h.i);
+      d.lag = Math.max(d.lag, 0.25 + Math.max(0, (h.pl.r.iq + h.pl.r.sense - d.pl.r.iq - d.pl.r.agility) / 500));
+      this.poseFx(h, ACT.PUMPFAKE, 0.25);
+      this.cnt.reads = (this.cnt.reads ?? 0) + 1;
+      this.emit({ type: 'read', team: h.team, player: h.i, other: d.i, pts: 0, read: 'closeout', text: `${h.pl.name} 달려드는 수비를 보고 치고 나간다` });
+    }
     // 드리블 기술 (M25): 앞을 막은 수비를 기술로 제치고 들어간다. 볼핸들링이 좋을수록 자주, 길게 (콤보)
     const d = this.defenderOf(h.i);
     if (this.inFront(h, d, 2.6) && this.rng.chance(this.moveUseP(h))) this.startMoves(h, d, false);
@@ -3522,6 +3777,12 @@ class GameSim {
       }
     }
     if (!inbound) this.cnt.passes++;
+    // 도움 수비를 읽고 빼 준다 (M28)
+    if (this.readPass) {
+      this.cnt.reads = (this.cnt.reads ?? 0) + 1;
+      this.emit({ type: 'read', team: h.team, player: h.i, other: m.i, pts: 0, read: this.readPass, text: `${h.pl.name} 도움 수비를 보고 ${this.readPass === 'dump' ? '골밑으로 빼 준다' : '밖으로 빼 준다'}` });
+      this.readPass = null;
+    }
     const ix = intercept >= 0 ? lerp(sx, ex, this.lastRiskS) : ex;
     const iy = intercept >= 0 ? lerp(sy, ey, this.lastRiskS) : ey;
     // 짧은 패스는 가끔 바운드로, 롭은 머리 위로
@@ -3655,6 +3916,41 @@ class GameSim {
       tac.pindown * (shooter && shooter.pl.r.three >= 55 && screener ? 1 : 0),
       tac.dho * (screener ? 1 : 0),
     ];
+    // 감독 조정 (M28): 미스매치 공략 (스위치로 키 작은 수비가 붙은 빅맨은 포스트, 느린 수비가 붙은 가드는 아이솔), 뜨거운 손에게 아이솔
+    const A = this.adj[off];
+    const adapt = tac.adapt ?? 0.55;
+    let hunt: { p: SP; k: 1 | 2; why: string } | null = null;
+    if (!vsZone) {
+      for (const p of mates) {
+        const d = this.defenderOf(p.i);
+        const size = p.pl.body.heightCm - d.pl.body.heightCm;
+        const quick = (p.pl.r.speed + p.pl.r.accel) / 2 - (d.pl.r.speed + d.pl.r.agility) / 2;
+        // 진짜 미스매치만: 빅맨을 가드·윙이 막거나 (스위치 등), 가드를 빅맨이 막는다
+        if (size >= 12 && p.pl.r.postUp >= 52 && !this.isBig(d)) hunt = { p, k: 2, why: `${p.pl.name} (키 ${p.pl.body.heightCm}) vs ${d.pl.name} (${d.pl.body.heightCm}) · 포스트업` };
+        else if (quick >= 15 && p.pl.r.ballHandling >= 58 && this.isBig(d) && !this.isBig(p) && !hunt) hunt = { p, k: 1, why: `${p.pl.name} vs 느린 ${d.pl.name} · 아이솔레이션` };
+      }
+    }
+    if (hunt && this.rng.chance(adapt * 0.45)) {
+      const hp = hunt.p;
+      const dd = this.defenderOf(hp.i);
+      this.sayAdjust(off, `mm${hp.pid}-${dd.pid}`, 'mismatch', `미스매치 공략 · ${hunt.why}`, hp.pid);
+      this.cnt.plays[hunt.k === 2 ? 'post' : 'iso'] = (this.cnt.plays[hunt.k === 2 ? 'post' : 'iso'] ?? 0) + 1;
+      if (hunt.k === 2) {
+        this.play = { k: 'post', star: hp.i, t: this.t };
+        this.callPlay('post', h, hp);
+      } else {
+        this.play = { k: 'iso', star: hp.i, t: this.t };
+        this.callPlay('iso', hp, null);
+      }
+      return;
+    }
+    const feedP = A.feed >= 0 && this.t < A.feedUntil ? mates.find((p) => p.pid === A.feed) : undefined;
+    if (feedP && this.rng.chance(0.3)) {
+      this.cnt.plays.iso = (this.cnt.plays.iso ?? 0) + 1;
+      this.play = { k: 'iso', star: feedP.i, t: this.t };
+      this.callPlay('iso', feedP, null);
+      return;
+    }
     const k = this.rng.weighted(w);
     const nm = ['pnr', 'iso', 'post', 'motion', 'pindown', 'dho'][k];
     this.cnt.plays[nm] = (this.cnt.plays[nm] ?? 0) + 1;
@@ -4377,6 +4673,8 @@ class GameSim {
       if (Lman.u < 3.2 && Math.abs(Lman.v) > 5.5) w *= 0.55;
       if (m.pl.r.three >= 60) w *= 0.7;
       else if (m.pl.r.three < 42) w = Math.min(0.6, w * 1.3 + 0.1);
+      // 외곽 밀착 (M28 감독 조정): 슈터한테서 떨어지지 않는다
+      if (this.adj[def].tight3 && m.pl.r.three >= 52) w *= 0.45;
       // 위치선정 (M22): 오프볼이 좋으면 함부로 떠나지 못하고, 나쁘면 버려 두고 도움 수비를 간다
       w *= clamp(1 - (m.pl.r.offBall - 56) / 80, 0.55, 1.5);
       // 그래비티 (M17): 슈퍼스타는 공이 없어도 딱 붙고, 공 가진 슈퍼스타 쪽으로는 도움 수비가 몰린다
@@ -4451,6 +4749,7 @@ class GameSim {
 
   private moveAll() {
     const off = this.off;
+    const onBallD = (this.act.k === 'drive' || this.act.k === 'move') && this.ball.holder >= 0 ? this.defenderOf(this.ball.holder) : null;
     for (const p of this.P) {
       const onDef = p.team !== off;
       const f = this.fit(p);
@@ -4466,7 +4765,7 @@ class GameSim {
       let cap = p.maxSpd * p.urg * (0.86 + 0.14 * f);
       if (this.ball.holder === p.i) cap *= 0.8 + (p.pl.r.ballHandling / 100) * 0.17;
       // 돌파를 막는 수비는 뒷걸음질·옆걸음이라 앞으로 달리는 공격수보다 느리다
-      if (onDef && (this.act.k === 'drive' || this.act.k === 'move') && this.ball.holder >= 0 && this.defenderOf(this.ball.holder) === p) cap *= 0.72 + (p.pl.r.agility / 100) * 0.2;
+      if (onDef && onBallD === p) cap *= 0.72 + (p.pl.r.agility / 100) * 0.2;
       if (p.stun > 0) cap *= 0.25;
       // 제쳐졌다 (M25): 반응이 늦고 느리다
       if (p.lag > 0) {
@@ -4499,7 +4798,10 @@ class GameSim {
       if (p.screenFlag > 0) p.screenFlag = Math.max(0, p.screenFlag - DT);
     }
     // 몸싸움 (M27): 서로 겹치지 않게 밀어낸다. 무겁고 힘세고 자세를 잡은 쪽이 덜 밀리고, 부딪힌 속도를 나눠 갖는다
-    for (const p of this.P) this.massK[p.i] = this.massOf(p);
+    for (const p of this.P) {
+      this.massK[p.i] = this.massOf(p);
+      this.radK[p.i] = this.radOf(p);
+    }
     this.touches.length = 0;
     for (let a = 0; a < 10; a++) {
       for (let b = a + 1; b < 10; b++) {
@@ -4508,7 +4810,7 @@ class GameSim {
         const dx = pb.x - pa.x;
         const dy = pb.y - pa.y;
         const d = Math.hypot(dx, dy);
-        const R = this.radOf(pa) + this.radOf(pb);
+        const R = this.radK[a] + this.radK[b];
         if (d < R && d > 0.0001) {
           const ma = this.massK[a];
           const mb = this.massK[b];

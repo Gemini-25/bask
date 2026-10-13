@@ -1060,6 +1060,37 @@ export class CourtScene extends Phaser.Scene {
           if (calm) this.cameras.main.shake(100, 0.004);
         }
         break;
+      case 'adjust': {
+        // 감독 조정 (M28): 화면 위쪽에 알린다 (2포1은 작게)
+        if (speed > 16) break;
+        if (e.adj === 'twoForOne') {
+          if (calm) this.popText(VIEW_W / 2 - 40, 60, `${teams[e.team].short} 2포1`, '#bfe3ff');
+          break;
+        }
+        // 화면엔 짧게 (자세한 건 문자 중계)
+        const who = e.player >= 0 ? pb.game.players[e.player].name : '';
+        const short: Record<string, string> = {
+          focus: `${who} 집중 견제`,
+          tight3: '3점 경계 · 외곽 밀착',
+          zone: '골밑 봉쇄 · 2-3 지역방어',
+          press: '전면 강압 수비',
+          feed: `${who}에게 몰아주기`,
+          cold: `${who} 대신 다른 쪽으로`,
+          mismatch: `미스매치 공략 · ${who}`,
+          late: `마지막 공격 · ${who}`,
+          foul3: '3점 막기 · 일부러 파울',
+        };
+        this.showBanner(`${teams[e.team].short} 감독 · ${short[e.adj ?? ''] ?? e.text}`, speed <= 4 ? 2400 : 1600, VIEW_H * 0.2);
+        if (e.player >= 0 && calm) this.emote(e.player, 'bang');
+        break;
+      }
+      case 'read': {
+        // 수비 읽기 (M28)
+        if (!calm || e.player < 0) break;
+        const p = at(e.player);
+        this.popText(p.x, p.y, e.read === 'closeout' ? '클로즈아웃 공략' : e.read === 'dump' ? '골밑으로 빼 준다' : '킥아웃', '#c9f2ff');
+        break;
+      }
       case 'contact': {
         // 몸싸움 (M27): 이긴 선수 위에 글자
         const p = at(e.player);
