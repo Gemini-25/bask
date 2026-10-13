@@ -13,6 +13,7 @@ import { overall, POS_GROUP, type Player } from '../data/player';
 import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
 import { carryScore, creation as creationOf } from './roles';
+import { leapOf } from './leap';
 import { canDunk, contestFactor, DEEP_DIST, elite, legend, missCut, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
 import {
   FLAG_CUT,
@@ -36,6 +37,7 @@ import {
   type PlayKind,
   type ShotMove,
   type ShotCtx,
+  type Leap,
 } from './types';
 import { DUNK_MOVES, moveShotLabel, SHOT_MOVES, shotMove, type MoveWhen, type ShotMoveDef } from '../data/moves';
 import type { RatingKey } from '../data/ratings';
@@ -190,6 +192,8 @@ type Phase =
       poster?: boolean;
       /** 뱅크슛: 백보드를 맞고 들어간다 (M21) */
       bank?: boolean;
+      /** 덩크 도약 (M24, 화면용) */
+      leap?: Leap;
       ctx?: ShotCtx;
       def?: number;
       rim?: number;
@@ -2182,7 +2186,8 @@ class GameSim {
 
   /** 덩크 점프 높이 (화면용): 림에 손이 닿게. 큰 선수는 덜 뛰어도 닿는다 */
   private dunkHeight(h: SP, move?: ShotMove) {
-    return clamp(1.5 - (h.pl.body.heightCm - 185) / 110, 1.1, 1.55) + (h.pl.r.jump - 60) / 600 + (move === 'poster' ? 0.1 : 0);
+    // 수직 점프 그대로 (M24). 림까지 손이 닿게 맞추는 건 화면이 한다
+    return leapOf(h.pl).vert + (move === 'poster' ? 0.05 : 0);
   }
 
   /**
@@ -2223,37 +2228,37 @@ class GameSim {
 
   /** 덩크 도약 거리 (M24, 화면용 m): 점프·스피드가 좋을수록, 속공일수록, 화려한 덩크일수록 멀리서 뛴다 */
   private takeoffDist(h: SP, act: number, fast: boolean): number {
-    const r = h.pl.r;
-    if (act === ACT.FTLINE) return 4.3 + Math.max(0, r.jump - 85) * 0.01;
-    let d = 1.4 + Math.max(0, r.jump - 40) * 0.024 + Math.max(0, r.speed - 50) * 0.01 + (fast ? 0.4 : 0);
+    const L = leapOf(h.pl);
+    if (act === ACT.FTLINE) return 4.3 + L.clear * 0.2;
+    // 피지컬 (점프·가속·스피드·키·윙스팬·몸무게)이 정하는 거리에 속공, 덩크 종류
+    let d = L.range + (fast ? 0.4 : 0);
     if (act === ACT.SUPERMAN) d += 0.9;
     else if (act === ACT.WINDMILL || act === ACT.D360 || act === ACT.TOMAHAWK || act === ACT.CRADLE || act === ACT.BETWEEN || act === ACT.DOUBLE) d += 0.3;
     else if (act === ACT.POSTER || act === ACT.HAMMER) d += 0.25;
     else if (act === ACT.REVERSE) d -= 0.25;
     else if (act === ACT.CDUNK) d -= 0.35;
-    return clamp(d, 1.2, 4.0);
+    return clamp(d, 1.2, 4.2);
   }
 
   /** 덩크 (M24, 화면용): 멀리서 뛰어 림까지 날아가 꽂는다 */
   private glideDunk(h: SP, ph: Extract<Phase, { k: 'gather' }>, act: number, flight: number, w: { x: number; y: number }, fast: boolean) {
     const D = this.takeoffDist(h, act, fast);
-    const jump = h.pl.r.jump;
-    this.glide(h, ph, act, {
+    const vert = this.dunkHeight(h, ph.move);
+    return this.glide(h, ph, act, {
       tS: this.t + flight,
       end: w,
       D,
-      // 체공 시간: 멀리서 뛸수록, 점프가 좋을수록 길다
-      air: (d) => clamp(0.62 + (jump - 50) / 400 + (d - 1.5) * 0.09, 0.62, 1.05),
+      // 체공 시간: 멀리서 뛸수록, 높이 뛸수록 길다
+      air: (d) => clamp(0.5 + vert * 0.32 + (d - 1.5) * 0.09, 0.62, 1.08),
       // 동작의 앞 2할은 두 발을 모으는 시간 (도약은 동작 0.2, 꽂기는 0.9)
       ground: 0.286,
-      jh: this.dunkHeight(h, ph.move),
+      jh: vert,
       peak: 1,
     });
   }
 
   /** 레이업 (M24, 화면용): 한두 걸음 앞에서 떠서 림 앞까지 날아가 올려놓는다 */
   private glideLayup(h: SP, ph: Extract<Phase, { k: 'gather' }>, act: number, flight: number, fast: boolean) {
-    const r = h.pl.r;
     const H = this.hoop(h.team);
     const tS = this.t + flight * 0.4;
     // 손을 떠날 때 있을 자리 (지금 움직임대로)
@@ -2264,15 +2269,16 @@ class GameSim {
       ex = H.x + ((ex - H.x) / Math.max(0.01, de)) * 0.45;
       ey = H.y + ((ey - H.y) / Math.max(0.01, de)) * 0.45;
     }
-    const D = clamp(1.25 + Math.max(0, r.jump - 40) * 0.01 + Math.max(0, r.speed - 50) * 0.008 + (fast ? 0.3 : 0) + (act === ACT.FINGER ? 0.25 : 0), 1.1, 2.6);
+    const L = leapOf(h.pl);
+    const D = clamp(0.75 + L.range * 0.35 + (fast ? 0.3 : 0) + (act === ACT.FINGER ? 0.25 : 0), 1.1, 2.6);
     this.glide(h, ph, act, {
       tS,
       end: { x: ex, y: ey },
       D,
-      air: (d) => clamp(0.36 + r.jump / 600 + (d - 1.2) * 0.08, 0.34, 0.6),
+      air: (d) => clamp(0.3 + L.vert * 0.2 + (d - 1.2) * 0.08, 0.34, 0.6),
       // 레이업 동작: 도약 0.3, 손을 떠나는 때 0.55
       ground: 1.2,
-      jh: 0.55 + r.jump / 300,
+      jh: L.vert * 0.85,
       peak: 1.15,
     });
   }
@@ -2287,7 +2293,7 @@ class GameSim {
     ph: Extract<Phase, { k: 'gather' }>,
     act: number,
     o: { tS: number; end: { x: number; y: number }; D: number; air: (d: number) => number; ground: number; jh: number; peak: number },
-  ) {
+  ): Leap | undefined {
     const i = h.i;
     const tS = o.tS;
     const H = this.hoop(h.team);
@@ -2398,6 +2404,8 @@ class GameSim {
     for (let f = this.tick; (f + 1) * DT < tS; f++) q.push(...at(sv(f * DT)));
     h.vq = q;
     h.vqN = q.length / 2;
+    const [lx, ly] = at(sD);
+    return { d: Math.round(dist(lx, ly, H.x, H.y) * 10) / 10, h: Math.round(o.jh * 100) / 100, air: Math.round(A * 100) / 100, x: lx, y: ly, t: Math.ceil(tT / DT - 1e-6) };
   }
 
   /** 동작 성향: 성격(옵션) × 센스 × 천재 */
@@ -2662,6 +2670,7 @@ class GameSim {
         h.qDur = flight + 0.6;
       }
     }
+    let leap: Leap | undefined;
     if (si.kind === 'dunk') {
       const w = this.wrl(h.team, COURT.hoopFromBaseline + 0.45, clamp(L.v * 0.35, -0.45, 0.45));
       h.vx = 0;
@@ -2669,7 +2678,7 @@ class GameSim {
       h.slideX = (w.x - h.x) / flight;
       h.slideY = (w.y - h.y) / flight;
       h.slideUntil = this.t + flight;
-      if (!ph.alley && mv !== 'putback') this.glideDunk(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, w, fast);
+      if (!ph.alley && mv !== 'putback') leap = this.glideDunk(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, w, fast);
     } else if (si.kind === 'layup' && !ph.post) this.glideLayup(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, fast);
     this.ph = {
       k: 'shot',
@@ -2693,6 +2702,7 @@ class GameSim {
       move: mv,
       bank: mv === 'bank' || undefined,
       poster: poster && si.kind === 'dunk',
+      leap,
       ...meta,
     };
   }
@@ -2751,11 +2761,12 @@ class GameSim {
         combo: ph.combo || undefined,
         move: ph.move,
         poster: ph.poster || undefined,
+        leap: ph.leap,
         fancy: (ph.assist >= 0 && this.lastPass?.fancy) || undefined,
         ctx: ph.ctx,
         def: ph.def,
         rim: ph.rim,
-        text: `${h.pl.name} ${fb}${ao}${label} 성공${ph.poster ? '!! 수비 머리 위로' : ''}${ast}${fouled ? ' + 앤드원!' : ''}${ph.combo ? ' · 콤비 플레이!' : ''}`,
+        text: `${h.pl.name} ${fb}${ao}${label} 성공${ph.poster ? '!! 수비 머리 위로' : ''}${ph.leap && ph.leap.d >= 2.5 ? ` (${ph.leap.d.toFixed(1)}m 밖에서 도약)` : ''}${ast}${fouled ? ' + 앤드원!' : ''}${ph.combo ? ' · 콤비 플레이!' : ''}`,
       });
       const H = this.hoop(h.team);
       this.ball.x = H.x;
@@ -2797,6 +2808,7 @@ class GameSim {
       prob: ph.prob,
       contest: ph.contest,
       move: ph.move,
+      leap: ph.leap,
       ctx: ph.ctx,
       def: ph.def,
       rim: ph.rim,

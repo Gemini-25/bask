@@ -82,6 +82,8 @@ export interface GameEvent {
   move?: ShotMove;
   /** 블록하러 뜬 수비 위로 찍었다 (인유어페이스) */
   poster?: boolean;
+  /** 덩크 도약 (M24, 화면용): 림에서 떨어진 거리 (m), 수직 점프 (m), 체공 (초), 뛴 자리, 뛴 틱 */
+  leap?: Leap;
   /** 체이스다운 블록 (M21) */
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
@@ -104,6 +106,15 @@ export interface GameEvent {
 /** 공격 작전 (M22) */
 export type PlayKind = 'pnr' | 'iso' | 'post' | 'motion' | 'pindown' | 'dho' | 'transition';
 export const PLAY_LABEL: Record<PlayKind, string> = { pnr: '픽앤롤', iso: '아이솔레이션', post: '포스트업', motion: '모션 오펜스', pindown: '핀다운', dho: '핸드오프', transition: '속공' };
+
+export interface Leap {
+  d: number;
+  h: number;
+  air: number;
+  x: number;
+  y: number;
+  t: number;
+}
 
 /** 화면에서 그릴 선수 동작 (Recording.act) */
 export const ACT = {

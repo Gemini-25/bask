@@ -7,6 +7,7 @@ import { RATING_KEYS } from '../src/data/ratings';
 import { generateTeam, TEAM_INFOS } from '../src/data/teams';
 import { COURT, hoopXY } from '../src/sim/court';
 import { simulateGame } from '../src/sim/engine';
+import { dunkReach, leapOf } from '../src/sim/leap';
 import { lineupRoles, matchups } from '../src/sim/roles';
 import { shotInfo } from '../src/sim/shooting';
 import { boxScore } from '../src/sim/stats';
@@ -60,6 +61,29 @@ describe('도약·99·건너뛰기·역할 (M24)', () => {
     expect(star.length).toBeGreaterThan(3);
     expect(avg(star.map((x) => x.d))).toBeGreaterThan(2.6);
     expect(avg(star.map((x) => x.d))).toBeGreaterThan(avg(t.map((x) => x.d)) + 0.5);
+  });
+
+  it('피지컬: 점프·키가 좋을수록 높이 뜨고 멀리서 뛰고, 덩크를 고를 수 있는 거리도 길다', () => {
+    const p = generatePlayer(new Rng(5), 'SF', 0, 3);
+    p.body = { heightCm: 198, wingspanCm: 206, weightKg: 95 };
+    p.r.jump = 50;
+    const lo = leapOf(p);
+    const rLo = dunkReach(p);
+    p.r.jump = 95;
+    const hi = leapOf(p);
+    expect(hi.vert).toBeGreaterThan(lo.vert + 0.25);
+    expect(hi.range).toBeGreaterThan(lo.range + 0.4);
+    expect(dunkReach(p)).toBeGreaterThan(rLo);
+    // 키가 크면 덜 뛰어도 림 위로 손이 올라간다
+    const tall = { ...p, body: { heightCm: 212, wingspanCm: 222, weightKg: 105 } };
+    expect(leapOf(tall).clear).toBeGreaterThan(hi.clear);
+    // 경기 기록: 덩크마다 도약 거리·점프·체공, 점프가 좋은 선수가 더 멀리서
+    const ls = gs.flatMap((g) => g.events.filter((e) => e.type === 'made' && e.leap).map((e) => ({ ...e.leap!, jump: g.players[e.player].r.jump })));
+    expect(ls.length).toBeGreaterThan(10);
+    const good = ls.filter((l) => l.jump >= 68);
+    const poor = ls.filter((l) => l.jump < 60);
+    expect(avg(good.map((l) => l.d))).toBeGreaterThan(avg(poor.map((l) => l.d)));
+    expect(avg(good.map((l) => l.h))).toBeGreaterThan(avg(poor.map((l) => l.h)));
   });
 
   it('레이업도 한두 걸음 앞에서 뜬다', () => {

@@ -4,6 +4,7 @@ import { DEEP_DIST, LOGO_DIST } from '../sim/shooting';
 import { ACT, DUNK_LABEL, FLAG_CUT, FLAG_STUN, PLAY_LABEL, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
 import { lineupRoles, ROLE_SHORT, type Role } from '../sim/roles';
+import { leapOf } from '../sim/leap';
 import { LABELS, TACTICS } from './labels';
 import { drawArena, drawCheerBanner, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type ArenaDeco, type CrowdMood } from './arena';
 import { drawBall, drawBenchFigure, drawFigure, drawFigureRig, reachPx, type Facing, type Kit } from './character';
@@ -397,6 +398,8 @@ export class CourtScene extends Phaser.Scene {
 
     // 작전 표시 (M22): 지금 돌리는 작전의 스크린·롤·컷 경로
     this.drawTactics(ctx, fr, pb.cur);
+    // 덩크 도약 (M24): 뛴 자리 발자국, 날아간 길, 꽂은 뒤엔 도약 거리 자
+    if (pb.speed <= 8) this.drawLeaps(ctx, pb.cur);
 
     const items: Drawable[] = [];
     for (const side of [0, 1] as const) {
@@ -493,7 +496,13 @@ export class CourtScene extends Phaser.Scene {
         if (act === ACT.HANG) {
           lift2 = Math.max(lift, need);
           if (Math.abs(x - hoopX) < 1.6) this.hanging[hs] = true;
-        } else lift2 = Math.max(lift, need * smooth(0.4, 0.85, prog ?? 0.5));
+        } else {
+          // 피지컬 (M24): 림 위로 손이 올라가는 만큼 더 솟았다가 (동작 0.72), 꽂으면서 림으로 내려온다 (0.9)
+          const p0 = prog ?? 0.5;
+          const pr = rel !== undefined && rel > 0 ? (p0 <= rel ? (p0 / rel) * 0.9 : 0.9 + ((p0 - rel) / Math.max(0.01, 1 - rel)) * 0.1) : p0;
+          const hump = pr < 0.72 ? smooth(0.2, 0.72, pr) : 1 - smooth(0.72, 0.9, pr);
+          lift2 = Math.max(lift, need * smooth(0.3, 0.8, pr) + leapOf(pl).clear * ZH * 1.6 * hump);
+        }
       }
       const carry = carrySlot === i;
       const ghosts = run && hasTrail(act) && pb.speed <= 8 ? [2, 1] : [];
@@ -890,6 +899,8 @@ export class CourtScene extends Phaser.Scene {
         if (loud) sound.play(e.shot === 'dunk' ? 'dunk' : 'swish');
         if (loud && big && calm) sound.play('cheer');
         this.popText(p.x, p.y, label, col, big);
+        // 덩크 도약 (M24): 몇 m 밖에서 뛰어 얼마나 높이 떴나
+        if (e.leap && e.shot === 'dunk' && speed <= 8) this.popText(p.x, p.y + 14, `도약 ${e.leap.d.toFixed(1)}m · 점프 ${Math.round(e.leap.h * 100)}cm`, e.leap.d >= 3 ? '#ffd23f' : '#ffe9a8');
         if (this.fireStart === e) {
           this.fireStart = null;
           this.popText(p.x, p.y - 16, 'ON FIRE!', '#ff8a1f', true);
@@ -1098,6 +1109,58 @@ export class CourtScene extends Phaser.Scene {
     if (!e || cur - e.tick > 90) return null;
     const end = this.endTicks.find((t) => t > e!.tick);
     return end !== undefined && end <= cur ? null : e;
+  }
+
+  private drawLeaps(ctx: CanvasRenderingContext2D, cur: number) {
+    const pb = this.host.pb!;
+    const rec = pb.game.rec;
+    for (const e of this.shotEvents) {
+      const L = e.leap;
+      if (!L || cur < L.t || cur > e.tick + 22) continue;
+      if (e.tick - L.t > 16) continue;
+      const slot = pb.slotOf(e.player, L.t);
+      if (slot < 0) continue;
+      const team = pb.game.teamOf[e.player] as 0 | 1;
+      const col = shade(this.host.looks[team].fill, 0.35);
+      const fade = cur > e.tick ? Math.max(0, 1 - (cur - e.tick) / 22) : 1;
+      ctx.globalAlpha = 0.9 * fade;
+      // 날아간 길 (바닥 그림자 점선)
+      const end = Math.min(cur, e.tick);
+      for (let f = L.t; f <= end; f += 0.5) {
+        const f0 = Math.floor(f);
+        const k = f - f0;
+        const x = rec.pos[f0 * 20 + slot * 2] * (1 - k) + rec.pos[(f0 + 1) * 20 + slot * 2] * k;
+        const y = rec.pos[f0 * 20 + slot * 2 + 1] * (1 - k) + rec.pos[(f0 + 1) * 20 + slot * 2 + 1] * k;
+        if ((f * 2) % 2 === 0) {
+          ctx.fillStyle = 'rgba(20,14,8,0.55)';
+          ctx.fillRect(Math.round(sx(x)) - 1, Math.round(sy(y)), 2, 1);
+        }
+      }
+      // 뛴 자리: 두 발자국
+      const fx = Math.round(sx(L.x));
+      const fy = Math.round(sy(L.y));
+      ctx.fillStyle = '#0b0d12';
+      ctx.fillRect(fx - 4, fy - 2, 4, 3);
+      ctx.fillRect(fx + 1, fy - 1, 4, 3);
+      ctx.fillStyle = col;
+      ctx.fillRect(fx - 3, fy - 1, 2, 1);
+      ctx.fillRect(fx + 2, fy, 2, 1);
+      // 꽂은 뒤: 뛴 자리에서 림 밑까지 자 (눈금 1m마다)
+      if (cur >= e.tick) {
+        const side = this.hoopSide(e.team, e.quarter);
+        const hx = side ? COURT.length - COURT.hoopFromBaseline : COURT.hoopFromBaseline;
+        const hy = COURT.width / 2;
+        const dd = Math.hypot(hx - L.x, hy - L.y) || 1;
+        ctx.fillStyle = '#ffe9a8';
+        for (let m = 0; m <= dd; m += 0.25) {
+          const x = L.x + ((hx - L.x) * m) / dd;
+          const y = L.y + ((hy - L.y) * m) / dd;
+          const tick = Math.abs(m - Math.round(m)) < 0.01;
+          ctx.fillRect(Math.round(sx(x)), Math.round(sy(y)) + 2, 1, tick ? 3 : 1);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 
   private drawTactics(ctx: CanvasRenderingContext2D, fr: ReturnType<Playback['sample']>, cur: number) {

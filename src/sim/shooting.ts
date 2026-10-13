@@ -2,6 +2,7 @@ import { clamp } from '../core/math';
 import type { Player } from '../data/player';
 import type { RatingKey } from '../data/ratings';
 import { COURT, isThreeLocal } from './court';
+import { dunkReach } from './leap';
 import type { ShotKind } from './types';
 
 export interface ShotInfo {
@@ -24,9 +25,10 @@ export interface Range {
 }
 export const NO_RANGE: Range = { extra: 0, slope: 1 };
 
+/** 덩크할 수 있나: 덩크·점프·키, 거리는 피지컬 (M24: 림 위로 손이 많이 올라가면 2m 넘게서도) */
 export function canDunk(p: Player, dist: number): boolean {
   const lift = p.r.jump + (p.body.heightCm - 190) * 1.6;
-  return dist < 1.5 && p.r.dunk >= 45 && lift >= 52;
+  return dist < dunkReach(p) && p.r.dunk >= 45 && lift >= 52;
 }
 
 /** 슛 종류마다 성공률을 정하는 능력치 */
@@ -55,11 +57,12 @@ export function shotInfo(p: Player, u: number, v: number, post = false, contest 
   const r = { dunk: soft(raw.dunk), layup: soft(raw.layup), postUp: soft(raw.postUp), floater: soft(raw.floater), midRange: soft(raw.midRange), three: soft(raw.three) };
   let kind: ShotKind;
   let pOpen: number;
-  if (dist < 1.7) {
+  const dunkable = canDunk(p, dist) && contest < 0.45;
+  if (dist < 1.7 || dunkable) {
     // 골밑에 수비가 버티고 있으면 덩크 대신 레이업을 올린다
-    if (canDunk(p, dist) && contest < 0.45) {
+    if (dunkable) {
       kind = 'dunk';
-      pOpen = 0.93 + (r.dunk - 50) * 0.0012;
+      pOpen = 0.93 + (r.dunk - 50) * 0.0012 - Math.max(0, dist - 1.5) * 0.06;
     } else {
       kind = 'layup';
       pOpen = 0.72 + (r.layup - 50) * 0.005 - Math.max(0, dist - 0.8) * 0.05;

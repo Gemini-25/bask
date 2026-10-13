@@ -45,7 +45,7 @@ for (const f of found) {
   const ys = f.xs.slice(5).map((p) => p[1]);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
   const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  const n = f.tick + 2 - f.from + 1;
+  const n = f.tick + Number(process.env.AFTER ?? 2) - f.from + 1;
   for (let k = 0; k < n; k++) {
     await page.evaluate(
       ([t]) => {
