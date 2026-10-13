@@ -580,6 +580,23 @@ export const ANIMS: Record<number, Anim> = {
     { t: 0.7, lF: [26, -50], lB: [18, -46], aF: [40, 116], aB: [36, 116], wF: 0.7, wB: 0.7, ball: 'FB', eyes: 'angry' },
     { t: 1, ...CROUCH_LEGS, aF: [36, 112], aB: [32, 112], wF: 0.7, wB: 0.7, ball: 'FB' },
   ]),
+  // 팁인 (M26): 공중에서 한 손을 끝까지 뻗어 손끝으로 톡 밀어 넣는다
+  [ACT.TIPIN]: A(
+    [
+      { t: 0, lF: [30, -62], lB: [20, -56], aF: [176, 0], aB: [150, 20], wF: 0.2, wB: 0.5, eyes: 'focus' },
+      { t: 0.45, lF: [28, -56], lB: [18, -50], aF: [186, -6], aB: [120, 30], wF: 0.05, wB: 0.6, wFe: 0.5, ball: 'F', lean: -4, eyes: 'focus' },
+      { t: 0.6, lF: [26, -50], lB: [18, -46], aF: [178, 0], aB: [120, 30], wF: 0.05, wFe: -0.6, lean: -2, eyes: 'angry' },
+      { t: 1, ...CROUCH_LEGS, aF: [140, 20], aB: [100, 30], wF: 0.4, eyes: 'focus' },
+    ],
+    { rel: 0.55 },
+  ),
+  // 다이브 (M26): 루즈볼에 몸을 던진다 (앞으로 쭉 뻗어 엎어진다)
+  [ACT.DIVE]: A([
+    { t: 0, ...CROUCH_LEGS, aF: [90, 20], aB: [80, 20], lean: 30, eyes: 'focus' },
+    { t: 0.25, lF: [40, -30], lB: [-70, -20], aF: [100, 0], aB: [96, 0], wF: 0.1, wB: 0.1, lean: 62, eyes: 'angry' },
+    { t: 0.5, lF: [-60, -10], lB: [-80, -10], aF: [96, 0], aB: [92, 0], wF: 0.1, wB: 0.1, lean: 80, crouch: 4, eyes: 'angry' },
+    { t: 1, lF: [-70, -10], lB: [-84, -10], aF: [86, 10], aB: [80, 10], wF: 0.3, wB: 0.3, lean: 78, crouch: 5, eyes: 'focus' },
+  ]),
   [ACT.BLOCK]: A([
     { t: 0, ...CROUCH_LEGS, aF: [120, 30], aB: [90, 30] },
     { t: 0.35, lF: [40, -62], lB: [-10, -22], aF: [182, 0], aB: [110, 30], wF: 0.2, eyes: 'angry' },

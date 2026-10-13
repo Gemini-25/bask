@@ -1043,7 +1043,12 @@ export class CourtScene extends Phaser.Scene {
         break;
       }
       case 'miss':
-        if (loud) sound.play(e.blocked ? 'block' : 'clank');
+        // 림·백보드에 맞는 소리는 'bounce'가 (M26)
+        if (loud && e.blocked) sound.play('block');
+        if (!e.blocked && e.missKind === 'air' && calm) {
+          const p = at(e.player);
+          this.popText(p.x, p.y, '에어볼', '#c9c9c9');
+        }
         if (e.blocked && e.other >= 0) {
           this.emote(e.other, 'bang');
           this.emote(e.player, 'dots');
@@ -1055,10 +1060,20 @@ export class CourtScene extends Phaser.Scene {
           if (calm) this.cameras.main.shake(100, 0.004);
         }
         break;
+      case 'bounce': {
+        // 공이 림·백보드에 맞았다 (M26): 세게 맞을수록 림이 크게 흔들린다
+        const side = this.hoopSide(e.team, e.quarter);
+        if (e.hit === 'rim') this.rimShake[side] = Math.max(this.rimShake[side], Math.min(0.4, 0.1 + (e.power ?? 2) * 0.05));
+        if (loud) sound.play(e.hit === 'rim' ? 'clank' : 'bounce');
+        break;
+      }
       case 'loose': {
         const p = at(e.player);
         if (loud) sound.play('bounce');
-        if (e.offensive) {
+        if (e.fumble) {
+          this.emote(e.player, 'dots');
+          if (calm) this.popText(p.x, p.y, '놓쳤다!', '#ffb3a8');
+        } else if (e.offensive) {
           if (calm) this.popText(p.x, p.y, '다시 잡았다', '#ffe08a');
         } else {
           this.emote(e.player, 'bang');

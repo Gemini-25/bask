@@ -50,6 +50,8 @@ export const SHOT_MOVES: ShotMoveDef[] = [
   { id: 'catchShoot', label: '캐치앤슛', prefix: true, kinds: ['three', 'mid'], need: { three: 60 }, keys: ['three', 'offBall'], base: 1.5, when: 'catch', style: 'basic', act: ACT.SHOOT, fx: { p: 1.02 } },
   { id: 'contactShot', label: '컨택트', prefix: true, kinds: ['mid', 'floater', 'layup'], need: { strength: 58 }, keys: ['strength', 'composure'], base: 0.9, when: 'traffic', style: 'power', ability: 'contact', act: ACT.CONTACT, fx: { foul: 1.35, p: 0.9, andOne: 1.4 } , beat: 'shove' },
   { id: 'pumpFake', label: '펌프 페이크', prefix: true, kinds: ['mid', 'three'], need: { iq: 50 }, keys: ['iq', 'sense', 'composure'], base: 0.9, when: 'tight', act: ACT.PUMPFAKE, fx: {}, extra: 0.35, beat: 'jumpfake' },
+  // 팁인 (M26): 리바운드 다툼에서만 (고르는 동작이 아니다)
+  { id: 'tipIn', label: '팁인', prefix: false, kinds: ['layup'], need: {}, keys: ['offReb'], base: 0, when: 'any', act: ACT.TIPIN, fx: { c: 0.55 } },
   { id: 'bank', label: '뱅크슛', prefix: false, kinds: ['mid'], need: {}, keys: ['midRange', 'iq'], base: 0.4, when: 'any', style: 'basic', act: ACT.SHOOT, fx: {} },
   { id: 'skyhook', label: '스카이훅', prefix: false, kinds: ['hook'], need: { postUp: 70 }, keys: ['postUp'], base: 1.0, when: 'any', minHeight: 203, act: ACT.SKYHOOK, fx: { block: 0.35, p: 0.98 } },
   { id: 'teardrop', label: '티어드롭', prefix: false, kinds: ['floater'], need: { floater: 60 }, keys: ['floater', 'sense'], base: 0.8, when: 'traffic', flashy: true, act: ACT.FLOAT, fx: { block: 0.6 } },

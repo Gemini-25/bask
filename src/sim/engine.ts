@@ -14,6 +14,7 @@ import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
 import { carryScore, creation as creationOf } from './roles';
 import { leapOf } from './leap';
+import { G, missBounce, pickMiss, predictCatch, stepBall, type BallBody, type Hits, type MissKind } from './ball';
 import { DRIBBLES, type DribbleDef } from '../data/dribbles';
 import { canDunk, contestFactor, DEEP_DIST, elite, legend, missCut, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
 import {
@@ -49,6 +50,8 @@ const ELITE = 0.8;
 const ex = (v: number) => v + Math.max(0, v - 80) * ELITE;
 /** 드리블 기술 (M25): 보통 핸들러 대 보통 수비가 반쯤 이기게 */
 const MOVE_EDGE = 18;
+/** 길목을 읽고 뛰어드는 비율 (M26): 뛰어들어도 손이 안 닿으면 못 끊으니 예전 가로채기 확률보다 크게 */
+const READ_K = 1.35;
 /** 슈퍼스타 보정 최대 (팀 슛 몫을 이만큼 더 가져가도 된다) */
 const STAR_MAX = 0.15;
 /** 슛 동작 없이 그냥 던지는 무게 (동작 무게 합과 비교) */
@@ -59,6 +62,8 @@ export const DEBUG: {
   think?: (t: number, i: number, u: number, v: number, tLeft: number, opts: string[], chosen: string) => void;
   intercept?: (info: Record<string, number | string>) => void;
   shot?: (kind: string, contest: number, p: number, made: boolean, tLeft: number) => void;
+  /** 패스 길목 (M26): 'read' 뛰어듦, 'readHit' 닿음, 'stray' 그냥 손에 걸림 */
+  lane?: (kind: string) => void;
 } = {};
 const RIM_FRONT = 0.75;
 /** 벤치는 아래쪽 사이드라인 밖 */
@@ -247,14 +252,36 @@ type Phase =
       sy: number;
       ex: number;
       ey: number;
+      /** 길목을 읽고 뛰어드는 수비 (M26: 실제로 공에 손이 닿아야 끊는다), 뛰어들 자리 */
       intercept: number;
+      ix: number;
+      iy: number;
       oob: boolean;
       inbound: boolean;
       lob: boolean;
       bounce?: boolean;
+      /** 길목 수비가 없는 안전한 패스 (핸드오프·득점 뒤 인바운드), 이미 손을 대 본 수비 (비트) */
+      safe: boolean;
+      touched: number;
     }
-  | { k: 'reb'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; z0: number; peak: number; shotTeam: Side; ft: boolean; jumped?: boolean }
-  | { k: 'loose'; t: number; vx: number; vy: number; shotTeam: Side; steal?: { by: number; from: number; kind: TurnoverKind } }
+  /**
+   * 공이 공중에 있거나 바닥을 구른다 (M26): 빗나간 슛·블록·쳐낸 공. 물리로 움직이고, 손이 닿는 선수가 잡으려고 다툰다.
+   * shotTeam = 공격하던 팀, touch = 마지막으로 건드린 팀 (아웃 판정), lx·ly = 잡힐 만한 자리 (선수들이 간다)
+   */
+  | {
+      k: 'air';
+      t: number;
+      shotTeam: Side;
+      touch: Side;
+      ft: boolean;
+      noScore: boolean;
+      lx: number;
+      ly: number;
+      noCatch: number;
+      tips: number;
+      lastBounce: number;
+      steal?: { by: number; from: number; kind: TurnoverKind };
+    }
   /** 블록한 공이 코트 밖으로 날아간다 (공격팀 공) */
   | { k: 'swat'; t: number; dur: number; sx: number; sy: number; ex: number; ey: number; team: Side }
   | { k: 'inbound'; inb: number; recv: number; sx: number; sy: number; t: number; ready: number; made: boolean }
@@ -342,6 +369,7 @@ const TOV_TEXT: Record<TurnoverKind, string> = {
   offFoul: '공격자 파울',
   shotClock: '24초 바이얼레이션',
   eightSec: '8초 바이얼레이션',
+  outOfBounds: '공을 밖으로 내보냈다',
 };
 
 const FOUL_TEXT: Record<FoulKind, string> = {
@@ -389,6 +417,9 @@ class GameSim {
   /** 지금 날아가는 패스가 화려한 패스 (비하인드 백·노룩) */
   private fancyPass = false;
   private nextThink = 0;
+  /** 공 속도 (M26, 공중일 때), 마지막 패스 위험 계산에서 길목 자리 */
+  private bv = { x: 0, y: 0, z: 0 };
+  private lastRiskS = 0.5;
   /** 지금 하고 있는 드리블 기술 (M25), 이번 돌파에 도움 수비를 제치려 했나 */
   private mv: MoveRun | null = null;
   private countered = false;
@@ -933,18 +964,10 @@ class GameSim {
         break;
       case 'pass':
         if (t - ph.t >= ph.dur) this.passArrive(ph);
+        else this.passFlight(ph);
         break;
-      case 'reb':
-        if (!ph.jumped && t - ph.t >= ph.dur - 0.3) {
-          ph.jumped = true;
-          for (const p of this.P) {
-            if (dist(p.x, p.y, ph.ex, ph.ey) < 2.8) this.jumpFx(p, 0.35 + p.pl.r.jump / 250, 0.55, ACT.REBOUND);
-          }
-        }
-        if (t - ph.t >= ph.dur) this.rebArrive(ph);
-        break;
-      case 'loose':
-        this.looseUpdate(ph);
+      case 'air':
+        this.airUpdate(ph);
         break;
       case 'inbound':
         this.inboundUpdate(ph);
@@ -1439,12 +1462,10 @@ class GameSim {
       }
       return;
     }
-    // 마지막 자유투 실패: 리바운드 (튀는 거리는 짧다)
-    const H = this.hoop(s.team);
-    const a = Math.atan2(s.y - H.y, s.x - H.x) + this.rng.normal(0, 1.2);
-    const rr = 0.8 + this.rng.range(0, 1.8);
+    // 마지막 자유투 실패: 림에 맞고 튄다 (짧게)
     this.clockRunning = true;
-    this.startRebound(H.x, H.y, COURT.rimHeight, H.x + Math.cos(a) * rr, H.y + Math.sin(a) * rr, s.team, true);
+    // 자유투는 부드럽게 쏘니 림 근처로 짧게 떨어진다
+    this.missFlight(s.team, s.x, s.y, this.rng.chance(0.45) ? 'front' : this.rng.chance(0.55) ? 'back' : 'side', 0.6, true);
   }
 
   // ---------------------------------------------------------------- 감독: 교체, 타임아웃
@@ -1616,7 +1637,7 @@ class GameSim {
   private live() {
     const h = this.holder();
     if (!h) {
-      this.ph = { k: 'loose', t: this.t, vx: 0, vy: 0, shotTeam: this.off };
+      this.startAir({ x: this.ball.x, y: this.ball.y, z: Math.max(0.5, this.ball.z), vx: 0, vy: 0, vz: 0 }, this.off, this.off);
       return;
     }
     const off = this.off;
@@ -2363,16 +2384,18 @@ class GameSim {
     const ct = this.contest(h);
     let si = shotInfo(h.pl, L.u, L.v, post, ct.c, this.rangeOf(h));
     if (forced === 'putback') si = { ...si, kind: 'dunk' };
+    if (forced === 'tipIn') si = { ...si, kind: 'layup' };
     // 슛 동작 (M16): 상황과 능력치로 고른다 (결과에 영향이 있어서 경기 난수)
     const move = forced ?? (alley ? undefined : this.pickShotMove(h, si, ct, post));
     const def = move ? shotMove(move) : undefined;
-    let dur = alley || forced === 'putback' ? 0.12 : si.kind === 'three' ? 0.32 : si.kind === 'dunk' || si.kind === 'layup' ? 0.18 : 0.28;
+    let dur = forced === 'tipIn' ? 0.06 : alley || forced === 'putback' ? 0.12 : si.kind === 'three' ? 0.32 : si.kind === 'dunk' || si.kind === 'layup' ? 0.18 : 0.28;
     dur += def?.extra ?? 0;
     // 화면용 동작은 일단 예상으로. 손을 떠날 때 마무리가 정해지면 그 동작으로 다시 쓴다 (retroFinish)
     const j = h.pl.r.jump;
     const dunkish = alley || si.kind === 'dunk' || move === 'poster' || move === 'contactDunk';
     const act = this.finishAct(dunkish ? 'dunk' : si.kind, move, alley, undefined, si.dist);
     if (dunkish) this.jumpFx(h, this.dunkHeight(h, move), (dur + 0.6) * 2, act);
+    else if (forced === 'tipIn') this.jumpFx(h, Math.max(this.zOf(h), leapOf(h.pl).vert * 0.9), dur + 0.35, act);
     else if (si.kind === 'layup') this.jumpFx(h, 0.5 + j / 300, dur + 0.4, act);
     else if (si.kind === 'hook' || si.kind === 'floater') this.jumpFx(h, 0.3 + j / 400, dur + 0.35, act);
     else this.jumpFx(h, 0.3 + j / 400, dur + 0.32, act, def?.slide ? Math.min(0.14, dur * 0.4) : 0);
@@ -2775,7 +2798,7 @@ class GameSim {
     const list: ShotMove[] = [];
     const w: number[] = [];
     for (const m of SHOT_MOVES) {
-      if (!m.kinds.includes(si.kind) || !ok(m.when)) continue;
+      if (m.base <= 0 || !m.kinds.includes(si.kind) || !ok(m.when)) continue;
       if (m.minHeight && h.pl.body.heightCm < m.minHeight) continue;
       if (DUNK_MOVES.includes(m.id) && !canDunk(h.pl, si.dist)) continue;
       if (!Object.entries(m.need).every(([k, v]) => r[k as RatingKey] >= v!)) continue;
@@ -2800,6 +2823,11 @@ class GameSim {
     let si = shotInfo(h.pl, L.u, L.v, ph.post, c, this.rangeOf(h));
     if (ph.alley && si.dist < 2.6) si = { ...si, kind: 'dunk', pOpen: 0.86 + (h.pl.r.dunk - 50) * 0.003 };
     if (ph.move === 'putback' && si.dist < 2.8) si = { ...si, kind: 'dunk', pOpen: 0.8 + (h.pl.r.dunk - 50) * 0.003 };
+    // 팁인 (M26): 공중에서 손끝으로 밀어 넣는다
+    if (ph.move === 'tipIn') {
+      const r = h.pl.r;
+      si = { ...si, kind: 'layup', pts: 2, three: false, pOpen: clamp(0.46 + (r.offReb + r.layup + r.jump - 165) / 320 + (h.pl.body.heightCm - 200) / 250, 0.22, 0.78) };
+    }
     // 인유어페이스·컨택트 덩크: 수비가 버텨도 레이업 대신 찍는다
     if ((ph.move === 'poster' || ph.move === 'contactDunk') && si.kind === 'layup' && si.dist < 1.9) si = { ...si, kind: 'dunk', pOpen: 0.8 + (h.pl.r.dunk - 50) * 0.0015 };
     // 동작이 슛 종류와 안 맞게 됐으면 (스텝백으로 3점 라인 밖 등은 그대로) 효과만 뺀다
@@ -2841,7 +2869,7 @@ class GameSim {
     const d = dd0;
     // 분석 (M17): 어떤 상황에서 쏜 슛인지, 누가 막았는지, 골밑은 누가 지켰는지
     const caught = assist >= 0 && this.t - this.lastPass!.t < 1.1;
-    const ctx: ShotCtx = mv === 'putback' ? 'putback' : ph.post ? 'post' : fast ? 'fast' : wasDrive && near ? 'drive' : caught && !wasDrive ? 'catch' : !near ? 'pullup' : 'other';
+    const ctx: ShotCtx = mv === 'putback' || mv === 'tipIn' ? 'putback' : ph.post ? 'post' : fast ? 'fast' : wasDrive && near ? 'drive' : caught && !wasDrive ? 'catch' : !near ? 'pullup' : 'other';
     const Hh = this.hoop(h.team);
     let rimP = -1;
     let rimD = 2.0;
@@ -3009,7 +3037,7 @@ class GameSim {
       h.slideY = (w.y - h.y) / flight;
       h.slideUntil = this.t + flight;
       if (!ph.alley && mv !== 'putback') leap = this.glideDunk(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, w, fast);
-    } else if (si.kind === 'layup' && !ph.post) this.glideLayup(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, fast);
+    } else if (si.kind === 'layup' && !ph.post && mv !== 'tipIn') this.glideLayup(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, fast);
     this.ph = {
       k: 'shot',
       dunk,
@@ -3130,6 +3158,7 @@ class GameSim {
       this.callFoul(ph.fouler, h.i, 'shooting', si.pts);
       return;
     }
+    const mk = this.missKindOf(h.team, ph.sx, ph.sy, si.kind, si.dist, ph.contest);
     this.emit({
       type: 'miss',
       team: h.team,
@@ -3138,6 +3167,7 @@ class GameSim {
       pts: si.pts,
       shot: si.kind,
       dist: si.dist,
+      missKind: mk,
       x: ph.sx,
       y: ph.sy,
       fastBreak: ph.fast,
@@ -3156,87 +3186,206 @@ class GameSim {
       this.endQuarter();
       return;
     }
-    const H = this.hoop(h.team);
-    const a = Math.atan2(ph.sy - H.y, ph.sx - H.x) + this.rng.normal(0, 1.1);
-    const far = si.three ? 2.2 : si.dist < 2 ? 0.8 : 1.4;
-    const rr = far + this.rng.range(0, 2.2);
-    this.startRebound(H.x, H.y, COURT.rimHeight, H.x + Math.cos(a) * rr, H.y + Math.sin(a) * rr, h.team);
+    this.missFlight(h.team, ph.sx, ph.sy, mk, si.dist, false);
   }
 
+  /**
+   * 정해 둔 자리로 공을 띄운다 (블록·자유투 등 옛 방식 호출): 그 자리 근처에 1.6m 높이로 내려오게 던진 다음 물리로
+   */
   private startRebound(sx: number, sy: number, z0: number, ex: number, ey: number, shotTeam: Side, ft = false) {
     // 공이 베이스라인 밖으로 나가지 않게
     const L = this.loc(shotTeam, ex, ey);
     const w = this.wrl(shotTeam, Math.max(0.5, L.u), clamp(L.v, -7.0, 7.0));
     const rr = dist(sx, sy, w.x, w.y);
-    this.ball.holder = -1;
-    this.ph = { k: 'reb', t: this.t, dur: 0.5 + rr * 0.12, sx, sy, ex: w.x, ey: w.y, z0, peak: 1 + rr * 0.3, shotTeam, ft };
+    const T = 0.5 + rr * 0.12;
+    const vz = (1.6 - z0 + 0.5 * G * T * T) / T;
+    this.startAir({ x: sx, y: sy, z: z0, vx: (w.x - sx) / T, vy: (w.y - sy) / T, vz }, shotTeam, shotTeam, { ft, noScore: true });
   }
 
-  private rebArrive(ph: Extract<Phase, { k: 'reb' }>) {
-    const cands: { p: SP; w: number }[] = [];
+  /** 공을 공중에 띄운다 (M26) */
+  private startAir(b: BallBody, shotTeam: Side, touch: Side, o: { ft?: boolean; noScore?: boolean; steal?: { by: number; from: number; kind: TurnoverKind }; noCatch?: number } = {}) {
+    this.ball.holder = -1;
+    this.ball.x = b.x;
+    this.ball.y = b.y;
+    this.ball.z = b.z;
+    this.bv = { x: b.vx, y: b.vy, z: b.vz };
+    const c = predictCatch(b, o.noScore ?? true);
+    this.ph = { k: 'air', t: this.t, shotTeam, touch, ft: !!o.ft, noScore: o.noScore ?? true, lx: c.x, ly: c.y, noCatch: this.t + (o.noCatch ?? 0.15), tips: 0, lastBounce: -1, steal: o.steal };
+  }
+
+  /** 빗나간 슛이 어디에 맞았나 (M26): 먼 슛은 앞뒤 림, 골밑은 백보드·옆 림, 옆 (베이스라인 쪽)에서 쏠수록 백보드 */
+  private missKindOf(team: Side, sx: number, sy: number, kind: ShotInfo['kind'], d: number, contest: number): MissKind {
+    const H = this.hoop(team);
+    const L = this.loc(team, sx, sy);
+    const Lh = this.loc(team, H.x, H.y);
+    const angle = clamp(Math.abs(L.v - Lh.v) / Math.max(0.5, Math.hypot(L.u - Lh.u, L.v - Lh.v)), 0, 1);
+    return pickMiss(kind, d, contest, angle, () => this.rng.next());
+  }
+
+  /** 빗나간 슛 (M26): 맞은 자리에서 그대로 튀게 한다 */
+  private missFlight(team: Side, sx: number, sy: number, mk: MissKind, d: number, ft: boolean) {
+    const H = this.hoop(team);
+    const dl = Math.max(0.01, dist(sx, sy, H.x, H.y));
+    const f = { x: (H.x - sx) / dl, y: (H.y - sy) / dl };
+    const b = missBounce(mk, H, f, d, () => this.rng.next());
+    this.startAir(b, team, team, { ft, noScore: true, noCatch: 0.1 });
+    if (mk !== 'air') this.emitBounce(team, mk === 'board' ? 'board' : 'rim', mk === 'hard' ? 6 : 2 + d / 4);
+  }
+
+  private emitBounce(team: Side, hit: 'rim' | 'board', power: number) {
+    this.emit({ type: 'bounce', team, player: -1, other: -1, pts: 0, hit, power: Math.round(power * 10) / 10, text: '' });
+  }
+
+  /**
+   * 공중의 공 (M26): 물리로 움직이고, 림·백보드에 맞으면 다시 튄다. 손이 닿는 선수들이 뛰어서 잡으려고 다툰다
+   * (자리·리바운드·점프·키·허슬·박스아웃). 비슷하게 다투면 쳐내고, 골밑 공격수는 팁인, 바닥에 떨어지면 몸을 던져 다툰다
+   */
+  private airUpdate(ph: Extract<Phase, { k: 'air' }>) {
+    const b = this.ball;
+    const body: BallBody = { x: b.x, y: b.y, z: b.z, vx: this.bv.x, vy: this.bv.y, vz: this.bv.z };
+    const hits: Hits = { rim: 0, board: 0, floor: 0, hard: 0 };
+    stepBall(body, DT, ph.noScore, hits);
+    b.x = body.x;
+    b.y = body.y;
+    b.z = body.z;
+    this.bv = { x: body.vx, y: body.vy, z: body.vz };
+    if (hits.rim || hits.board) {
+      if (this.t - ph.lastBounce > 0.25) this.emitBounce(ph.shotTeam, hits.rim ? 'rim' : 'board', hits.hard);
+      ph.lastBounce = this.t;
+      const c = predictCatch(body, ph.noScore);
+      ph.lx = c.x;
+      ph.ly = c.y;
+    }
+    // 바닥에 닿았다가 코트 밖이면 아웃: 마지막으로 건드린 팀이 공을 잃는다
+    if (!this.inCourt(b.x, b.y) && (b.z < 0.6 || Math.abs(b.x - COURT.length / 2) > COURT.length / 2 + 1.2 || Math.abs(b.y - MID_Y) > MID_Y + 1.2)) {
+      const next = (1 - ph.touch) as Side;
+      this.off = ph.shotTeam;
+      // 쳐낸 공을 공격팀이 마지막으로 건드려 나가면 실책, 리바운드 다툼 공이면 상대 공
+      if (ph.steal && next !== ph.shotTeam) this.turnover(ph.steal.from, 'outOfBounds');
+      else this.startDead(next);
+      return;
+    }
+    // 낮게 굴러가면 잡힐 자리는 공 자리
+    if (b.z < 1.4) {
+      ph.lx = b.x + this.bv.x * 0.3;
+      ph.ly = b.y + this.bv.y * 0.3;
+    }
+    if (this.t < ph.noCatch) return;
+    // 뛰어오를 때: 공이 손 닿을 높이 위로 내려오고 있으면
     for (const p of this.P) {
-      const dd = dist(p.x, p.y, ph.ex, ph.ey);
-      if (dd > 2.7) continue;
+      const hd = dist(p.x, p.y, b.x, b.y);
+      if (hd > 1.8 || p.stun > 0) continue;
+      const L = leapOf(p.pl);
+      if (this.zOf(p) <= 0 && this.t >= p.jt + p.jd && this.bv.z < 0.5 && b.z > L.reach + 0.05 && b.z < L.reach + L.vert + 0.35) this.jumpFx(p, L.vert * (0.85 + this.fit(p) * 0.15), 0.6, ACT.REBOUND);
+    }
+    // 손이 닿는 선수
+    const H = this.hoop(ph.shotTeam);
+    const cands: { p: SP; w: number; sure: number }[] = [];
+    for (const p of this.P) {
+      const hd = dist(p.x, p.y, b.x, b.y);
+      const L = leapOf(p.pl);
+      const low = b.z < 1.3;
+      // 손이 닿는 거리: 팔이 길수록, 낮은 공은 몸을 숙여 더 멀리
+      const reachR = 0.58 + (p.pl.body.wingspanCm - 195) / 250 + (low ? 0.2 : 0);
+      if (hd > reachR) continue;
+      const top = L.reach + Math.max(0.15, this.zOf(p));
+      if (b.z > top) continue;
+      // 림 위 원통 안의 공은 건드리면 안 된다
+      if (dist(b.x, b.y, H.x, H.y) < 0.45 && b.z > COURT.rimHeight - 0.05) continue;
       const offTeam = p.team === ph.shotTeam;
       const r = p.pl.r;
-      const skill = offTeam ? r.offReb : r.defReb;
+      const skill = low ? (r.hustle + r.speed) / 2 : offTeam ? r.offReb : r.defReb;
       const w =
-        Math.exp(-dd / 0.85) *
-        (0.4 + ex(skill) / 100 + ex(r.jump) / 250 + r.hustle / 400 + (offTeam ? 0 : ex(r.boxOut) / 300)) *
-        (1 + (p.pl.body.heightCm - 196) / 45) *
-        (offTeam ? (ph.ft ? 0.3 : 0.55) : 1) *
+        Math.exp(-hd / 0.35) *
+        (0.4 + ex(skill) / 100 + ex(r.jump) / 250 + r.hustle / 400 + (offTeam || low ? 0 : ex(r.boxOut) / 300)) *
+        (1 + (p.pl.body.heightCm - 196) / (low ? 120 : 45)) *
+        (offTeam && !low ? (ph.ft ? 0.4 : 0.6) : 1) *
         (0.85 + 0.15 * this.fit(p)) *
         (p.stun > 0 ? 0.4 : 1) *
         (1 + FX.rebound[lv(p.pl, 'rebound')]);
-      cands.push({ p, w });
+      // 손끝에 겨우 닿는 공은 잘 안 잡힌다 (튕기거나 놓친다): 내려와서 손 안에 들어올수록 확실히
+      const sure = low ? 0.85 : clamp(0.22 + (top - b.z) * 2.2, 0.22, 0.95);
+      cands.push({ p, w: w * sure, sure });
     }
-    if (cands.length === 0) {
-      const a = this.rng.range(0, Math.PI * 2);
-      this.ph = { k: 'loose', t: this.t, vx: Math.cos(a) * 1.3, vy: Math.sin(a) * 1.3, shotTeam: ph.shotTeam };
+    if (!cands.length) {
+      if (this.t - ph.t > 6) {
+        // 안전장치: 가장 가까운 선수
+        let best = this.P[0];
+        for (const p of this.P) if (dist(p.x, p.y, b.x, b.y) < dist(best.x, best.y, b.x, b.y)) best = p;
+        this.secure(best, ph);
+      }
       return;
     }
+    cands.sort((a, c) => c.w - a.w);
+    const k = this.rng.weighted(cands.map((c) => c.w));
+    const win = cands[k];
+    const rival = cands.find((c) => c.p.team !== win.p.team);
     // 리바운드 다툼 중 파울
-    if (cands.length >= 2 && this.rng.chance(0.06)) {
+    if (rival && b.z > 1.3 && this.rng.chance(0.05)) {
       const offs = cands.filter((c) => c.p.team === ph.shotTeam);
       const defs = cands.filter((c) => c.p.team !== ph.shotTeam);
       if (offs.length && defs.length) {
         const offFoul = this.rng.chance(0.55);
         const pool = offFoul ? offs : defs;
         const f = pool[this.rng.weighted(pool.map((c) => this.foulCare(c.p.pid) ** 2))].p;
-        if (this.pf[f.pid] >= this.foulOut - 1 && this.rng.chance(0.7)) {
-          this.rebound(cands[this.rng.weighted(cands.map((c) => c.w))].p, ph.shotTeam);
+        if (!(this.pf[f.pid] >= this.foulOut - 1 && this.rng.chance(0.7))) {
+          const v = offFoul ? this.rng.pick(defs).p : this.rng.pick(offs).p;
+          this.off = v.team;
+          this.callFoul(f.i, v.i, 'loose');
           return;
         }
-        const v = offFoul ? this.rng.pick(defs).p : this.rng.pick(offs).p;
-        this.off = v.team;
-        this.callFoul(f.i, v.i, 'loose');
+      }
+    }
+    // 비슷하게 다투면 쳐낸다 (탭아웃): 공은 다시 공중으로
+    if (rival && ph.tips < 3 && rival.w > win.w * 0.55 && this.rng.chance(b.z > 1.3 ? 0.32 : 0.22)) {
+      ph.tips++;
+      const a = this.rng.range(0, Math.PI * 2);
+      const v = this.rng.range(1.2, 3.2);
+      this.bv = { x: Math.cos(a) * v, y: Math.sin(a) * v, z: b.z > 1.3 ? this.rng.range(0.4, 1.8) : this.rng.range(0.6, 1.4) };
+      ph.touch = win.p.team;
+      ph.noCatch = this.t + 0.2;
+      const c = predictCatch({ x: b.x, y: b.y, z: b.z, vx: this.bv.x, vy: this.bv.y, vz: this.bv.z }, ph.noScore);
+      ph.lx = c.x;
+      ph.ly = c.y;
+      this.poseFx(win.p, b.z > 1.3 ? ACT.BLOCK : ACT.DIVE, 0.45);
+      if (b.z < 1.3) this.poseFx(rival.p, ACT.DIVE, 0.6);
+      return;
+    }
+    // 아무도 확실히 못 잡으면: 손끝에 맞고 튀거나 그냥 지나간다
+    if (!this.rng.chance(1 - cands.reduce((a, c) => a * (1 - c.sure), 1))) {
+      if (ph.tips < 4 && this.rng.chance(0.3)) {
+        ph.tips++;
+        const a = Math.atan2(this.bv.y, this.bv.x) + this.rng.normal(0, 1.0);
+        const v = Math.hypot(this.bv.x, this.bv.y) * 0.6 + this.rng.range(0.3, 1.2);
+        this.bv = { x: Math.cos(a) * v, y: Math.sin(a) * v, z: Math.abs(this.bv.z) * 0.3 + this.rng.range(0.3, 1.2) };
+        ph.touch = win.p.team;
+        ph.noCatch = this.t + 0.15;
+        const c = predictCatch({ x: b.x, y: b.y, z: b.z, vx: this.bv.x, vy: this.bv.y, vz: this.bv.z }, ph.noScore);
+        ph.lx = c.x;
+        ph.ly = c.y;
+      }
+      return;
+    }
+    // 바닥 공을 둘이 다퉜으면 몸을 던진다
+    if (rival && b.z < 1.3) this.poseFx(this.fxr.chance(0.5) ? win.p : rival.p, ACT.DIVE, 0.6);
+    // 팁인: 골밑 공격수가 림 높이에서 건드려 넣는다
+    if (!ph.steal && win.p.team === ph.shotTeam && b.z > 2.7 && dist(win.p.x, win.p.y, H.x, H.y) < 1.4) {
+      const r = win.p.pl.r;
+      if (this.rng.chance(clamp(0.12 + (r.offReb + r.jump + r.layup - 180) / 300 + (win.p.pl.body.heightCm - 200) / 200, 0.04, 0.5))) {
+        this.secure(win.p, ph, true);
         return;
       }
     }
-    const k = this.rng.weighted(cands.map((c) => c.w));
-    this.rebound(cands[k].p, ph.shotTeam);
+    this.secure(win.p, ph);
   }
 
-  private looseUpdate(ph: Extract<Phase, { k: 'loose' }>) {
-    let best: SP | null = null;
-    let bd = Infinity;
-    for (const p of this.P) {
-      const dd = dist(p.x, p.y, this.ball.x, this.ball.y);
-      if (dd < bd) {
-        bd = dd;
-        best = p;
-      }
-    }
-    if (best && (bd < 0.6 || this.t - ph.t > 4)) {
-      if (ph.steal) this.looseRecover(best, ph);
-      else this.rebound(best, ph.shotTeam);
+  /** 공을 잡았다: 쳐낸 공이면 스틸 판정, 아니면 리바운드 (tip이면 바로 팁인) */
+  private secure(p: SP, ph: Extract<Phase, { k: 'air' }>, tip = false) {
+    if (ph.steal) {
+      this.looseRecover(p, ph);
       return;
     }
-    if (!this.inCourt(this.ball.x, this.ball.y)) {
-      this.off = ph.shotTeam;
-      // 수비가 쳐내서 나갔으면 공격팀 공
-      this.startDead(ph.steal ? ph.shotTeam : ((1 - ph.shotTeam) as Side));
-    }
+    this.rebound(p, ph.shotTeam, tip);
   }
 
   private inCourt(x: number, y: number) {
@@ -3244,7 +3393,7 @@ class GameSim {
   }
 
   /** 공을 쳐냈다: 공이 튀어 나가 루즈볼. 누가 잡느냐에 따라 스틸이 되거나 공격이 이어진다 */
-  private deflect(from: SP, by: SP, kind: TurnoverKind, bx: number, by_: number, dir: number) {
+  private deflect(from: SP, by: SP, kind: TurnoverKind, bx: number, by_: number, dir: number, z = 1.0) {
     const a = dir + this.rng.normal(0, 0.9);
     const v = this.rng.range(2.5, 4.2);
     this.ball.holder = -1;
@@ -3253,18 +3402,18 @@ class GameSim {
     this.poseFx(by, ACT.STEAL, 0.4);
     this.emit({ type: 'loose', team: by.team, player: by.i, other: from.i, pts: 0, text: `${by.pl.name} 공을 쳐냈다!` });
     this.act = { k: 'hold', u: 0, v: 0, t: this.t };
-    this.ph = { k: 'loose', t: this.t, vx: Math.cos(a) * v, vy: Math.sin(a) * v, shotTeam: this.off, steal: { by: by.i, from: from.i, kind } };
+    this.startAir({ x: bx, y: by_, z, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: this.rng.range(0.5, 2.0) }, this.off, by.team, { steal: { by: by.i, from: from.i, kind }, noCatch: 0.2 });
   }
 
   /** 쳐낸 루즈볼을 누가 잡았나 */
-  private looseRecover(p: SP, ph: Extract<Phase, { k: 'loose' }>) {
+  private looseRecover(p: SP, ph: Extract<Phase, { k: 'air' }>) {
     const st = ph.steal!;
     // 몸을 던져서 잡기도 한다
     const rival = this.P.some((q) => q.team !== p.team && dist(q.x, q.y, p.x, p.y) < 1.6);
     if (rival && this.fxr.chance(0.45)) this.poseFx(p, ACT.FALL, 0.7);
     if (p.team !== ph.shotTeam) {
-      // 수비가 잡으면 쳐낸 선수의 스틸
-      this.turnover(st.from, st.kind, st.by);
+      // 수비가 잡으면 쳐낸 선수의 스틸 (놓친 패스는 잡은 선수의 스틸)
+      this.turnover(st.from, st.kind, st.by >= 0 ? st.by : p.i);
       this.ball.holder = p.i;
       return;
     }
@@ -3275,7 +3424,7 @@ class GameSim {
     this.ph = { k: 'live' };
   }
 
-  private rebound(p: SP, shotTeam: Side) {
+  private rebound(p: SP, shotTeam: Side, tip = false) {
     const offensive = p.team === shotTeam;
     this.emit({
       type: 'rebound',
@@ -3296,6 +3445,11 @@ class GameSim {
       this.act = { k: 'hold', u: 0, v: 0, t: this.t };
       this.nextThink = this.t + 0.2;
       this.nextSpots = 0;
+      // 팁인 (M26): 잡지 않고 공중에서 바로 건드려 넣는다
+      if (tip) {
+        this.startGather(p, false, false, 'tipIn');
+        return;
+      }
       // 풋백 덩크 (M16): 골밑에서 잡자마자 다시 찍는다
       const H = this.hoop(p.team);
       const r = p.pl.r;
@@ -3329,16 +3483,15 @@ class GameSim {
       const pr = this.passRisk(h, m, false, ex, ey, lob);
       // 쇼타임 (M21): 속공 패스가 덜 끊긴다
       const showFast = this.possLive && this.t - this.possStart < 7 ? 1 - FX.showtime[lv(h.pl, 'showtime')] * 0.6 : 1;
-      if (pr.by >= 0 && this.rng.chance(pr.risk * (1 - FX.noLook[lv(h.pl, 'noLook')]) * showFast)) {
+      if (pr.by >= 0 && this.rng.chance(Math.min(0.95, pr.risk * READ_K) * (1 - FX.noLook[lv(h.pl, 'noLook')]) * showFast)) {
         intercept = pr.by;
+        this.lastRiskS = pr.s;
+        DEBUG.lane?.('read');
         if (DEBUG.intercept) {
           const d = this.P[pr.by];
           const sd = segDist(d.x, d.y, sx, sy, ex, ey);
           DEBUG.intercept({ risk: pr.risk.toFixed(2), s: pr.s.toFixed(2), sd: sd.d.toFixed(2), len: dist(sx, sy, ex, ey).toFixed(1), who: d.man === h.i ? 'passerD' : d.man === m.i ? 'recvD' : 'other', mode: this.mode });
         }
-        ex = lerp(sx, ex, pr.s);
-        ey = lerp(sy, ey, pr.s);
-        dur = Math.max(0.12, dist(sx, sy, ex, ey) / spd);
       } else if (!inbound) {
         const pOob = 0.004 + ((100 - h.pl.r.passing) / 100) * 0.01 + ((100 - h.pl.r.focus) / 100) * 0.004 + ((52 - h.pl.r.iq) / 100) * 0.006;
         if (this.rng.chance(pOob)) {
@@ -3353,7 +3506,8 @@ class GameSim {
       }
     }
     if (!inbound) this.cnt.passes++;
-    if (intercept >= 0) this.cnt.intercepts++;
+    const ix = intercept >= 0 ? lerp(sx, ex, this.lastRiskS) : ex;
+    const iy = intercept >= 0 ? lerp(sy, ey, this.lastRiskS) : ey;
     // 짧은 패스는 가끔 바운드로, 롭은 머리 위로
     const bounce = !lob && !inbound && !handoff && dist(sx, sy, ex, ey) < 6.5 && this.fxr.chance(0.3);
     // 화려한 패스 (M21, 화면용 난수): 쇼타임·노룩 패스·센스가 좋으면 비하인드 백·노룩
@@ -3363,21 +3517,66 @@ class GameSim {
     if (!from) this.poseFx(h, this.fancyPass ? (Math.hypot(h.vx, h.vy) > 2 ? ACT.BEHINDPASS : ACT.NOLOOK) : lob ? ACT.LOB : bounce ? ACT.BOUNCE : ACT.PASS, this.fancyPass ? 0.4 : 0.3);
     this.ball.holder = -1;
     this.act = { k: 'hold', u: 0, v: 0, t: this.t };
-    this.ph = { k: 'pass', from: h.i, to: m.i, t: this.t, dur, sx, sy, ex, ey, intercept, oob, inbound, lob, bounce };
+    this.ph = { k: 'pass', from: h.i, to: m.i, t: this.t, dur, sx, sy, ex, ey, intercept, ix, iy, oob, inbound, lob, bounce, safe: !!from || madeInbound || handoff, touched: 0 };
+  }
+
+  /** 패스 높이 (M26): 체스트 패스는 가슴 높이로 곧게, 바운드는 바닥을 찍고, 롭은 머리 위로 */
+  private passZ(ph: Extract<Phase, { k: 'pass' }>, s: number) {
+    if (ph.bounce) return s < 0.55 ? lerp(1.0, 0.05, s / 0.55) : lerp(0.05, 1.0, (s - 0.55) / 0.45);
+    return (ph.lob ? 1.8 : 1.2) + Math.sin(Math.PI * s) * (ph.lob ? 1.6 : ph.inbound ? 0.7 : 0.35);
+  }
+
+  /**
+   * 날아가는 패스 (M26): 이번 틱에 공이 지나가는 길에 수비 손이 닿는지 본다. 길목을 읽고 뛰어든 수비는 몸을 날려 더 멀리 닿고,
+   * 그냥 근처에 있던 수비도 가끔 손에 걸린다. 닿으면 잡거나 (스틸) 쳐낸다 (루즈볼). 길목 수비가 못 닿으면 패스는 그대로 간다
+   */
+  private passFlight(ph: Extract<Phase, { k: 'pass' }>): boolean {
+    if (ph.oob) return false;
+    const s0 = clamp((this.t - ph.t) / ph.dur, 0, 1);
+    const s1 = clamp((this.t + DT - ph.t) / ph.dur, 0, 1);
+    if (s1 < 0.1 || s0 > 0.94) return false;
+    const x0 = lerp(ph.sx, ph.ex, s0);
+    const y0 = lerp(ph.sy, ph.ey, s0);
+    const x1 = lerp(ph.sx, ph.ex, s1);
+    const y1 = lerp(ph.sy, ph.ey, s1);
+    const from = this.P[ph.from];
+    for (const d of this.mates((1 - from.team) as Side)) {
+      if (d.stun > 0) continue;
+      const jumper = d.i === ph.intercept;
+      const bit = 1 << d.i;
+      if (!jumper && (ph.safe || ph.touched & bit)) continue;
+      const seg = segDist(d.x, d.y, x0, y0, x1, y1);
+      const sk = lerp(s0, s1, seg.s);
+      if (sk < 0.1) continue;
+      const L = leapOf(d.pl);
+      const R = 0.45 + (d.pl.body.wingspanCm - 195) / 250 + (jumper ? 0.2 : 0);
+      if (seg.d > R) continue;
+      const bz = this.passZ(ph, sk);
+      // 머리 위로 지나가거나 (뛰어든 수비는 손을 뻗어 뛴다), 바닥 가까이 튀는 바운드 패스는 손이 안 간다
+      if (bz > L.reach + (jumper ? L.vert * 0.7 : 0.08) || (bz < 0.55 && !jumper)) continue;
+      if (!jumper) {
+        ph.touched |= bit;
+        const r = d.pl.r;
+        const pr = 0.028 * (0.6 + (ex(r.steal) / 100) * 0.5 + (r.iq / 100) * 0.2) * clamp(1.3 - (ex(from.pl.r.passing) / 100) * 0.6, 0.5, 1.2) * (1 + FX.pickpocket[lv(d.pl, 'pickpocket')] * 0.4);
+        if (!this.rng.chance(pr)) continue;
+      }
+      // 손에 닿았다: 잡으면 스틸, 아니면 쳐낸다
+      const bx = lerp(ph.sx, ph.ex, sk);
+      const by = lerp(ph.sy, ph.ey, sk);
+      this.cnt.intercepts++;
+      DEBUG.lane?.(jumper ? 'readHit' : 'stray');
+      this.ball.x = bx;
+      this.ball.y = by;
+      this.ball.z = bz;
+      const clean = clamp(0.48 + (d.pl.r.steal - 60) / 120 + (jumper ? 0.22 : -0.22), 0.12, 0.88);
+      if (this.rng.chance(clean)) this.turnover(ph.from, 'stolenPass', d.i);
+      else this.deflect(from, d, 'stolenPass', bx, by, Math.atan2(ph.ey - ph.sy, ph.ex - ph.sx), bz);
+      return true;
+    }
+    return false;
   }
 
   private passArrive(ph: Extract<Phase, { k: 'pass' }>) {
-    if (ph.intercept >= 0) {
-      this.ball.x = ph.ex;
-      this.ball.y = ph.ey;
-      // 손만 대서 튕겨 나가는 패스도 있다
-      if (this.rng.chance(0.3)) {
-        this.deflect(this.P[ph.from], this.P[ph.intercept], 'stolenPass', ph.ex, ph.ey, Math.atan2(ph.ey - ph.sy, ph.ex - ph.sx));
-        return;
-      }
-      this.turnover(ph.from, 'stolenPass', ph.intercept);
-      return;
-    }
     if (ph.oob) {
       this.ball.x = ph.ex;
       this.ball.y = ph.ey;
@@ -3385,6 +3584,20 @@ class GameSim {
       return;
     }
     const m = this.P[ph.to];
+    // 패스를 놓친다 (M26): 받기 어려운 패스 (롭·빠른 패스·서툰 패스)에 손이 서툴면 공이 튄다 → 루즈볼
+    if (!ph.safe && !ph.inbound) {
+      const f = this.P[ph.from].pl.r;
+      const pf = 0.001 + ((100 - f.passing) / 100) * 0.0025 + ((100 - m.pl.r.ballHandling) / 100) * 0.003 + (ph.lob ? 0.006 : 0) + (m.stun > 0 ? 0.02 : 0);
+      if (this.rng.chance(pf)) {
+        const a = Math.atan2(ph.ey - ph.sy, ph.ex - ph.sx) + this.rng.normal(0, 0.8);
+        const v = this.rng.range(1.2, 3.0);
+        this.emit({ type: 'loose', team: m.team, player: m.i, other: -1, pts: 0, fumble: true, text: `${m.pl.name} 패스를 놓쳤다!` });
+        this.poseFx(m, ACT.STUN, 0.35);
+        this.act = { k: 'hold', u: 0, v: 0, t: this.t };
+        this.startAir({ x: m.x, y: m.y, z: 1.1, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: this.rng.range(0.4, 1.6) }, this.off, m.team, { steal: { by: -1, from: m.i, kind: 'badPass' }, noCatch: 0.25 });
+        return;
+      }
+    }
     this.ball.holder = m.i;
     if (ph.inbound) this.clockRunning = true;
     else this.lastPass = { from: ph.from, to: ph.to, t: this.t, fancy: this.fancyPass || undefined };
@@ -3759,12 +3972,17 @@ class GameSim {
     ];
     // 빅맨이 골대 가까운 칸
     const byHeight = (a: SP, b: SP) => b.pl.body.heightCm - a.pl.body.heightCm;
+    // 마지막 자유투가 손을 떠나면 (M26) 칸에 선 선수들이 골밑으로 들어간다: 첫 칸 수비가 안쪽 자리를 잡는다
+    const stepIn = ph.stage === 'flight' && ph.n >= ph.of && this.t - ph.t > 0.25;
+    const hu = COURT.hoopFromBaseline;
     [...defs].sort(byHeight).forEach((p, k) => {
-      if (k < 4) this.setGoalLocal(p, team, LANE_U[defLane[k][0]], defLane[k][1] * LANE_V, 0.5);
+      if (k < 4 && stepIn) this.setGoalLocal(p, team, defLane[k][0] === 0 ? hu + 0.5 : hu + 2.4, defLane[k][1] * (defLane[k][0] === 0 ? 1.0 : 1.4), 0.9);
+      else if (k < 4) this.setGoalLocal(p, team, LANE_U[defLane[k][0]], defLane[k][1] * LANE_V, 0.5);
       else this.setGoalLocal(p, team, 8.6, 0.8, 0.5);
     });
     [...offs].sort(byHeight).forEach((p, k) => {
-      if (k < 2) this.setGoalLocal(p, team, LANE_U[offLane[k][0]], offLane[k][1] * LANE_V, 0.5);
+      if (k < 2 && stepIn) this.setGoalLocal(p, team, hu + 1.5, offLane[k][1] * 1.5, 0.9);
+      else if (k < 2) this.setGoalLocal(p, team, LANE_U[offLane[k][0]], offLane[k][1] * LANE_V, 0.5);
       else this.setGoalLocal(p, team, 8.9, (k === 2 ? -1 : 1) * 3.2, 0.5);
     });
   }
@@ -3810,12 +4028,12 @@ class GameSim {
       return;
     }
 
-    if (ph.k === 'shot' || ph.k === 'gather' || ph.k === 'reb' || ph.k === 'loose') {
+    if (ph.k === 'shot' || ph.k === 'gather' || ph.k === 'air') {
       this.reboundGoal(p, true);
       return;
     }
 
-    if (ph.k === 'pass' && p.i === ph.to && ph.intercept < 0 && !ph.oob) {
+    if (ph.k === 'pass' && p.i === ph.to && !ph.oob) {
       this.setGoal(p, ph.ex, ph.ey, 1);
       return;
     }
@@ -3947,16 +4165,24 @@ class GameSim {
     let lx = H.x;
     let ly = H.y;
     let near = false;
-    if (ph.k === 'reb') {
-      lx = ph.ex;
-      ly = ph.ey;
-      near = dist(p.x, p.y, lx, ly) < 4.5 && this.t - ph.t > ph.dur * 0.35;
-    } else if (ph.k === 'loose') {
-      lx = this.ball.x;
-      ly = this.ball.y;
-      near = dist(p.x, p.y, lx, ly) < 8;
+    if (ph.k === 'air') {
+      // 공이 떨어질 자리로 (낮게 구르면 공을 쫓는다)
+      lx = ph.lx;
+      ly = ph.ly;
+      near = this.ball.z < 1.4 ? dist(p.x, p.y, lx, ly) < 8 : dist(p.x, p.y, lx, ly) < 4.5 && this.t - ph.t > 0.15;
     }
     if (near) {
+      // 박스아웃에 걸린 공격수 (M26): 공 쪽을 막고 선 수비를 돌아가느라 늦다 (힘·공격 리바운드 vs 박스아웃·힘)
+      if (offense && ph.k === 'air' && this.ball.z >= 1.4) {
+        const dl = dist(p.x, p.y, lx, ly);
+        for (const q of this.mates((1 - p.team) as Side)) {
+          const dq = dist(q.x, q.y, p.x, p.y);
+          if (dq > 1.1 || dist(q.x, q.y, lx, ly) > dl - 0.3) continue;
+          const seal = clamp(0.55 + (ex(q.pl.r.boxOut) + q.pl.r.strength - ex(p.pl.r.offReb) - p.pl.r.strength) / 160, 0.2, 0.8);
+          this.setGoal(p, lx, ly, 1 - seal * (q.stun > 0 ? 0.3 : 1));
+          return;
+        }
+      }
       this.setGoal(p, lx, ly, 1);
       return;
     }
@@ -3966,7 +4192,7 @@ class GameSim {
       const crash = big ? dH < 8 : dH < 3.5 || (p.pl.r.offReb > 62 && dH < 6);
       if (crash) {
         const L = this.loc(off, p.x, p.y);
-        this.setGoalLocal(p, off, 2.0, (L.v >= 0 ? 1 : -1) * 1.2, 0.9);
+        this.setGoalLocal(p, off, 2.4, (L.v >= 0 ? 1 : -1) * 1.5, 0.9);
         return;
       }
       const pg = this.primary(off);
@@ -4001,7 +4227,7 @@ class GameSim {
     const off = this.off;
     const def = p.team;
     const H = this.hoop(off);
-    if (ph.k === 'shot' || ph.k === 'gather' || ph.k === 'reb' || ph.k === 'loose') {
+    if (ph.k === 'shot' || ph.k === 'gather' || ph.k === 'air') {
       if (ph.k === 'gather') {
         // 슛 쏘는 선수 수비는 손을 뻗으러 붙는다
         const s = this.P[ph.shooter];
@@ -4064,12 +4290,13 @@ class GameSim {
     const m = this.P[p.man];
     let mx = m.x;
     let my = m.y;
-    if (ph.k === 'pass' && ph.to === m.i && ph.intercept < 0) {
+    if (ph.k === 'pass' && ph.to === m.i && !ph.oob) {
       mx = ph.ex;
       my = ph.ey;
     }
-    if (ph.k === 'pass' && ph.intercept === p.i) {
-      this.setGoal(p, ph.ex, ph.ey, 1);
+    // 길목으로 몸을 날린다 (반응이 빠를수록 일찍: 스틸·센스)
+    if (ph.k === 'pass' && ph.intercept === p.i && this.t - ph.t >= clamp(0.24 - (p.pl.r.steal - 50) / 500 - (p.pl.r.iq - 50) / 800, 0.08, 0.32)) {
+      this.setGoal(p, ph.ix, ph.iy, 1.15);
       return;
     }
     const mh = Math.max(0.01, dist(mx, my, H.x, H.y));
@@ -4175,7 +4402,7 @@ class GameSim {
     const shiftV = clamp(Lb.v * 0.38, -2.6, 2.6);
     const anchor = (z: number) => this.wrl(off, Math.max(1.2, zones[z].u + shiftU), clamp(zones[z].v + shiftV, -6.8, 6.8));
     // 공 가진 선수(또는 패스 받을 선수)에 가장 가까운 구역 수비가 붙는다
-    const target = ph.k === 'pass' && ph.intercept < 0 ? { x: ph.ex, y: ph.ey } : this.holder() ?? this.ball;
+    const target = ph.k === 'pass' && !ph.oob ? { x: ph.ex, y: ph.ey } : this.holder() ?? this.ball;
     let onBall: SP | null = null;
     let bd = Infinity;
     for (const d of this.mates(def)) {
@@ -4337,8 +4564,7 @@ class GameSim {
         const s = clamp((t - ph.t) / ph.dur, 0, 1);
         b.x = lerp(ph.sx, ph.ex, s);
         b.y = lerp(ph.sy, ph.ey, s);
-        if (ph.bounce) b.z = s < 0.55 ? lerp(1.0, 0.05, s / 0.55) : lerp(0.05, 1.0, (s - 0.55) / 0.45);
-        else b.z = (ph.lob ? 1.8 : 1.2) + Math.sin(Math.PI * s) * (ph.lob ? 1.6 : ph.inbound ? 0.7 : 0.35);
+        b.z = this.passZ(ph, s);
         break;
       }
       case 'shot': {
@@ -4382,22 +4608,9 @@ class GameSim {
         }
         break;
       }
-      case 'reb': {
-        const s = clamp((t - ph.t) / ph.dur, 0, 1);
-        b.x = lerp(ph.sx, ph.ex, s);
-        b.y = lerp(ph.sy, ph.ey, s);
-        b.z = ph.z0 + (1.6 - ph.z0) * s + ph.peak * Math.sin(Math.PI * s);
+      case 'air':
+        // 물리는 airUpdate가 (M26)
         break;
-      }
-      case 'loose': {
-        b.x += ph.vx * DT;
-        b.y += ph.vy * DT;
-        ph.vx *= 0.95;
-        ph.vy *= 0.95;
-        const age = t - ph.t;
-        b.z = Math.abs(Math.sin(age * 5)) * Math.max(0, 0.9 - age * 0.3);
-        break;
-      }
       case 'inbound':
         if (ph.made) b.z = Math.max(0.1, b.z - 6 * DT);
         break;

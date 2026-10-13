@@ -12,7 +12,8 @@ export type TurnoverKind =
   | 'doubleDribble'
   | 'offFoul'
   | 'shotClock'
-  | 'eightSec';
+  | 'eightSec'
+  | 'outOfBounds';
 export type FoulKind = 'shooting' | 'reach' | 'block' | 'charge' | 'loose' | 'screen' | 'holding' | 'technical' | 'intentional';
 export type DefScheme = 'man' | 'zone23' | 'zone32' | 'press';
 
@@ -28,6 +29,8 @@ export type EventType =
   | 'ankle'
   /** 드리블 기술 (M25): 수비를 한 발 제쳤다 (stage 1). 휘청·주저앉으면 ankle */
   | 'dribble'
+  /** 공이 림·백보드에 맞았다 (M26, 화면용: 림 흔들림·소리) */
+  | 'bounce'
   | 'screen'
   | 'foul'
   | 'ft'
@@ -90,6 +93,12 @@ export interface GameEvent {
   dmove?: number;
   stage?: number;
   combo2?: number;
+  /** 공이 맞은 곳 (M26): 림·백보드, 세기 (m/s), 빗나간 슛의 종류 */
+  hit?: 'rim' | 'board';
+  power?: number;
+  missKind?: string;
+  /** 루즈볼 (M26): 패스를 놓쳤다 */
+  fumble?: boolean;
   /** 체이스다운 블록 (M21) */
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
@@ -235,6 +244,10 @@ export const ACT = {
   SHOVED: 89,
   /** 펌프 페이크 후 슛 */
   PUMPFAKE: 90,
+  /** 팁인 (M26): 공중에서 손끝으로 건드려 넣는다 */
+  TIPIN: 91,
+  /** 루즈볼에 몸을 던진다 (M26) */
+  DIVE: 92,
 } as const;
 
 /** 드리블 기술 이름 */
@@ -251,6 +264,7 @@ export type ShotMove =
   | 'oneLeg'
   | 'catchShoot'
   | 'pumpFake'
+  | 'tipIn'
   | 'contactShot'
   | 'bank'
   | 'skyhook'
