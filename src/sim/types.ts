@@ -15,7 +15,7 @@ export type TurnoverKind =
   | 'eightSec'
   | 'outOfBounds';
 /** 감독 조정 (M28): 에이스 집중 견제, 외곽 밀착, 지역방어로 골밑 봉쇄, 전면 강압 수비, 뜨거운 손에게 몰아주기, 슛 난조, 미스매치 공략, 막판 작전, 일부러 파울 */
-export type AdjKind = 'focus' | 'tight3' | 'zone' | 'press' | 'feed' | 'cold' | 'mismatch' | 'late' | 'twoForOne' | 'foul3';
+export type AdjKind = 'focus' | 'tight3' | 'zone' | 'press' | 'feed' | 'cold' | 'mismatch' | 'late' | 'twoForOne' | 'foul3' | 'coverage' | 'scram';
 export type FoulKind = 'shooting' | 'reach' | 'block' | 'charge' | 'loose' | 'screen' | 'holding' | 'technical' | 'intentional';
 export type DefScheme = 'man' | 'zone23' | 'zone32' | 'press';
 
@@ -39,6 +39,8 @@ export type EventType =
   | 'adjust'
   /** 수비를 읽었다 (M28): player = 읽은 선수, read = 무엇을 */
   | 'read'
+  /** 공격 세트의 다음 단계 (M29, 화면용: 작전 표시 화살표) */
+  | 'setStep'
   | 'screen'
   | 'foul'
   | 'ft'
@@ -112,7 +114,15 @@ export interface GameEvent {
   /** 감독 조정 (M28) */
   adj?: AdjKind;
   /** 수비 읽기 (M28): 달려드는 수비를 보고 돌파, 도움 수비가 오면 빼 주기 (밖으로 킥아웃, 골밑으로 덤프오프) */
-  read?: 'closeout' | 'kick' | 'dump';
+  read?: 'closeout' | 'kick' | 'dump' | 'break';
+  /** 픽앤롤 수비 (M29, 작전 이벤트에) */
+  cov?: Coverage;
+  /** 감독 조정으로 부른 작전 (M28: 몰아주기·미스매치·마지막 공격) */
+  reason?: AdjKind;
+  /** 공격 세트 (M29): 단계, 역할 1~5의 선수 번호, 고른 쪽 (1·-1) */
+  step?: number;
+  roles?: number[];
+  side?: number;
   /** 체이스다운 블록 (M21) */
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
@@ -133,8 +143,26 @@ export interface GameEvent {
 }
 
 /** 공격 작전 (M22) */
-export type PlayKind = 'pnr' | 'iso' | 'post' | 'motion' | 'pindown' | 'dho' | 'transition';
-export const PLAY_LABEL: Record<PlayKind, string> = { pnr: '픽앤롤', iso: '아이솔레이션', post: '포스트업', motion: '모션 오펜스', pindown: '핀다운', dho: '핸드오프', transition: '속공' };
+export type PlayKind = 'pnr' | 'iso' | 'post' | 'motion' | 'pindown' | 'dho' | 'transition' | 'horns' | 'flex' | 'spain' | 'floppy' | 'zipper' | 'elevator' | 'highlow';
+export const PLAY_LABEL: Record<PlayKind, string> = {
+  pnr: '픽앤롤',
+  iso: '아이솔레이션',
+  post: '포스트업',
+  motion: '모션 오펜스',
+  pindown: '핀다운',
+  dho: '핸드오프',
+  transition: '속공',
+  horns: '호른스',
+  flex: '플렉스',
+  spain: '스페인 픽앤롤',
+  floppy: '플로피',
+  zipper: '지퍼',
+  elevator: '엘리베이터',
+  highlow: '하이로우',
+};
+/** 픽앤롤 수비 (M29): 드롭 (빅맨이 골밑으로 물러난다), 헤지 (빅맨이 잠깐 튀어나왔다 돌아간다), 블리츠 (둘이 함정), 스위치, 아이스 (스크린 쪽을 막아 사이드로 몬다) */
+export type Coverage = 'drop' | 'hedge' | 'blitz' | 'switch' | 'ice';
+export const COVERAGE_LABEL: Record<Coverage, string> = { drop: '드롭', hedge: '헤지', blitz: '블리츠 (함정)', switch: '스위치', ice: '아이스' };
 
 export interface Leap {
   d: number;

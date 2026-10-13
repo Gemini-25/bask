@@ -164,7 +164,8 @@ describe('도약·99·건너뛰기·역할 (M24)', () => {
     // 경기에서 아이솔레이션을 부른 선수는 그 라인업의 에이스
     let iso = 0;
     for (const e of g.events) {
-      if (e.type !== 'play' || e.play !== 'iso') continue;
+      // 감독 조정으로 부른 아이솔 (몰아주기·미스매치·마지막 공격)은 빼고
+      if (e.type !== 'play' || e.play !== 'iso' || e.reason) continue;
       let l = g.lineups[0];
       for (const x of g.lineups) if (x.tick <= e.tick) l = x;
       const t = g.teamOf[e.player];

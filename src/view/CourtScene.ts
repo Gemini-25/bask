@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { COURT } from '../sim/court';
+import { COURT, toWorld } from '../sim/court';
+import { SETS } from '../data/sets';
 import { DEEP_DIST, LOGO_DIST } from '../sim/shooting';
-import { ACT, DUNK_LABEL, FLAG_CUT, FLAG_STUN, MOVE_LABEL, PLAY_LABEL, type GameEvent } from '../sim/types';
+import { ACT, COVERAGE_LABEL, DUNK_LABEL, FLAG_CUT, FLAG_STUN, MOVE_LABEL, PLAY_LABEL, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
 import { lineupRoles, ROLE_SHORT, type Role } from '../sim/roles';
 import { leapOf } from '../sim/leap';
@@ -320,6 +321,7 @@ export class CourtScene extends Phaser.Scene {
       this.stridePhase = ph;
     }
     this.playEvents = pb.game.events.filter((e) => e.type === 'play');
+    this.stepEvents = pb.game.events.filter((e) => e.type === 'setStep');
     this.endTicks = pb.game.events.filter((e) => e.type === 'made' || e.type === 'turnover' || (e.type === 'rebound' && !e.offensive) || e.type === 'quarterEnd').map((e) => e.tick);
     this.lastCarry = null;
     this.mood = { homeCheer: 0, awayCheer: 0, wave: -1 };
@@ -1079,6 +1081,8 @@ export class CourtScene extends Phaser.Scene {
           mismatch: `미스매치 공략 · ${who}`,
           late: `마지막 공격 · ${who}`,
           foul3: '3점 막기 · 일부러 파울',
+          coverage: e.text.replace(/^.*?감독: /, '').split(' · ')[0],
+          scram: `스크램 · ${who} 다시 바꿔 막기`,
         };
         this.showBanner(`${teams[e.team].short} 감독 · ${short[e.adj ?? ''] ?? e.text}`, speed <= 4 ? 2400 : 1600, VIEW_H * 0.2);
         if (e.player >= 0 && calm) this.emote(e.player, 'bang');
@@ -1088,7 +1092,8 @@ export class CourtScene extends Phaser.Scene {
         // 수비 읽기 (M28)
         if (!calm || e.player < 0) break;
         const p = at(e.player);
-        this.popText(p.x, p.y, e.read === 'closeout' ? '클로즈아웃 공략' : e.read === 'dump' ? '골밑으로 빼 준다' : '킥아웃', '#c9f2ff');
+        if (e.read === 'break') this.popText(p.x, p.y - 8, e.text, '#ffe08a', true);
+        else this.popText(p.x, p.y, e.read === 'closeout' ? '클로즈아웃 공략' : e.read === 'dump' ? '골밑으로 빼 준다' : '킥아웃', '#c9f2ff');
         break;
       }
       case 'contact': {
@@ -1260,6 +1265,8 @@ export class CourtScene extends Phaser.Scene {
   }
 
   /** 지금 돌리는 작전 (공격이 끝나면 없다) */
+  private stepEvents: GameEvent[] = [];
+
   private activePlay(cur: number): GameEvent | null {
     let e: GameEvent | null = null;
     for (const p of this.playEvents) {
@@ -1402,15 +1409,40 @@ export class CourtScene extends Phaser.Scene {
           dash(o, rim, col);
         }
         break;
-      default:
+      default: {
+        // 공격 세트 (M29): 지금 단계에서 각자 갈 곳 (스크리너는 고리, 컷은 하늘색)
+        const def = e.roles ? SETS.find((d) => d.id === e.play) : undefined;
+        if (!def || !e.roles) break;
+        let step = 0;
+        for (const s of this.stepEvents) {
+          if (s.tick > cur) break;
+          if (s.tick >= e.tick && s.play === e.play) step = s.step ?? 0;
+        }
+        const st = def.steps[step];
+        if (!st) break;
+        const right = side === 1;
+        for (const [rk, [u, v]] of Object.entries(st.at)) {
+          const r = Number(rk);
+          const sl = slot(e.roles[r - 1]);
+          if (sl < 0) continue;
+          const p = at(sl);
+          const w = toWorld(right, u, v * (e.side ?? 1));
+          const dest = { x: sx(w.x), y: sy(w.y) };
+          if (st.screen?.some((x) => x[0] === r)) ring(p, '#ffffff');
+          if (Math.hypot(w.x - p.wx, w.y - p.wy) > 1.4) dash(p, dest, st.cut?.includes(r as 1 | 2 | 3 | 4 | 5) ? '#9ff0ff' : '#ffffff');
+        }
         break;
+      }
     }
     // 컷하는 선수는 골밑으로 화살표 (어느 작전이든)
     for (let k = e.team === 0 ? 0 : 5, n = k + 5; k < n; k++) if (fr.flags[k] & FLAG_CUT) dash(at(k), rim, '#9ff0ff');
     ctx.globalAlpha = 1;
     // 작전 이름표
     if (!this.playTag) this.playTag = this.world(this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '11px', color: '#ffffff', padding: { x: 4, y: 2 }, resolution: 3 }).setOrigin(0.5, 1).setDepth(160));
-    const label = `${PLAY_LABEL[e.play!]}${e.play === 'pnr' ? (e.pop ? ' · 팝' : ' · 롤') : ''}`;
+    let stepN = 0;
+    if (e.roles) for (const s of this.stepEvents) if (s.tick <= cur && s.tick >= e.tick && s.play === e.play) stepN = s.step ?? 0;
+    const nSteps = e.roles ? (SETS.find((d) => d.id === e.play)?.steps.length ?? 0) : 0;
+    const label = `${PLAY_LABEL[e.play!]}${e.play === 'pnr' ? (e.pop ? ' · 팝' : ' · 롤') + (e.cov ? ` vs ${COVERAGE_LABEL[e.cov]}` : '') : nSteps > 1 ? ` ${stepN + 1}/${nSteps}` : ''}`;
     if (this.playTag.text !== label) this.playTag.setText(label);
     const anchor = e.play === 'post' && o ? o : h;
     // 팀 색 바탕에 등번호 색 글자 (작전 칩)

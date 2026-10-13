@@ -1,4 +1,4 @@
-// M27 몸싸움 장면: node tools/m27-peek.mjs <주소> <출력> <시드> <몇 번째> <종류(shove|stop|backdown|hold|screen|charge)> [앞 틱] [뒤 틱]
+// M27 몸싸움 장면: node tools/m27-peek.mjs <주소> <출력> <시드> <몇 번째> <종류(shove|stop|backdown|hold|screen|screen:엘리베이터|charge)> [앞 틱] [뒤 틱]
 import { chromium } from 'playwright-core';
 const [url, out, seed, nth, kind, before = '8', after = '6'] = process.argv.slice(2);
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
@@ -11,7 +11,7 @@ await page.evaluate((s) => window.bask.startExhibition(Number(s)), seed);
 await page.waitForTimeout(500);
 const ev = await page.evaluate(([n, kind]) => {
   const g = window.bask.host.pb.game;
-  const pick = (e) => (kind === 'screen' ? e.type === 'screen' : kind === 'charge' ? e.type === 'foul' && e.foul === 'charge' : e.type === 'contact' && e.contact === kind);
+  const pick = (e) => (kind.startsWith('screen') ? e.type === 'screen' && (kind === 'screen' || e.text.includes(kind.slice(7))) : kind === 'charge' ? e.type === 'foul' && e.foul === 'charge' : e.type === 'contact' && e.contact === kind);
   const e = g.events.filter(pick)[Number(n)];
   const pb = window.bask.host.pb;
   const s = pb.slotOf(e.player, e.tick);

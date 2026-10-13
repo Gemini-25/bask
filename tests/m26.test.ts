@@ -130,7 +130,7 @@ describe('공 물리·리바운드 (M26)', () => {
     const orb = (v: number) => {
       let o = 0;
       let d = 0;
-      for (const g of games(6, (a) => a.players.forEach((p) => ((p.r.defReb = v), (p.r.boxOut = v))), 30)) {
+      for (const g of games(10, (a) => a.players.forEach((p) => ((p.r.defReb = v), (p.r.boxOut = v))), 30)) {
         const bx = boxScore(g);
         o += bx.teams[1].oreb;
         d += bx.teams[0].dreb;

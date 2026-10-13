@@ -49,7 +49,11 @@ describe('판단 AI·감독 조정 (M28)', () => {
         if (x.type === 'ft' && x.made) pts.set(x.player, (pts.get(x.player) ?? 0) + 1);
       }
       const opp = 1 - e.team;
-      const top = Math.max(...[...pts].filter(([pid]) => g.teamOf[pid] === opp).map(([, v]) => v));
+      // 감독은 코트 위 선수 중에서 고른다
+      let lu = g.lineups[0];
+      for (const l of g.lineups) if (l.tick <= e.tick) lu = l;
+      const on = new Set(lu.pids);
+      const top = Math.max(...[...pts].filter(([pid]) => g.teamOf[pid] === opp && on.has(pid)).map(([, v]) => v));
       expect(g.teamOf[e.player]).toBe(opp);
       expect(pts.get(e.player)).toBe(top);
       n++;

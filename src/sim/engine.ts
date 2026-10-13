@@ -15,6 +15,7 @@ import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
 import { carryScore, creation as creationOf } from './roles';
 import { leapOf } from './leap';
 import { tendencyOf, type Tendency } from './tendency';
+import { SETS, setDef, type Role, type SetId } from '../data/sets';
 import { G, missBounce, pickMiss, predictCatch, stepBall, type BallBody, type Hits, type MissKind } from './ball';
 import { DRIBBLES, type DribbleDef } from '../data/dribbles';
 import { canDunk, contestFactor, DEEP_DIST, elite, legend, missCut, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
@@ -42,6 +43,8 @@ import {
   type ShotCtx,
   type Leap,
   type AdjKind,
+  type Coverage,
+  COVERAGE_LABEL,
 } from './types';
 import { DUNK_MOVES, moveShotLabel, SHOT_MOVES, shotMove, type MoveWhen, type ShotMoveDef } from '../data/moves';
 import type { RatingKey } from '../data/ratings';
@@ -318,7 +321,9 @@ type Phase =
   | { k: 'end' };
 
 type Play =
-  | { k: 'pnr'; scr: number; side: number; stage: 'go' | 'set' | 'use' | 'roll'; t: number; pop: boolean; screened: boolean }
+  | { k: 'pnr'; scr: number; side: number; stage: 'go' | 'set' | 'use' | 'roll'; t: number; pop: boolean; screened: boolean; cov: Coverage; spain?: number; spainHit?: boolean; rollT?: number }
+  /** 공격 세트 (M29): 몇 번째 단계, 역할별 코트 자리 (역할 1~5 → P 자리), 고른 쪽, 스크린을 스친 선수·걸린 수비 (비트) */
+  | { k: 'set'; id: SetId; step: number; t: number; roles: number[]; side: number; brushed: number; hit: number; passed: boolean }
   | { k: 'iso'; star: number; t: number }
   | { k: 'post'; star: number; t: number }
   | { k: 'motion'; t: number }
@@ -464,6 +469,13 @@ class GameSim {
   private readDrive = false;
   /** 몸싸움을 이기고 밀고 들어간 선수 (M27: 마무리가 좋고 파울을 얻는다) */
   private shove: { by: number; t: number } | null = null;
+  /** 픽앤롤 수비 (M29): 팀별 지금 쓰는 방식, 굴러 들어가는 빅맨을 태그하는 수비 */
+  private covNow: (Coverage | '')[] = ['', ''];
+  private tagger = -1;
+  /** 미스매치 다시 바꾸기를 따져 볼 시각 (M29), 속공 수적 우위 (이번 공격 시작 시각, 몇 명 더) */
+  private nextScram = 0;
+  private breakAt = -1;
+  private breakAdv = 0;
   /** 포스트업을 시작한 자리 (M27) */
   private postFrom: { i: number; d: number; t: number; shown: boolean } | null = null;
   /** 지금 하고 있는 드리블 기술 (M25), 이번 돌파에 도움 수비를 제치려 했나 */
@@ -812,12 +824,12 @@ class GameSim {
   }
 
   /** 작전 시작을 알린다 (M22) */
-  private callPlay(k: PlayKind, h: SP, other: SP | null, pop = false) {
+  private callPlay(k: PlayKind, h: SP, other: SP | null, pop = false, cov?: Coverage, reason?: AdjKind) {
     this.lastPlay = { k, t: this.t };
     const nm = (p: SP | null) => p?.pl.name ?? '';
     const text =
       k === 'pnr'
-        ? `작전: 픽앤롤 · ${nm(other)} 스크린 → ${pop ? '팝 (밖으로)' : '롤 (골밑으로)'}`
+        ? `작전: 픽앤롤 · ${nm(other)} 스크린 → ${pop ? '팝 (밖으로)' : '롤 (골밑으로)'}${cov ? ` · 수비는 ${COVERAGE_LABEL[cov]}` : ''}`
         : k === 'iso'
           ? `작전: 아이솔레이션 · ${nm(h)} 1대1, 나머지는 반대쪽으로 빠진다`
           : k === 'post'
@@ -827,7 +839,7 @@ class GameSim {
               : k === 'dho'
                 ? `작전: 핸드오프 · ${nm(other)} → ${nm(h)}`
                 : '작전: 모션 오펜스 · 컷과 패스로 빈 곳을 찾는다';
-    this.emit({ type: 'play', team: h.team, player: h.i, other: other?.i ?? -1, pts: 0, play: k, pop: pop || undefined, text });
+    this.emit({ type: 'play', team: h.team, player: h.i, other: other?.i ?? -1, pts: 0, play: k, pop: pop || undefined, cov, reason, text });
   }
 
   private addScore(team: Side, pts: number) {
@@ -928,6 +940,10 @@ class GameSim {
       const play = this.play;
       if (play?.k === 'pnr' && play.scr === p.i && (play.stage === 'set' || play.stage === 'use')) return ACT.SCREEN;
       if (play?.k === 'pindown' && play.scr === p.i && play.stage === 'run') return ACT.SCREEN;
+      if (play?.k === 'set') {
+        const r = (play.roles.indexOf(p.i) + 1) as Role;
+        if (r >= 1 && setDef(play.id).steps[play.step]?.screen?.some((x) => x[0] === r)) return ACT.SCREEN;
+      }
       if (play?.k === 'dho' && play.big === p.i && play.stage === 'run') return ACT.HOLD;
       const h = this.holder();
       const sp = Math.hypot(p.vx, p.vy);
@@ -1828,6 +1844,11 @@ class GameSim {
     this.updatePlay(h);
     this.updateCuts();
     this.updateDouble(h);
+    this.readBreak(h);
+    if (this.t >= this.nextScram) {
+      this.nextScram = this.t + 1.0;
+      this.scram(def);
+    }
 
     // 집중력이 낮으면 가끔 트래블링·더블드리블
     if (this.misc && this.t >= this.misc.at) {
@@ -2014,7 +2035,7 @@ class GameSim {
         const mates = this.mates(off);
         const star = (A.feed >= 0 && mates.find((p) => p.pid === A.feed)) || [...mates].sort((a, b) => creationOf(b.pl) - creationOf(a.pl))[0];
         this.play = { k: 'iso', star: star.i, t: this.t };
-        this.callPlay('iso', star, null);
+        this.callPlay('iso', star, null, false, undefined, 'late');
         this.sayAdjust(off, `late${q}-${Math.round(this.possStart * 10)}`, 'late', `마지막 공격 · ${star.pl.name}에게 맡긴다 (${Math.ceil(clk)}초)`, star.pid);
       }
     }
@@ -2108,7 +2129,9 @@ class GameSim {
       if (this.mode === 'advance' && lane > 0.7) ev += 0.08;
       ev -= this.hogPenalty(h.pid) * 0.75;
       if (doubled) ev -= 0.15;
-      ev += tn.rim * 0.03 + late.two * 0.6;
+      ev += tn.rim * 0.03 + late.two * 0.6 + (this.usage[h.pid] ?? 0) * 0.3;
+      // 속공 수적 우위 (M29): 그대로 몰고 들어간다
+      if (this.breakAdv > 0 && this.mode === 'advance') ev += 0.03 * this.breakAdv;
       if (closing) ev += 0.04 + readK * 0.08;
       opts.push({
         v: ev,
@@ -2135,6 +2158,10 @@ class GameSim {
         let v = this.passValue(h, m, tLeft);
         if (v === null) continue;
         v += tn.pass * 0.025;
+        // 슛 욕심 (성격): 이기적이면 덜 빼 준다
+        v -= (this.usage[h.pid] ?? 0) * 0.6;
+        // 속공 (M29): 앞서 달리는 동료에게 길게
+        if (this.breakAdv > 0 && this.mode === 'advance' && this.loc(off, m.x, m.y).u < this.loc(off, h.x, h.y).u - 2.5) v += 0.03;
         if (helpOn && hp!.man === m.i) {
           v += 0.07 * (0.5 + r.vision / 100) + readK * 0.04;
           readTo = m.i;
@@ -2166,6 +2193,8 @@ class GameSim {
       if (this.act.k === 'drive') v -= 0.12;
       if (play?.k === 'pnr' && (play.stage === 'go' || play.stage === 'set')) v += 0.06;
       if (play?.k === 'pindown' && play.stage === 'go') v += 0.05;
+      // 세트가 아직 만들어지는 중이면 기다린다 (M29)
+      if (play?.k === 'set' && !setDef(play.id).steps[play.step]?.look && tLeft > 8) v += 0.07;
       if (this.mode === 'advance') v += 0.05;
       if (doubled) v -= 0.2;
       // 막판에 이기고 있으면 시간을 끈다
@@ -2191,7 +2220,7 @@ class GameSim {
   private vCont(tLeft: number): number {
     const base = 1.02 * Math.pow(clamp((tLeft - 1.2) / 10, 0, 1), 0.6);
     // 템포가 느린 팀일수록 공격 초반에 서두르지 않는다
-    const patience = 0.14 - this.teams[this.off].tactics.pace * 0.1;
+    const patience = 0.17 - this.teams[this.off].tactics.pace * 0.1;
     return base + patience * clamp((tLeft - 13) / 10, 0, 1);
   }
 
@@ -2397,6 +2426,13 @@ class GameSim {
     if (play?.k === 'post' && play.star === m.i && Lm.u < 4) v += 0.12;
     if (play?.k === 'dho' && play.stage === 'entry' && play.big === m.i) v += 0.14;
     if (play?.k === 'pindown' && play.shooter === m.i && play.stage === 'run') v += 0.06;
+    // 세트 (M29): 이 단계에서 찾는 선수, 스페인 스크린을 걸고 빠진 슈터
+    if (play?.k === 'set') {
+      const st = setDef(play.id).steps[play.step];
+      const r = (play.roles.indexOf(m.i) + 1) as Role;
+      if (st?.look?.includes(r)) v += 0.14;
+    }
+    if (play?.k === 'pnr' && play.spain === m.i && play.spainHit) v += 0.08;
     // 더블팀 당하면 비어 있는 동료를 찾는다
     if (this.doubleFor === h.i && this.doubler >= 0 && this.P[this.doubler].man === m.i) v += 0.12;
     if (this.lastPass && this.lastPass.from === m.i && this.t - this.lastPass.t < 2) v -= 0.06;
@@ -2432,6 +2468,16 @@ class GameSim {
     if (play?.k === 'post' && play.star === h.i && this.loc(this.off, h.x, h.y).u < 4.5) {
       this.act = { k: 'post', u: 0, v: 0, t: this.t };
       return;
+    }
+    // 세트 (M29): 공 가진 선수도 자기 자리에서 기다린다
+    if (play?.k === 'set') {
+      const st = setDef(play.id).steps[play.step];
+      const r = (play.roles.indexOf(h.i) + 1) as Role;
+      const spot = r >= 1 ? st?.at[r] : undefined;
+      if (spot) {
+        this.act = { k: 'wait', u: spot[0], v: spot[1] * play.side, t: this.t };
+        return;
+      }
     }
     if (this.act.k !== 'probe' || this.t > this.act.t) this.newProbe(h);
   }
@@ -3570,7 +3616,7 @@ class GameSim {
         Math.exp(-hd / 0.35) *
         (0.4 + ex(skill) / 100 + ex(r.jump) / 250 + r.hustle / 400 + (offTeam || low ? 0 : ex(r.boxOut) / 300)) *
         (1 + (p.pl.body.heightCm - 196) / (low ? 120 : 45)) *
-        (offTeam && !low ? (ph.ft ? 0.4 : 0.6) : 1) *
+        (offTeam && !low ? (ph.ft ? 0.4 : 0.68) : 1) *
         (0.85 + 0.15 * this.fit(p)) *
         (p.stun > 0 ? 0.4 : 1) *
         (1 + FX.rebound[lv(p.pl, 'rebound')]);
@@ -3937,10 +3983,10 @@ class GameSim {
       this.cnt.plays[hunt.k === 2 ? 'post' : 'iso'] = (this.cnt.plays[hunt.k === 2 ? 'post' : 'iso'] ?? 0) + 1;
       if (hunt.k === 2) {
         this.play = { k: 'post', star: hp.i, t: this.t };
-        this.callPlay('post', h, hp);
+        this.callPlay('post', h, hp, false, undefined, 'mismatch');
       } else {
         this.play = { k: 'iso', star: hp.i, t: this.t };
-        this.callPlay('iso', hp, null);
+        this.callPlay('iso', hp, null, false, undefined, 'mismatch');
       }
       return;
     }
@@ -3948,9 +3994,11 @@ class GameSim {
     if (feedP && this.rng.chance(0.3)) {
       this.cnt.plays.iso = (this.cnt.plays.iso ?? 0) + 1;
       this.play = { k: 'iso', star: feedP.i, t: this.t };
-      this.callPlay('iso', feedP, null);
+      this.callPlay('iso', feedP, null, false, undefined, 'feed');
       return;
     }
+    // 공격 세트 (M29): 팀마다 즐겨 쓰는 세트가 있다 (지역방어엔 덜)
+    if (this.rng.chance((tac.set ?? 0.3) * (vsZone ? 0.6 : 1)) && this.startSet(h)) return;
     const k = this.rng.weighted(w);
     const nm = ['pnr', 'iso', 'post', 'motion', 'pindown', 'dho'][k];
     this.cnt.plays[nm] = (this.cnt.plays[nm] ?? 0) + 1;
@@ -3959,8 +4007,9 @@ class GameSim {
     const scr = pnrMate ?? screener;
     if (k === 0 && scr) {
       const pop = scr.pl.r.three >= 60 && this.rng.chance(0.5);
-      this.play = { k: 'pnr', scr: scr.i, side, stage: 'go', t: this.t, pop, screened: false };
-      this.callPlay('pnr', h, scr, pop);
+      const cov = this.coverageFor(h, scr);
+      this.play = { k: 'pnr', scr: scr.i, side, stage: 'go', t: this.t, pop, screened: false, cov };
+      this.callPlay('pnr', h, scr, pop, cov);
     } else if (k === 1) {
       this.play = { k: 'iso', star: star.i, t: this.t };
       this.callPlay('iso', star, null);
@@ -3980,6 +4029,256 @@ class GameSim {
     }
   }
 
+  /** 속공 수적 우위 (M29): 하프라인 근처에서 앞선 공격수가 돌아온 수비보다 많으면 바로 공격한다 */
+  private readBreak(h: SP) {
+    if (this.mode !== 'advance' || !this.possLive || this.t - this.possStart > 4.5) {
+      if (this.breakAt !== this.possStart) this.breakAdv = 0;
+      return;
+    }
+    if (this.breakAt === this.possStart) return;
+    const off = this.off;
+    const Lb = this.loc(off, h.x, h.y);
+    if (Lb.u > 13.5 || Lb.u < 5) return;
+    // 공 가진 선수와 나란히 또는 앞서 달리는 동료 vs 공과 골대 사이로 돌아온 수비
+    const atk = this.mates(off).filter((p) => this.loc(off, p.x, p.y).u < Lb.u + 0.8).length;
+    const back = this.mates((1 - off) as Side).filter((d) => this.loc(off, d.x, d.y).u < Lb.u - 0.3).length;
+    if (atk >= 2 && atk > back && back <= 2 && atk <= 4 && Math.hypot(h.vx, h.vy) > 3.5) {
+      this.breakAt = this.possStart;
+      this.breakAdv = atk - back;
+      this.cnt.reads = (this.cnt.reads ?? 0) + 1;
+      this.emit({ type: 'read', team: off, player: h.i, other: -1, pts: 0, read: 'break', text: `속공 ${atk}대${back}!` });
+    }
+  }
+
+  /**
+   * 스크램 (M29): 스위치로 생긴 미스매치 (키 작은 수비가 빅맨을)를 공에서 먼 쪽에서 다시 바꾼다. 감독 능력만큼
+   */
+  private scram(def: Side) {
+    if (this.zoneOn(def) || this.mode !== 'set') return;
+    const adapt = this.teams[def].tactics.adapt ?? 0.55;
+    const h = this.holder();
+    if (!h) return;
+    for (const d of this.mates(def)) {
+      const o = this.P[d.man];
+      if (!o || o.i === h.i) continue;
+      if (o.pl.body.heightCm - d.pl.body.heightCm < 10 || !this.isBig(o) || this.isBig(d)) continue;
+      // 빅맨인데 작은 선수를 막고 있는 수비와 바꾼다
+      const e = this.mates(def).find((x) => x !== d && this.isBig(x) && !this.isBig(this.P[x.man]) && this.P[x.man].i !== h.i);
+      if (!e) continue;
+      if (dist(d.x, d.y, h.x, h.y) < 4 || dist(e.x, e.y, h.x, h.y) < 4) continue;
+      if (!this.rng.chance(adapt * 0.5)) continue;
+      const em = e.man;
+      e.man = d.man;
+      d.man = em;
+      this.sayAdjust(def, `scram${o.pid}-${Math.floor(this.elapsed / 120)}`, 'scram', `스크램: ${e.pl.name}가 ${o.pl.name}을 다시 맡는다 (미스매치 지우기)`, o.pid);
+      return;
+    }
+  }
+
+  /**
+   * 픽앤롤 수비 고르기 (M29): 팀 기본 (드롭·헤지·블리츠·스위치·아이스)에 감독이 상대를 보고 바꾼다 (adapt):
+   * 에이스에겐 블리츠, 슛 좋은 핸들러에겐 헤지 (빅맨이 느리면 아이스), 키가 비슷하면 스위치, 사이드 픽앤롤은 아이스
+   */
+  private coverageFor(h: SP, scr: SP): Coverage {
+    const def = (1 - h.team) as Side;
+    const tac = this.teams[def].tactics;
+    const base: Coverage = tac.cov ?? (tac.switch >= 0.4 ? 'switch' : 'drop');
+    if (this.zoneOn(def)) return 'drop';
+    const adapt = tac.adapt ?? 0.55;
+    const big = this.defenderOf(scr.i);
+    const guard = this.defenderOf(h.i);
+    const hr = h.pl.r;
+    const shooter = hr.three >= 70 || hr.midRange >= 74;
+    const star = this.star[h.pid] > 0.05 || this.adj[def].focus === h.pid;
+    const slowBig = big.pl.r.speed + big.pl.r.agility < 100;
+    const similar = Math.abs(big.pl.body.heightCm - guard.pl.body.heightCm) < 8;
+    const L = this.loc(h.team, h.x, h.y);
+    let c = base;
+    let why = '';
+    // 림을 지키는 빅맨 (림 프로텍터·블록이 좋은)은 골밑을 비우지 않는다: 드롭
+    const anchor = lv(big.pl, 'rimProtector') >= 1 || big.pl.r.block >= 78;
+    if (anchor && (c === 'blitz' || c === 'hedge')) [c, why] = ['drop', `${big.pl.name}이 골밑을 지킨다`];
+    else if (this.rng.chance(adapt)) {
+      if (star && !slowBig && !anchor && base !== 'blitz') [c, why] = ['blitz', `${h.pl.name}에게 함정`];
+      else if (shooter && (base === 'drop' || base === 'ice')) [c, why] = slowBig || anchor ? ['ice', `${h.pl.name} 슛이 좋아 사이드로`] : ['hedge', `${h.pl.name} 슛이 좋아 빅맨이 튀어나온다`];
+      else if (similar && base !== 'switch') [c, why] = ['switch', '키가 비슷해 바꿔 막는다'];
+      else if (Math.abs(L.v) > 4.2 && base !== 'ice') [c, why] = ['ice', '사이드 픽앤롤은 사이드로 몬다'];
+    }
+    if (c !== this.covNow[def]) {
+      this.covNow[def] = c;
+      this.sayAdjust(def, `cov-${c}-q${this.quarter}`, 'coverage', `픽앤롤 수비 ${COVERAGE_LABEL[c]}${why ? ` · ${why}` : ''}`, why ? h.pid : -1);
+    }
+    return c;
+  }
+
+  /** 태그할 수비 (M29): 빅맨·공 가진 선수 수비가 아닌 수비 중 골대에 가장 가까운 선수 (반대쪽 아래) */
+  private pickTagger(play: Extract<Play, { k: 'pnr' }>) {
+    const def = (1 - this.off) as Side;
+    const H = this.hoop(this.off);
+    const h = this.holder();
+    if (!h) return;
+    const big = this.defenderOf(play.scr);
+    const guard = this.defenderOf(h.i);
+    let best: SP | null = null;
+    let bd = Infinity;
+    for (const d of this.mates(def)) {
+      if (d === big || d === guard || d.stun > 0) continue;
+      const dd = dist(d.x, d.y, H.x, H.y);
+      if (dd < bd) [best, bd] = [d, dd];
+    }
+    this.tagger = best && bd < 6.5 ? best.i : -1;
+  }
+
+  /** 세트 역할 정하기 (M29): 1 = 공 운반, 5 = 센터 (포스트·키), 4 = 다른 빅맨 (없으면 가장 큰 선수), 2 = 3점이 가장 좋은 선수, 3 = 나머지 */
+  private setRoles(h: SP): number[] | null {
+    const mates = this.mates(this.off);
+    const left = new Set(mates.map((p) => p.i));
+    const take = (p: SP | undefined) => {
+      if (!p) return -1;
+      left.delete(p.i);
+      return p.i;
+    };
+    const r1 = take([...mates].sort((a, b) => carryScore(b.pl) - carryScore(a.pl))[0]);
+    const pool = () => mates.filter((p) => left.has(p.i));
+    const r5 = take([...pool()].sort((a, b) => b.pl.body.heightCm + b.pl.r.postUp * 0.3 - (a.pl.body.heightCm + a.pl.r.postUp * 0.3))[0]);
+    const r4 = take([...pool()].sort((a, b) => b.pl.body.heightCm - a.pl.body.heightCm)[0]);
+    const r2 = take([...pool()].sort((a, b) => b.pl.r.three - a.pl.r.three)[0]);
+    const r3 = take(pool()[0]);
+    const roles = [r1, r2, r3, r4, r5];
+    if (roles.some((x) => x < 0)) return null;
+    void h;
+    return roles;
+  }
+
+  /** 세트를 부른다 (M29): 팀이 즐겨 쓰는 세트 중에서, 역할이 맞으면 */
+  private startSet(h: SP): boolean {
+    const tac = this.teams[this.off].tactics;
+    const roles = this.setRoles(h);
+    if (!roles) return false;
+    const P = (r: Role) => this.P[roles[r - 1]];
+    const ok = (id: SetId) => {
+      // 세트마다 필요한 선수: 하이로우는 포스트가 되는 센터, 플로피·엘리베이터·핀다운류는 슈터
+      if (id === 'highlow') return P(5).pl.r.postUp >= 50 && P(4).pl.r.passing >= 42;
+      if (id === 'floppy' || id === 'elevator') return P(2).pl.r.three >= 55;
+      if (id === 'spain') return P(2).pl.r.three >= 50 && P(2).pl.r.screen >= 35;
+      return true;
+    };
+    const ids = SETS.map((d) => d.id).filter(ok);
+    if (!ids.length) return false;
+    const w = ids.map((id) => tac.sets?.[id] ?? 0.6);
+    const id = ids[this.rng.weighted(w)];
+    const L = this.loc(this.off, h.x, h.y);
+    const side = Math.abs(L.v) > 1.5 ? (Math.sign(L.v) as 1 | -1) : this.rng.chance(0.5) ? 1 : -1;
+    this.play = { k: 'set', id, step: 0, t: this.t, roles, side, brushed: 0, hit: 0, passed: false };
+    this.cnt.plays[id] = (this.cnt.plays[id] ?? 0) + 1;
+    const def = setDef(id);
+    this.lastPlay = { k: id, t: this.t };
+    this.emit({ type: 'play', team: h.team, player: P(1).i, other: P(5).i, pts: 0, play: id, step: 0, roles: roles.map((i) => this.P[i].pid), side, text: `작전: ${def.label} · ${def.desc}` });
+    return true;
+  }
+
+  /** 세트 진행 (M29): 단계마다 자리로 가고, 공을 돌리고, 시간이 되거나 다 모이면 다음 단계. 마지막엔 이어지는 작전으로 */
+  private updateSet(play: Extract<Play, { k: 'set' }>, h: SP, age: number) {
+    const def = setDef(play.id);
+    const st = def.steps[play.step];
+    if (age > 9 || !st) {
+      this.play = null;
+      return;
+    }
+    const P = (r: Role) => this.P[play.roles[r - 1]];
+    // 하이로우: 골밑 빅맨이 받으면 바로 포스트업
+    if (play.id === 'highlow' && play.step === 1 && h.i === P(5).i) {
+      this.play = { k: 'post', star: h.i, t: this.t };
+      this.lastPlay = { k: 'highlow', t: this.lastPlay?.t ?? this.t };
+      return;
+    }
+    // 이 단계의 공: 받을 선수가 비어 있으면 넘긴다
+    if (st.ball && !play.passed && age > 0.35) {
+      const to = P(st.ball);
+      play.passed = true;
+      if (to.i !== h.i && this.passRisk(h, to, true).risk < 0.2 && this.ph.k === 'live') {
+        this.startPass(h, to, false);
+        return;
+      }
+    }
+    // 스크린: 받는 선수가 스치고 지나갈 때 따라오던 수비가 스크리너 바로 옆이면 걸린다
+    for (const [sr, ur] of st.screen ?? []) {
+      const S = P(sr);
+      const U = P(ur);
+      const D = this.defenderOf(U.i);
+      if (play.hit & (1 << D.i) || D.stun > 0) continue;
+      if (dist(U.x, U.y, S.x, S.y) < 1.6 && dist(D.x, D.y, S.x, S.y) < 0.95) {
+        play.hit |= 1 << D.i;
+        this.downScreen(S, D, def.label);
+      }
+    }
+    const atSpots = Object.entries(st.at).every(([r, [u, v]]) => {
+      const p = P(Number(r) as Role);
+      const w = this.wrl(this.off, u, v * play.side);
+      return dist(p.x, p.y, w.x, w.y) < 0.9;
+    });
+    if (age >= st.dur || (age >= st.min && atSpots)) {
+      if (st.then) {
+        const t = st.then;
+        this.play = null;
+        if (t.k === 'pnr') {
+          const hh = P(t.handler);
+          const scr = P(t.scr);
+          if (this.ball.holder !== hh.i) return;
+          const pop = t.pop ?? (scr.pl.r.three >= 62 && this.rng.chance(0.4));
+          this.play = { k: 'pnr', scr: scr.i, side: play.side, stage: 'go', t: this.t, pop, screened: false, cov: this.coverageFor(hh, scr), spain: t.spain ? P(t.spain).i : undefined };
+        } else if (t.k === 'dho') this.play = { k: 'dho', big: P(t.big).i, guard: P(t.guard).i, side: play.side, stage: 'entry', t: this.t };
+        else this.play = { k: 'post', star: P(t.star).i, t: this.t };
+        this.lastPlay = { k: play.id, t: this.lastPlay?.t ?? this.t };
+        return;
+      }
+      play.step++;
+      play.t = this.t;
+      play.brushed = 0;
+      play.passed = false;
+      if (play.step >= def.steps.length) this.play = null;
+      else {
+        this.nextThink = Math.min(this.nextThink, this.t + 0.15);
+        this.emitPid({ type: 'setStep', team: this.off, player: -1, other: -1, pts: 0, play: play.id, step: play.step, text: '' });
+      }
+    }
+  }
+
+  /** 세트에서 이 선수가 갈 곳 (M29): 스크린을 받는 선수는 스크리너 어깨를 먼저 스치고 간다 */
+  private setGoalFor(p: SP, play: Extract<Play, { k: 'set' }>): boolean {
+    const def = setDef(play.id);
+    const st = def.steps[play.step];
+    if (!st) return false;
+    const r = (play.roles.indexOf(p.i) + 1) as Role;
+    if (r < 1) return false;
+    const spot = st.at[r];
+    const off = this.off;
+    if (!spot) return false;
+    const dest = this.wrl(off, spot[0], spot[1] * play.side);
+    const bit = 1 << p.i;
+    const scr = st.screen?.find((x) => x[1] === r);
+    if (scr && !(play.brushed & bit)) {
+      const S = this.P[play.roles[scr[0] - 1]];
+      const dx = dest.x - S.x;
+      const dy = dest.y - S.y;
+      const dl = Math.max(0.01, Math.hypot(dx, dy));
+      // 스크리너 바로 옆 (가는 쪽 어깨)
+      const wx = S.x + (dx / dl) * 0.55 - (dy / dl) * 0.35;
+      const wy = S.y + (dy / dl) * 0.55 + (dx / dl) * 0.35;
+      if (dist(p.x, p.y, wx, wy) < 0.6) play.brushed |= bit;
+      else {
+        this.setGoal(p, wx, wy, 1);
+        if (st.cut?.includes(r)) p.cut = Math.max(p.cut, 0.3);
+        return true;
+      }
+    }
+    // 스크리너는 자리에 버티고, 컷하는 선수는 손을 든다
+    const screener = st.screen?.some((x) => x[0] === r);
+    if (st.cut?.includes(r)) p.cut = Math.max(p.cut, 0.3);
+    this.setGoal(p, dest.x, dest.y, screener ? 0.75 : 0.9);
+    return true;
+  }
+
   private updatePlay(h: SP) {
     const play = this.play;
     if (!play) return;
@@ -3990,6 +4289,7 @@ class GameSim {
     }
     if (play.k === 'pindown') return this.updatePindown(play, age);
     if (play.k === 'dho') return this.updateDho(play, h, age);
+    if (play.k === 'set') return this.updateSet(play, h, age);
     const s = this.P[play.scr];
     if (s.i === h.i) {
       this.play = null;
@@ -4013,7 +4313,10 @@ class GameSim {
       if (age > 0.45) {
         play.stage = 'use';
         play.t = this.t;
-        const w = { x: s.x + px * 1.3 + fx * 0.9, y: s.y + py * 1.3 + fy * 0.9 };
+        // 아이스 (M29): 스크린 쪽이 막혀서 반대쪽으로 (스크린 거절)
+        const iced = play.cov === 'ice' && this.rng.chance(0.65);
+        const w = iced ? { x: h.x - px * 1.8 + fx * 1.4, y: h.y - py * 1.8 + fy * 1.4 } : { x: s.x + px * 1.3 + fx * 0.9, y: s.y + py * 1.3 + fy * 0.9 };
+        if (iced) play.screened = true;
         const L = this.loc(this.off, w.x, w.y);
         this.act = { k: 'use', u: L.u, v: L.v, t: this.t };
       }
@@ -4026,6 +4329,9 @@ class GameSim {
       if (age > 0.6) {
         play.stage = 'roll';
         play.t = this.t;
+        play.rollT = this.t;
+        // 헤지·블리츠 뒤 굴러 들어가는 빅맨은 반대쪽 수비가 태그 (M29)
+        if ((play.cov === 'hedge' || play.cov === 'blitz') && !play.pop) this.pickTagger(play);
       }
     } else if (play.stage === 'roll') {
       if (age > 3.5) this.play = null;
@@ -4043,7 +4349,8 @@ class GameSim {
     const sd = this.zoneOn(def) ? null : this.P.find((p) => p.man === s.i && p.team === def) ?? null;
     const tac = this.teams[def].tactics;
     const similar = sd ? Math.abs(sd.pl.body.heightCm - d.pl.body.heightCm) < 9 : false;
-    if (sd && this.rng.chance(tac.switch * (similar ? 1.6 : 0.8))) {
+    const swCov = this.play?.k === 'pnr' && this.play.cov === 'switch';
+    if (sd && this.rng.chance(swCov ? 0.9 : tac.switch * (similar ? 1.6 : 0.8))) {
       // 스위치: 서로 막던 선수를 바꾼다. 미스매치가 생길 수 있다.
       d.man = s.i;
       sd.man = h.i;
@@ -4088,11 +4395,11 @@ class GameSim {
   }
 
   /** 다운스크린에 걸렸다 (M27: 몸이 부딪히면): 스크린·근력 vs 민첩·IQ */
-  private downScreen(s: SP, d: SP) {
+  private downScreen(s: SP, d: SP, label = '다운스크린') {
     if (!this.rng.chance(0.8)) return;
     d.stun = clamp(0.3 + (s.pl.r.screen + s.pl.r.strength / 2 - d.pl.r.agility - d.pl.r.iq / 2) / 220, 0.2, 0.75);
     s.screenFlag = 0.5;
-    this.emit({ type: 'screen', team: s.team, player: s.i, other: d.i, pts: 0, text: `${s.pl.name}의 다운스크린` });
+    this.emit({ type: 'screen', team: s.team, player: s.i, other: d.i, pts: 0, text: `${s.pl.name}의 ${label === '다운스크린' ? label : `${label} 스크린`}` });
     this.nextThink = Math.min(this.nextThink, this.t + 0.2);
   }
 
@@ -4369,6 +4676,14 @@ class GameSim {
         this.setGoalLocal(p, off, 2.2, (p.i % 2 === 0 ? -1 : 1) * 5.6, 1);
         return;
       }
+      // 트레일러 (M29): 빅맨 하나는 탑으로 따라와 받거나 스크린, 다른 빅맨은 골밑으로 달린다 (림 런)
+      if (fast && this.isBig(p)) {
+        const bigs = this.mates(off).filter((q) => this.isBig(q) && q.i !== this.ball.holder);
+        const first = bigs.sort((a, b) => this.loc(off, a.x, a.y).u - this.loc(off, b.x, b.y).u)[0];
+        if (first === p) this.setGoalLocal(p, off, 1.6, 0.8, 1);
+        else this.setGoalLocal(p, off, 8.0, -0.5, 0.95);
+        return;
+      }
       this.spotGoal(p, fast ? 0.95 : 0.7);
       return;
     }
@@ -4378,6 +4693,15 @@ class GameSim {
       return;
     }
     const play = this.play;
+    if (play?.k === 'set' && this.setGoalFor(p, play)) return;
+    // 스페인 픽앤롤 (M29): 굴러 들어가는 빅맨의 수비에게 뒤에서 스크린, 그다음 3점 라인으로
+    if (play?.k === 'pnr' && play.spain === p.i) {
+      if ((play.stage === 'use' || play.stage === 'roll') && !play.spainHit) {
+        const bd = this.defenderOf(play.scr);
+        this.setGoal(p, bd.x, bd.y, 1);
+      } else this.setGoalLocal(p, off, 8.4, -play.side * 0.8, 0.9);
+      return;
+    }
     if (play?.k === 'pnr' && play.scr === p.i) {
       const h = this.holder();
       if (!h) {
@@ -4565,6 +4889,26 @@ class GameSim {
     const Lball = this.loc(off, this.ball.x, this.ball.y);
     const press = this.scheme[def] === 'press';
 
+    // 속공 수비 (M29): 공보다 앞선 수비 중 공에 가장 가까운 선수가 공을 멈추고 (스톱 더 볼), 가장 깊은 선수는 림을 지킨다
+    if (!press && this.mode === 'advance' && this.possLive && ph.k === 'live' && this.t - this.possStart < 6 && Lball.u < 20) {
+      const h = this.holder();
+      if (h) {
+        const ahead = this.mates(def).filter((d) => this.loc(off, d.x, d.y).u < Lball.u);
+        if (ahead.length) {
+          const stopper = ahead.reduce((a, b) => (dist(a.x, a.y, h.x, h.y) < dist(b.x, b.y, h.x, h.y) ? a : b));
+          const deep = ahead.reduce((a, b) => (this.loc(off, a.x, a.y).u < this.loc(off, b.x, b.y).u ? a : b));
+          if (p === stopper && ahead.length >= 2) {
+            const hh = Math.max(0.01, dist(h.x, h.y, H.x, H.y));
+            this.setGoal(p, h.x + ((H.x - h.x) / hh) * 1.8, h.y + ((H.y - h.y) / hh) * 1.8, 1);
+            return;
+          }
+          if (p === deep && p !== stopper) {
+            this.setGoalLocal(p, off, 2.2, clamp(Lball.v * 0.2, -1, 1), 1);
+            return;
+          }
+        }
+      }
+    }
     // 속공 수비: 공보다 뒤에 있으면 일단 골밑으로 전력 질주
     if (!press && this.mode === 'advance' && ph.k !== 'inbound' && Lp.u > Lball.u + 0.5 && Lball.u < 22) {
       this.setGoalLocal(p, off, 2.5 + (p.i % 5) * 0.5, ((p.i % 5) - 2) * 1.5, 1);
@@ -4628,18 +4972,52 @@ class GameSim {
     const hasBall = this.ball.holder === m.i || (ph.k === 'pass' && ph.to === m.i);
 
     const play = this.play;
-    if (play?.k === 'pnr' && play.scr === m.i && (play.stage === 'use' || play.stage === 'roll')) {
-      // 스크린 수비: 골대 앞으로 내려서서 돌파를 막는다 (드롭)
+    // 굴러 들어가는 빅맨 태그 (M29): 헤지·블리츠 뒤 반대쪽 수비가 잠깐 골밑으로 내려와 막는다
+    if (play?.k === 'pnr' && this.tagger === p.i && play.stage === 'roll' && this.t - (play.rollT ?? this.t) < 1.6) {
+      const R = this.P[play.scr];
+      const rh = Math.max(0.01, dist(R.x, R.y, H.x, H.y));
+      this.setGoal(p, R.x + ((H.x - R.x) / rh) * 0.6, R.y + ((H.y - R.y) / rh) * 0.6, 1);
+      return;
+    }
+    if (play?.k === 'pnr' && play.scr === m.i && (play.stage === 'set' || play.stage === 'use' || play.stage === 'roll')) {
       const h = this.holder();
       if (h) {
         const hh = Math.max(0.01, dist(h.x, h.y, H.x, H.y));
-        const dropX = H.x + ((h.x - H.x) / hh) * Math.min(3, hh * 0.6);
-        const dropY = H.y + ((h.y - H.y) / hh) * Math.min(3, hh * 0.6);
+        const fx = (H.x - h.x) / hh;
+        const fy = (H.y - h.y) / hh;
+        // 스크린 쪽 (공 가진 선수 기준 옆)
+        const sx = -fy * play.side;
+        const sy = fx * play.side;
         const manX = mx + ux * 1;
         const manY = my + uy * 1;
-        const w = play.stage === 'roll' ? 0.45 : 0.15;
-        this.setGoal(p, lerp(dropX, manX, w), lerp(dropY, manY, w), 1);
-        return;
+        const cov = play.cov;
+        const early = play.stage !== 'roll';
+        if (cov === 'hedge' && early) {
+          // 헤지: 스크린 쪽으로 튀어나와 공 가진 선수의 길을 막았다가 돌아간다
+          this.setGoal(p, h.x + fx * 0.9 + sx * 0.7, h.y + fy * 0.9 + sy * 0.7, 1);
+          return;
+        }
+        if (cov === 'blitz' && early) {
+          // 블리츠: 둘이 붙어 함정 (공 가진 선수는 빼 줘야 한다)
+          this.setGoal(p, h.x + fx * 0.5 + sx * 0.7, h.y + fy * 0.5 + sy * 0.7, 1);
+          if (play.stage === 'use' && this.doubler < 0) {
+            this.doubler = p.i;
+            this.doubleFor = h.i;
+            this.cnt.doubles++;
+          }
+          return;
+        }
+        if (cov === 'switch' && !early) {
+          // 스위치는 스크린 순간 (screenContact)에 맡을 선수가 바뀐다
+        } else if (play.stage !== 'set' || cov === 'drop' || cov === 'ice') {
+          // 드롭 (아이스도): 골대 앞으로 내려서서 돌파를 막는다. 굴러 들어가면 그쪽으로
+          const deep = cov === 'ice' ? 0.5 : 0.6;
+          const dropX = H.x + ((h.x - H.x) / hh) * Math.min(3, hh * deep) - sx * (cov === 'ice' ? 0.8 : 0);
+          const dropY = H.y + ((h.y - H.y) / hh) * Math.min(3, hh * deep) - sy * (cov === 'ice' ? 0.8 : 0);
+          const w = play.stage === 'roll' ? (cov === 'hedge' || cov === 'blitz' ? 0.85 : 0.45) : 0.15;
+          this.setGoal(p, lerp(dropX, manX, w), lerp(dropY, manY, w), 1);
+          return;
+        }
       }
     }
 
@@ -4653,6 +5031,11 @@ class GameSim {
       if (this.act.k === 'post' && this.ball.holder === m.i) gap = 0.25;
       gx = mx + ux * gap;
       gy = my + uy * gap;
+      // 아이스 (M29): 스크린 쪽에 붙어 스크린을 못 쓰게 사이드로 몬다
+      if (play?.k === 'pnr' && play.cov === 'ice' && this.ball.holder === m.i && play.stage !== 'roll') {
+        gx += -uy * play.side * 0.7;
+        gy += ux * play.side * 0.7;
+      }
       urg = 1;
       // 속았다 (M25): 쏠린 쪽으로 간다
       if (this.t < p.leanUntil) {
@@ -4888,6 +5271,25 @@ class GameSim {
       if (play?.k === 'pindown' && play.stage === 'run' && !play.screened && play.scr === o.i && this.defenderOf(play.shooter) === d) {
         play.screened = true;
         this.downScreen(o, d);
+        continue;
+      }
+      // 세트 스크린 (M29): 스크리너 몸에 받는 선수의 수비가 걸렸다
+      if (play?.k === 'set') {
+        const st = setDef(play.id).steps[play.step];
+        const r = (play.roles.indexOf(o.i) + 1) as Role;
+        const sc = st?.screen?.find((x) => x[0] === r && this.defenderOf(play.roles[x[1] - 1]) === d);
+        if (sc && !(play.hit & (1 << d.i))) {
+          play.hit |= 1 << d.i;
+          this.downScreen(o, d, setDef(play.id).label);
+          continue;
+        }
+      }
+      // 스페인 스크린 (M29): 굴러 들어가는 빅맨의 수비가 뒤에서 걸렸다
+      if (play?.k === 'pnr' && play.spain === o.i && !play.spainHit && this.defenderOf(play.scr) === d) {
+        play.spainHit = true;
+        d.stun = Math.max(d.stun, clamp(0.35 + (o.pl.r.screen + o.pl.r.strength / 2 - d.pl.r.agility - d.pl.r.iq / 2) / 220, 0.25, 0.8));
+        o.screenFlag = 0.5;
+        this.emit({ type: 'screen', team: o.team, player: o.i, other: d.i, pts: 0, text: `${o.pl.name}의 스페인 스크린 (뒤에서)` });
         continue;
       }
       // 돌파하다 수비와 부딪혔다
