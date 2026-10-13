@@ -147,6 +147,8 @@ export class CourtScene extends Phaser.Scene {
   private playEvents: GameEvent[] = [];
   private endTicks: number[] = [];
   private playTag?: Phaser.GameObjects.Text;
+  /** 겹친 선수를 화면에서 민 정도 (작전 표시가 같은 자리에 그리게) */
+  private lastSpread: number[] = new Array(10).fill(0);
   private zoomUntil = 0;
   private clock = 0;
   private lastCutIn = -9999;
@@ -400,6 +402,16 @@ export class CourtScene extends Phaser.Scene {
     const rimY = szy(7.5, COURT.rimHeight);
     const tags: ({ x: number; y: number; name: string; team: number } | null)[] = new Array(10).fill(null);
     const labelMode = LABELS.mode;
+    // 화면 정리 (M23): 공 가진 선수·슛 쏘는 선수는 맨 위에, 너무 붙은 선수는 화면에서만 살짝 떼어 그린다
+    const keyOf = (i: number) => {
+      const a = rec.act[f0 * 10 + i];
+      if (carrySlot === i || FACE_HOOP.has(a) || DUNK_ACTS.has(a) || a === ACT.HANG) return 2;
+      if (a === ACT.BLOCK || a === ACT.CHASE || a === ACT.CONTEST || a === ACT.STEAL) return 1;
+      return 0;
+    };
+    const key = Array.from({ length: 10 }, (_, i) => keyOf(i));
+    const ox = this.spread(fr, key);
+    this.lastSpread = ox;
     for (let i = 0; i < 10; i++) {
       const pid = lineup.pids[i];
       const pl = pb.game.players[pid];
@@ -456,7 +468,7 @@ export class CourtScene extends Phaser.Scene {
       const rel = run && run.rel >= run.start ? (run.rel + 1 - run.start) / len : undefined;
       const stunned = (fr.flags[i] & FLAG_STUN) !== 0;
       const energy = fr.energy[i];
-      const px = Math.round(sx(x));
+      const px = Math.round(sx(x)) + (wk ? 0 : ox[i]);
       const py = Math.round(sy(y));
       // 덩크·매달리기: 손이 림에 닿게 높이를 맞춘다
       let lift2 = lift;
@@ -470,7 +482,7 @@ export class CourtScene extends Phaser.Scene {
       const carry = carrySlot === i;
       const ghosts = run && hasTrail(act) && pb.speed <= 8 ? [2, 1] : [];
       items.push({
-        depth: y,
+        depth: y + (key[i] === 2 ? 0.8 : key[i] === 1 ? 0.4 : 0),
         draw: () => {
           // 그림자 (점프하면 작아진다)
           const sw = Math.max(4, 10 - Math.round(lift / 3));
@@ -1037,6 +1049,28 @@ export class CourtScene extends Phaser.Scene {
     }
   }
 
+  /** 화면에서만 겹친 선수를 옆으로 조금 민다 (px). 중요한 선수 (key 2)는 안 움직이고 남이 비킨다 */
+  private spread(fr: ReturnType<Playback['sample']>, key: number[]): number[] {
+    const bx = Array.from({ length: 10 }, (_, i) => sx(fr.px[i * 2]));
+    const by = Array.from({ length: 10 }, (_, i) => sy(fr.px[i * 2 + 1]));
+    const ox = new Array(10).fill(0);
+    for (let it = 0; it < 3; it++)
+      for (let i = 0; i < 10; i++)
+        for (let j = i + 1; j < 10; j++) {
+          const dy = Math.abs(by[j] - by[i]);
+          if (dy > 12) continue;
+          const dx = bx[j] + ox[j] - (bx[i] + ox[i]);
+          const gap = 11 - Math.abs(dx);
+          if (gap <= 0) continue;
+          const push = gap * Math.min(1, (12 - dy) / 8) * 0.5;
+          const sg = dx > 0 || (dx === 0 && i < j) ? 1 : -1;
+          const wi = key[i] > key[j] ? 0 : key[i] < key[j] ? 1 : 0.5;
+          ox[i] -= sg * push * wi;
+          ox[j] += sg * push * (1 - wi);
+        }
+    return ox.map((v) => Math.round(Math.max(-5, Math.min(5, v))));
+  }
+
   /** 지금 돌리는 작전 (공격이 끝나면 없다) */
   private activePlay(cur: number): GameEvent | null {
     let e: GameEvent | null = null;
@@ -1060,7 +1094,7 @@ export class CourtScene extends Phaser.Scene {
     const fill = this.host.looks[e.team].fill;
     const col = luminance(fill) > 0.6 || colorDistance(fill, '#c99a5b') < 90 ? '#ffd23f' : shade(fill, 0.25);
     const slot = (pid: number) => (pid >= 0 ? pb.slotOf(pid, cur) : -1);
-    const at = (k: number) => ({ x: sx(fr.px[k * 2]), y: sy(fr.px[k * 2 + 1]), wx: fr.px[k * 2], wy: fr.px[k * 2 + 1] });
+    const at = (k: number) => ({ x: sx(fr.px[k * 2]) + (this.lastSpread[k] ?? 0), y: sy(fr.px[k * 2 + 1]), wx: fr.px[k * 2], wy: fr.px[k * 2 + 1] });
     const side = this.hoopSide(e.team, e.quarter);
     const hx = side ? COURT.length - COURT.hoopFromBaseline : COURT.hoopFromBaseline;
     const rim = { x: sx(hx), y: sy(7.5) };
@@ -1093,7 +1127,7 @@ export class CourtScene extends Phaser.Scene {
         [c, 0],
       ] as [string, number][]) {
         ctx.fillStyle = col;
-        for (let a = 0; a < Math.PI * 2; a += 0.16) ctx.fillRect(Math.round(p.x + Math.cos(a) * 10), Math.round(p.y + 1 + Math.sin(a) * 4) + oy, 2, 1);
+        for (let a = 0; a < Math.PI * 2; a += 0.13) ctx.fillRect(Math.round(p.x + Math.cos(a) * 12), Math.round(p.y + 1 + Math.sin(a) * 4.5) + oy, 2, 2);
       }
     };
     const hs = slot(e.player);
@@ -1135,11 +1169,15 @@ export class CourtScene extends Phaser.Scene {
     for (let k = e.team === 0 ? 0 : 5, n = k + 5; k < n; k++) if (fr.flags[k] & FLAG_CUT) dash(at(k), rim, '#9ff0ff');
     ctx.globalAlpha = 1;
     // 작전 이름표
-    if (!this.playTag) this.playTag = this.world(this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '10px', color: '#ffffff', stroke: '#0b0d12', strokeThickness: 3, resolution: 3 }).setOrigin(0.5, 1).setDepth(160));
+    if (!this.playTag) this.playTag = this.world(this.add.text(0, 0, '', { fontFamily: FONT, fontSize: '11px', color: '#ffffff', padding: { x: 4, y: 2 }, resolution: 3 }).setOrigin(0.5, 1).setDepth(160));
     const label = `${PLAY_LABEL[e.play!]}${e.play === 'pnr' ? (e.pop ? ' · 팝' : ' · 롤') : ''}`;
     if (this.playTag.text !== label) this.playTag.setText(label);
     const anchor = e.play === 'post' && o ? o : h;
-    if (anchor) this.playTag.setColor(col).setPosition(anchor.x, anchor.y - (LABELS.mode === 'off' ? 44 : 54)).setVisible(true);
+    // 팀 색 바탕에 등번호 색 글자 (작전 칩)
+    const look = this.host.looks[e.team];
+    // 어두운 바탕에 팀 색 (어두운 팀 색이면 밝게)
+    const txt = luminance(look.fill) > 0.35 ? look.fill : shade(look.fill, 0.5);
+    if (anchor) this.playTag.setColor(txt).setBackgroundColor('#11151dcc').setPosition(anchor.x, anchor.y - (LABELS.mode === 'off' ? 46 : 56)).setVisible(true);
     else this.playTag.setVisible(false);
   }
 
