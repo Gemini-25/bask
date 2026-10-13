@@ -34,6 +34,14 @@ export const SHOT_KEY: Record<ShotKind, RatingKey> = { dunk: 'dunk', layup: 'lay
 
 /** 엘리트 (M24): 80을 넘으면 제곱으로 커져 99에서 1. 99는 99답게 넣는다 */
 export const elite = (v: number) => clamp((v - 80) / 19, 0, 1) ** 2;
+/** 레전드 (M24): 90부터, 99에서 1. 99는 흔하지 않다: 리그 최상위보다 한 단계 위 */
+export const legend = (v: number) => clamp((v - 90) / 9, 0, 1) ** 2;
+/** 남은 실패 확률을 줄이는 몫: 엘리트 (80~) + 레전드 (90~) */
+const MISS_CUT: Record<ShotKind, [number, number]> = { dunk: [0.35, 0.5], layup: [0.35, 0.42], hook: [0.35, 0.2], floater: [0.35, 0.2], mid: [0.08, 0.22], three: [0.08, 0.12] };
+export function missCut(kind: ShotKind, v: number): number {
+  const [e, l] = MISS_CUT[kind];
+  return elite(v) * e + legend(v) * l;
+}
 const ELITE: Record<ShotKind, number> = { dunk: 0.05, layup: 0.15, hook: 0.15, floater: 0.15, mid: 0.11, three: 0.06 };
 
 /** 공격 방향 기준 좌표 (u, v)에서 이 선수가 던지는 슛 */

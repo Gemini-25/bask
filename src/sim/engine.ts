@@ -13,7 +13,7 @@ import { overall, POS_GROUP, type Player } from '../data/player';
 import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
 import { carryScore, creation as creationOf } from './roles';
-import { canDunk, contestFactor, DEEP_DIST, elite, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
+import { canDunk, contestFactor, DEEP_DIST, elite, legend, missCut, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
 import {
   FLAG_CUT,
   FLAG_SCREEN,
@@ -2481,11 +2481,12 @@ class GameSim {
     if (caughtNow && (si.kind === 'three' || si.kind === 'mid')) cAdj *= 1 - clamp((h.pl.r.offBall - 56) / 180, -0.15, 0.18);
     // 엘리트 슈터·피니셔는 견제를 덜 탄다 (그 슛 능력치 85부터, M24: 99는 점프슛 3할, 골밑 5할 덜 탄다)
     const near0 = si.kind === 'dunk' || si.kind === 'layup' || si.kind === 'hook' || si.kind === 'floater';
-    cAdj *= 1 - Math.max(clamp((h.pl.r[SHOT_KEY[si.kind]] - 85) / 100, 0, 0.14), elite(h.pl.r[SHOT_KEY[si.kind]]) * (near0 ? 0.5 : 0.3));
+    const sk = h.pl.r[SHOT_KEY[si.kind]];
+    cAdj *= 1 - Math.max(clamp((sk - 85) / 100, 0, 0.14), elite(sk) * (near0 ? 0.5 : 0.3) + legend(sk) * 0.2);
     if (si.kind === 'mid' || si.kind === 'three') cAdj *= 1 - FX.deadeye[lv(h.pl, 'deadeye')];
     let p = si.pOpen * contestFactor(si.kind, cAdj) * this.form(h, si) * this.abilityShot(h) * (mfx.p ?? 1);
-    // 99는 99답게 (M24): 엘리트는 남은 실패 확률을 줄인다 (골밑 35%, 점프슛 8%)
-    p += (1 - Math.min(1, p)) * elite(h.pl.r[SHOT_KEY[si.kind]]) * (near0 ? 0.35 : 0.08);
+    // 99는 99답게 (M24): 엘리트·레전드는 남은 실패 확률을 줄인다 (99: 덩크 85%, 레이업 77%, 훅·플로터 55%, 미드 30%, 3점 20%)
+    p += (1 - Math.min(1, p)) * missCut(si.kind, sk);
     const assist = this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 3.2 ? this.lastPass.from : -1;
     // 콤비 패스를 받아 쏘면 조금 더 들어간다
     const comboShot = assist >= 0 && !!this.combo(this.P[assist].pid, h.pid);
@@ -2589,7 +2590,7 @@ class GameSim {
       if (!near) pb *= 0.25;
       if (si.kind === 'dunk') pb *= 0.6;
       // 엘리트 피니셔 (M24)는 블록을 피해 올린다
-      pb *= 1 - elite(h.pl.r[SHOT_KEY[si.kind]]) * 0.6;
+      pb *= 1 - elite(h.pl.r[SHOT_KEY[si.kind]]) * 0.6 - legend(h.pl.r[SHOT_KEY[si.kind]]) * 0.3;
       pb *= (mfx.block ?? 1) * (1 + FX.rimProtector[lv(b.pl, 'rimProtector')] * 1.5);
       // 인유어페이스: 블록하러 뜬 수비 위로 찍는다
       if (mv === 'poster') {
