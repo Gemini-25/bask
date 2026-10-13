@@ -44,6 +44,12 @@ export interface Figure {
   scale?: number;
   /** 잔상 (테두리 없이) */
   ghost?: boolean;
+  /** 덩크 (M24): 꽂는 팔을 이만큼 (도) 낮춘다. 높이 뜬 선수는 팔꿈치까지 림에 넣는다 */
+  armAdj?: number;
+  /** 보폭 주기 (M25): 지나온 거리 / 보폭, 진행 방향 가속, 뒷걸음질 */
+  phase?: number;
+  accel?: number;
+  back?: boolean;
 }
 
 export interface Rig {
@@ -68,6 +74,15 @@ function sizes(pl: Player, s: number) {
 }
 
 /** 서서 팔을 위로 뻗었을 때 손끝 높이 (px, 위로 든 팔은 늘어난다): 덩크 때 림에 손이 닿게 화면에서 맞춘다 */
+let measureCtx: CanvasRenderingContext2D | null = null;
+/** 이 자세로 섰을 때 공 (공이 없으면 높은 손)의 높이 (발바닥에서 px, M24 덩크 높이 맞추기) */
+export function poseBallHeight(f: Omit<Figure, 'lift'>): number {
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  if (!measureCtx) return reachPx(f.pl, f.scale);
+  const rig = drawFigureRig(measureCtx, 50, 120, { ...f, lift: 0, carry: true });
+  return 120 - (rig.ball ? rig.ball.y : Math.min(rig.handF.y, rig.handB.y));
+}
+
 export function reachPx(pl: Player, scale = 1) {
   const z = sizes(pl, scale);
   return z.L + z.T + z.Lu + Math.round(1.5 * scale) + z.Lf + Math.round(4 * scale) - 1;
@@ -150,7 +165,11 @@ export function drawFigureRig(ctx: CanvasRenderingContext2D, x: number, y: numbe
   const s = f.scale ?? 1;
   const pl = f.pl;
   const z = sizes(pl, s);
-  const pose = poseAt(f.act, { prog: f.prog, rel: f.rel, time: f.time, speed: f.speed, seed: f.seed });
+  const pose = poseAt(f.act, { prog: f.prog, rel: f.rel, time: f.time, speed: f.speed, seed: f.seed, phase: f.phase, accel: f.accel, back: f.back });
+  if (f.armAdj) {
+    pose.aF = [pose.aF[0] - f.armAdj, pose.aF[1]];
+    if (pose.ball === 'FB') pose.aB = [pose.aB[0] - f.armAdj, pose.aB[1]];
+  }
   // 바라보는 방향: 동작이 정한 게 있으면 그걸로
   let facing: Facing = f.facing;
   let flip = f.flip;

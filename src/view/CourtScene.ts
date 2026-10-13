@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import { COURT } from '../sim/court';
 import { DEEP_DIST, LOGO_DIST } from '../sim/shooting';
-import { ACT, DUNK_LABEL, FLAG_CUT, FLAG_STUN, PLAY_LABEL, type GameEvent } from '../sim/types';
+import { ACT, DUNK_LABEL, FLAG_CUT, FLAG_STUN, MOVE_LABEL, PLAY_LABEL, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
 import { lineupRoles, ROLE_SHORT, type Role } from '../sim/roles';
 import { leapOf } from '../sim/leap';
 import { LABELS, TACTICS } from './labels';
 import { drawArena, drawCheerBanner, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type ArenaDeco, type CrowdMood } from './arena';
-import { drawBall, drawBenchFigure, drawFigure, drawFigureRig, reachPx, type Facing, type Kit } from './character';
+import { drawBall, drawBenchFigure, drawFigure, drawFigureRig, poseBallHeight, reachPx, type Facing, type Kit } from './character';
 import { hasTrail, isOneShot } from './anims';
 import { sx, sy, szy, VIEW_H, VIEW_W, ZH } from './iso';
 import type { Playback } from './playback';
@@ -106,6 +106,8 @@ interface Confetto {
 const WALK_TICKS = 16;
 
 /** 림 쪽을 보고 하는 동작 (슛·레이업·덩크·자유투) */
+/** 공 (공 가진 선수)을 보는 수비 동작 (M25) */
+const FACE_BALL = new Set<number>([ACT.STANCE, ACT.SLIDE, ACT.DENY, ACT.CLOSEOUT]);
 const FACE_HOOP = new Set<number>([ACT.SHOOT, ACT.DEEP, ACT.STEPBACK, ACT.SIDESTEP, ACT.FADE, ACT.TURNFADE, ACT.ONELEG, ACT.CONTACT, ACT.HOOK, ACT.SKYHOOK, ACT.FLOAT, ACT.LAYUP, ACT.FINGER, ACT.SCOOP, ACT.REVLAY, ACT.EURO, ACT.POWERLAY, ACT.CLUTCH, ACT.FT]);
 /** 덩크 동작 (꼭대기에서 손이 림에 닿게 높이를 맞춘다) */
 const DUNK_ACTS = new Set<number>([ACT.DUNK, ACT.DUNK2, ACT.CDUNK, ACT.TOMAHAWK, ACT.REVERSE, ACT.WINDMILL, ACT.D360, ACT.DOUBLE, ACT.ELBOW, ACT.BETWEEN, ACT.FTLINE, ACT.CRADLE, ACT.HAMMER, ACT.SUPERMAN, ACT.SCORPION, ACT.SELFOOP, ACT.POSTER, ACT.PUTBACK, ACT.ALLEY]);
@@ -256,6 +258,13 @@ export class CourtScene extends Phaser.Scene {
     });
   }
 
+  private sparks: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
+  /** 보폭 주기 (M25), 공격 팀 */
+  private stridePhase: Float32Array | null = null;
+  private offTeam = 0;
+  /** 덩크 꽂는 자세에서 공 높이 (선수·동작·방향마다 한 번 잰다) */
+  private slamCache = new Map<string, number>();
+
   /** 지금 다섯 명씩의 역할 (M24, 라인업마다 한 번) */
   private roleCache = new WeakMap<object, Role[]>();
   private rolesOf(lineup: { pids: number[] }): Role[] {
@@ -298,6 +307,18 @@ export class CourtScene extends Phaser.Scene {
     this.prevLineup = null;
     this.confetti = [];
     this.shotEvents = pb.game.events.filter((e) => e.type === 'made' || e.type === 'miss');
+    // 보폭 주기 (M25): 지나온 거리를 보폭으로 나눠 쌓는다. 발이 땅에 맞게 디딘다 (속도가 빠를수록 보폭이 길다)
+    {
+      const rec = pb.game.rec;
+      const ph = new Float32Array(rec.n * 10);
+      for (let f = 1; f < rec.n; f++)
+        for (let i = 0; i < 10; i++) {
+          const d = Math.min(1, Math.hypot(rec.pos[f * 20 + i * 2] - rec.pos[(f - 1) * 20 + i * 2], rec.pos[f * 20 + i * 2 + 1] - rec.pos[(f - 1) * 20 + i * 2 + 1]));
+          const v = d / pb.game.dt;
+          ph[f * 10 + i] = ph[(f - 1) * 10 + i] + d / Math.max(1.2, Math.min(2.9, 1.0 + v * 0.3));
+        }
+      this.stridePhase = ph;
+    }
     this.playEvents = pb.game.events.filter((e) => e.type === 'play');
     this.endTicks = pb.game.events.filter((e) => e.type === 'made' || e.type === 'turnover' || (e.type === 'rebound' && !e.offensive) || e.type === 'quarterEnd').map((e) => e.tick);
     this.lastCarry = null;
@@ -429,6 +450,9 @@ export class CourtScene extends Phaser.Scene {
       return 0;
     };
     const key = Array.from({ length: 10 }, (_, i) => keyOf(i));
+    // 공격 팀: 공을 쥔 쪽, 없으면 마지막으로 쥔 쪽
+    if (carrySlot >= 0) this.offTeam = pb.game.teamOf[lineup.pids[carrySlot]];
+    const offTeam = this.offTeam;
     const ox = this.spread(fr, key);
     this.lastSpread = ox;
     for (let i = 0; i < 10; i++) {
@@ -456,12 +480,32 @@ export class CourtScene extends Phaser.Scene {
       const speed = Math.hypot(vx, vy);
       const act = rec.act[f0 * 10 + i];
       const lift = ((rec.pz[f0 * 10 + i] * (1 - (pb.cur - f0)) + rec.pz[f1 * 10 + i] * (pb.cur - f0)) / 50) * ZH;
-      // 바라보는 방향: 움직이면 진행 방향, 서 있으면 공 쪽
+      // 걸음 (M25): 보폭 주기, 진행 방향 가속 (급정지·첫 발)
+      const sp = this.stridePhase;
+      const kf = pb.cur - f0;
+      const phase = sp ? sp[f0 * 10 + i] + (sp[f1 * 10 + i] - sp[f0 * 10 + i]) * kf : undefined;
+      let accel = 0;
+      if (f0 > 0 && f1 + 1 < rec.n && speed > 0.3) {
+        const v0x = (rec.pos[f0 * 20 + i * 2] - rec.pos[(f0 - 1) * 20 + i * 2]) / pb.game.dt;
+        const v0y = (rec.pos[f0 * 20 + i * 2 + 1] - rec.pos[(f0 - 1) * 20 + i * 2 + 1]) / pb.game.dt;
+        const v2x = (rec.pos[(f1 + 1) * 20 + i * 2] - rec.pos[f1 * 20 + i * 2]) / pb.game.dt;
+        const v2y = (rec.pos[(f1 + 1) * 20 + i * 2 + 1] - rec.pos[f1 * 20 + i * 2 + 1]) / pb.game.dt;
+        accel = ((v2x - v0x) * vx + (v2y - v0y) * vy) / speed / (2 * pb.game.dt);
+      }
+      // 바라보는 방향: 움직이면 진행 방향, 서 있으면 공 쪽. 수비 자세·사이드 스텝은 늘 공을 본다,
+      // 공 쪽을 보며 뒤로 물러나는 수비는 뒷걸음질 (M25)
       let dx = vx;
       let dy = vy;
-      if (speed < 0.5) {
-        dx = fr.ball[0] - x;
-        dy = fr.ball[1] - y;
+      const bx = fr.ball[0] - x;
+      const by = fr.ball[1] - y;
+      let back = false;
+      if (speed < 0.5 || FACE_BALL.has(act)) {
+        dx = bx;
+        dy = by;
+      } else if (team !== offTeam && act === ACT.IDLE && speed > 1.2 && speed < 6 && Math.hypot(bx, by) < 14 && vx * bx + vy * by < -0.4 * speed * Math.hypot(bx, by)) {
+        dx = bx;
+        dy = by;
+        back = true;
       }
       const face = this.facing[i];
       if (Math.hypot(dx, dy) > 0.05) {
@@ -491,17 +535,34 @@ export class CourtScene extends Phaser.Scene {
       const py = Math.round(sy(y));
       // 덩크·매달리기: 손이 림에 닿게 높이를 맞춘다
       let lift2 = lift;
+      let armAdj = 0;
       if (act === ACT.HANG || DUNK_ACTS.has(act)) {
         const need = py - rimY - reachPx(pl) + 1;
         if (act === ACT.HANG) {
           lift2 = Math.max(lift, need);
           if (Math.abs(x - hoopX) < 1.6) this.hanging[hs] = true;
         } else {
-          // 피지컬 (M24): 림 위로 손이 올라가는 만큼 더 솟았다가 (동작 0.72), 꽂으면서 림으로 내려온다 (0.9)
+          // 덩크 (M25): 올라가며 공을 젖히고, 꽂는 순간 (동작 0.9) 공이 딱 림에 닿는다. 꼭대기도 그 순간.
+          // 높이 뜨는 선수 (림 위로 손이 많이 올라간다)는 팔을 낮춰 팔꿈치까지 림에 넣는다 (몸이 더 높이 뜬다)
           const p0 = prog ?? 0.5;
-          const pr = rel !== undefined && rel > 0 ? (p0 <= rel ? (p0 / rel) * 0.9 : 0.9 + ((p0 - rel) / Math.max(0.01, 1 - rel)) * 0.1) : p0;
-          const hump = pr < 0.72 ? smooth(0.2, 0.72, pr) : 1 - smooth(0.72, 0.9, pr);
-          lift2 = Math.max(lift, need * smooth(0.3, 0.8, pr) + leapOf(pl).clear * ZH * 1.6 * hump);
+          const pS = rel !== undefined && rel > 0 ? rel : 0.9;
+          const warp = (q: number) => (q <= pS ? (q / pS) * 0.9 : 0.9 + ((q - pS) / Math.max(0.01, 1 - pS)) * 0.1);
+          const pT = (0.2 / 0.9) * pS;
+          const adjFull = Math.round(Math.max(0, Math.min(28, (leapOf(pl).clear - 0.35) * 55)));
+          const adjAt = (q: number) => adjFull * smooth(0.7, 0.9, warp(q));
+          armAdj = adjAt(p0);
+          // 그 순간 자세에서 공 높이를 재서, 공이 림까지 고르게 다가가 꽂는 순간 딱 닿게 몸 높이를 정한다
+          const fig = { pl, kit: this.kit(team), facing: face.f, flip: face.flip, act, speed: 0, time: 0, seed: i, tired: false, rel };
+          const key = `${pid}|${act}|${face.f}|${face.flip ? 1 : 0}|${Math.round(pS * 100)}`;
+          let bT = this.slamCache.get(key);
+          if (bT === undefined) {
+            bT = poseBallHeight({ ...fig, prog: pT, armAdj: adjAt(pT) });
+            this.slamCache.set(key, bT);
+          }
+          const now = py - rimY - poseBallHeight({ ...fig, prog: Math.min(p0, pS), armAdj: adjAt(Math.min(p0, pS)) }) + 1;
+          const start = py - rimY - bT + 1;
+          const u = Math.max(0, Math.min(1, (p0 - pT) / Math.max(0.01, pS - pT)));
+          lift2 = p0 < pT ? lift : Math.max(0, now - start * (1 - u) ** 1.25);
         }
       }
       const carry = carrySlot === i;
@@ -544,6 +605,10 @@ export class CourtScene extends Phaser.Scene {
             prog,
             rel,
             carry,
+            armAdj,
+            phase,
+            accel,
+            back,
           });
           const top = rig.top;
           if (carry && rig.ball) this.lastCarry = { x: rig.ball.x, y: rig.ball.y, cur: pb.cur };
@@ -645,6 +710,18 @@ export class CourtScene extends Phaser.Scene {
     items.sort((a, b) => a.depth - b.depth);
     for (const it of items) it.draw();
 
+    // 덩크 파편 (M25)
+    if (this.sparks.length) {
+      for (const c of this.sparks) {
+        c.x += c.vx * dt;
+        c.y += c.vy * dt;
+        c.vy += 120 * dt;
+        c.life -= dt;
+        ctx.fillStyle = c.life > 0.2 ? '#ffffff' : '#ffd23f';
+        ctx.fillRect(Math.round(c.x), Math.round(c.y), 2, 1);
+      }
+      this.sparks = this.sparks.filter((c) => c.life > 0);
+    }
     // 꽃가루
     if (this.confetti.length) {
       for (const c of this.confetti) {
@@ -908,7 +985,17 @@ export class CourtScene extends Phaser.Scene {
         }
         const side = this.hoopSide(e.team, e.quarter);
         this.swish[side] = 0.5;
-        if (e.shot === 'dunk') this.rimShake[side] = 0.45;
+        if (e.shot === 'dunk') {
+          this.rimShake[side] = 0.45;
+          // 쾅 (M25): 림에서 파편이 튄다
+          const rx = sx(side ? COURT.length - COURT.hoopFromBaseline : COURT.hoopFromBaseline);
+          const ry = szy(COURT.width / 2, COURT.rimHeight);
+          for (let k = 0; k < 10; k++) {
+            const a = (k / 10) * Math.PI * 2 + Math.random() * 0.3;
+            const v = 40 + Math.random() * 50;
+            this.sparks.push({ x: rx, y: ry, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.6 - 15, life: 0.28 + Math.random() * 0.12 });
+          }
+        }
         this.cheer(e.team as 0 | 1, big ? 1 : 0.6);
         if (e.team === 0 && e.pts === 3 && this.mood.wave < 0 && Math.random() < 0.25) this.mood.wave = 0;
         if ((e.shot === 'dunk' || e.alleyOop) && calm) {
@@ -1017,10 +1104,28 @@ export class CourtScene extends Phaser.Scene {
         }
         break;
       case 'ankle': {
+        // 앵클 브레이커 (M25): 수비가 주저앉는다
         this.emote(e.player, 'note');
         const p = at(e.other);
-        this.popText(p.x, p.y, '휘청!', '#ffe066', true);
-        this.cheer(e.team as 0 | 1, 0.7);
+        const h = at(e.player);
+        if (e.dmove) this.popText(h.x, h.y, `${MOVE_LABEL[e.dmove]}!`, shade(looks[e.team].fill, 0.4), true);
+        this.popText(p.x, p.y + 14, '앵클 브레이커!!', '#ffe066', true);
+        if (loud) sound.play('cheer');
+        this.cheer(e.team as 0 | 1, 1);
+        if (calm) this.cameras.main.shake(120, 0.004);
+        break;
+      }
+      case 'dribble': {
+        // 드리블 기술 (M25): 기술 이름, 수비가 당한 정도 (한 발 늦음 / 휘청)
+        if (speed > 16) break;
+        const h = at(e.player);
+        const p = at(e.other);
+        const col = shade(looks[e.team].fill, 0.4);
+        if (e.dmove) this.popText(h.x, h.y, `${MOVE_LABEL[e.dmove]}${(e.combo2 ?? 1) > 1 ? ` ×${e.combo2}` : ''}`, col, (e.stage ?? 1) >= 2);
+        if ((e.stage ?? 1) >= 2) {
+          this.popText(p.x, p.y + 14, '휘청!', '#ffe066');
+          this.cheer(e.team as 0 | 1, 0.5);
+        }
         break;
       }
       case 'rebound':

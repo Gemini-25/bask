@@ -5,7 +5,7 @@
 // - 파울·자유투, 체력과 교체, 타임아웃, 수비 전술(대인·지역·프레스·스위치·더블팀)이 있다.
 // 화면 없이 돌아가고, 결과(Recording + 이벤트)를 화면이 재생한다.
 
-import { clamp, dist, lerp, segDist, sigmoid } from '../core/math';
+import { clamp, dist, lerp, segDist } from '../core/math';
 import { Rng } from '../core/rng';
 import { FX, lv } from '../data/abilities';
 import { DUNKS, dunkUnlocked } from '../data/dunks';
@@ -14,6 +14,7 @@ import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
 import { carryScore, creation as creationOf } from './roles';
 import { leapOf } from './leap';
+import { DRIBBLES, type DribbleDef } from '../data/dribbles';
 import { canDunk, contestFactor, DEEP_DIST, elite, legend, missCut, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
 import {
   FLAG_CUT,
@@ -46,6 +47,8 @@ export const DT = 0.1;
 /** 엘리트 능력치 (M16): 80을 넘는 만큼 더 세게 친다. 99는 99답게 (99 → 114) */
 const ELITE = 0.8;
 const ex = (v: number) => v + Math.max(0, v - 80) * ELITE;
+/** 드리블 기술 (M25): 보통 핸들러 대 보통 수비가 반쯤 이기게 */
+const MOVE_EDGE = 18;
 /** 슈퍼스타 보정 최대 (팀 슛 몫을 이만큼 더 가져가도 된다) */
 const STAR_MAX = 0.15;
 /** 슛 동작 없이 그냥 던지는 무게 (동작 무게 합과 비교) */
@@ -151,6 +154,41 @@ interface SP {
   /** 화면용 위치 (M24): 다음 틱들에 실제 자리 대신 기록할 x, y (덩크 도약 비행) */
   vq: number[] | null;
   vqN: number;
+  /** 제쳐졌다 (M25): 남은 시간 동안 반응이 늦고 느리다 */
+  lag: number;
+  /** 속아서 쏠린 쪽 (목표 지점에 더한다)과 끝나는 시각 */
+  leanX: number;
+  leanY: number;
+  leanUntil: number;
+  /** 기술 뒤 치고 나가기: 끝나는 시각, 가속 배율 */
+  burstUntil: number;
+  burstK: number;
+}
+
+/** 드리블 기술 진행 (M25) */
+interface MoveRun {
+  /** 공 가진 선수, 제치려는 수비 (자리) */
+  h: number;
+  d: number;
+  seq: DribbleDef[];
+  k: number;
+  t0: number;
+  x0: number;
+  y0: number;
+  /** 공격 방향 (옆): +1 / -1 */
+  side: number;
+  /** 앞 (골대 쪽), 옆 단위 벡터 */
+  fx: number;
+  fy: number;
+  lx: number;
+  ly: number;
+  decided: boolean;
+  /** 이번 기술에 수비가 당한 정도, 콤보 중 이긴 횟수, 콤보 최대 */
+  stage: number;
+  wins: number;
+  max: number;
+  /** 도움 수비를 제치는 기술 */
+  help: boolean;
 }
 
 type Phase =
@@ -247,7 +285,7 @@ type Play =
   | { k: 'dho'; big: number; guard: number; side: number; stage: 'entry' | 'run'; t: number };
 
 interface Act {
-  k: 'advance' | 'probe' | 'drive' | 'post' | 'wait' | 'use' | 'hold';
+  k: 'advance' | 'probe' | 'drive' | 'post' | 'wait' | 'use' | 'hold' | 'move';
   u: number;
   v: number;
   t: number;
@@ -351,6 +389,13 @@ class GameSim {
   /** 지금 날아가는 패스가 화려한 패스 (비하인드 백·노룩) */
   private fancyPass = false;
   private nextThink = 0;
+  /** 지금 하고 있는 드리블 기술 (M25), 이번 돌파에 도움 수비를 제치려 했나 */
+  private mv: MoveRun | null = null;
+  private countered = false;
+  /** 슛 동작 (M25): 인유어페이스 당할 수비, 펌프 페이크에 떴나, 블록 손을 피했나 */
+  private posterBy = -1;
+  private drewFake = false;
+  private dodged = false;
   private nextSpots = 0;
   private helper = -1;
   private doubler = -1;
@@ -536,6 +581,12 @@ class GameSim {
       qDur: 0,
       vq: null,
       vqN: 0,
+      lag: 0,
+      leanX: 0,
+      leanY: 0,
+      leanUntil: 0,
+      burstUntil: 0,
+      burstK: 1,
     };
     this.applyPlayer(sp, pid);
     return sp;
@@ -761,8 +812,15 @@ class GameSim {
       if (ph.k === 'ft') return ACT.FT;
       if (ph.k === 'live') {
         if (this.act.k === 'post') return ACT.POST;
-        const still = Math.hypot(p.vx, p.vy) < 0.4;
-        return still && (this.act.k === 'hold' || this.act.k === 'wait') ? ACT.HOLD : ACT.DRIBBLE;
+        // 평소 드리블 (M25): 달릴 땐 앞으로 밀고, 수비가 붙으면 낮게 몸으로 가리고, 서서 간을 볼 땐 리듬 드리블
+        const sp = Math.hypot(p.vx, p.vy);
+        const d = this.defenderOf(p.i);
+        const dd = dist(d.x, d.y, p.x, p.y);
+        if (sp < 0.4 && (this.act.k === 'hold' || this.act.k === 'wait')) return ACT.HOLD;
+        if (sp > 4.5) return ACT.SPEEDDRIB;
+        if (dd < 1.6 && sp > 0.4) return ACT.POCKET;
+        if (sp < 0.8 && dd < 3 && p.pl.r.ballHandling >= 55) return ACT.RHYTHM;
+        return ACT.DRIBBLE;
       }
       return ACT.HOLD;
     }
@@ -777,7 +835,21 @@ class GameSim {
       if (play?.k === 'pindown' && play.scr === p.i && play.stage === 'run') return ACT.SCREEN;
       if (play?.k === 'dho' && play.big === p.i && play.stage === 'run') return ACT.HOLD;
       const h = this.holder();
-      if (h && p.team !== h.team && dist(p.x, p.y, h.x, h.y) < 2.2) return ACT.STANCE;
+      const sp = Math.hypot(p.vx, p.vy);
+      if (h && p.team !== h.team) {
+        const dh = dist(p.x, p.y, h.x, h.y);
+        // 공 가진 선수 수비: 붙어서 자세, 옆으로 따라가면 사이드 스텝, 막 받은 슈터에겐 달려들어 손을 든다
+        if (dh < 2.2) return sp > 1.0 ? ACT.SLIDE : ACT.STANCE;
+        const lp = this.lastPass;
+        if (this.defenderOf(h.i) === p && dh < 6 && sp > 2.5 && lp && lp.to === h.i && this.t - lp.t < 1.2) return ACT.CLOSEOUT;
+        // 공과 가까운 쪽 수비는 패스 길에 팔을 뻗는다
+        if (!this.zoneOn(p.team) && p.man >= 0 && p.man !== h.i) {
+          const m = this.P[p.man];
+          if (dist(m.x, m.y, h.x, h.y) < 7.5 && dist(p.x, p.y, m.x, m.y) < 2.2 && this.loc(this.off, m.x, m.y).u > 2.5) return ACT.DENY;
+        }
+      }
+      // 공 없이 컷하는 선수는 손을 들고 뛴다
+      if (p.team === this.off && p.cut > 0 && sp > 2.5) return ACT.CUT;
     }
     return ACT.IDLE;
   }
@@ -837,16 +909,6 @@ class GameSim {
     p.fx = act;
     p.fxT = this.t;
     p.fxUntil = this.t + dur;
-  }
-
-  /** 드리블 기술 고르기 (볼 핸들링이 좋을수록 화려하게, 연출용 난수) */
-  private pickMove(h: SP): number {
-    const r = h.pl.r;
-    const bh = r.ballHandling;
-    // 크로스오버·비하인드·레그스루·스핀·헤지·인앤아웃·셰이크 앤 베이크·스냅백·킬러 크로스
-    const f = (0.55 + r.sense / 100) * FX.geniusFlash[lv(h.pl, 'genius')] * (this.styleOf[h.pid]?.flash ?? 1) * (lv(h.pl, 'ankle') ? 1.3 : 1);
-    const w = [3, bh >= 58 ? 1.6 * f : 0, bh >= 64 ? 1.6 * f : 0, bh >= 70 && r.agility >= 60 ? 1.2 * f : 0, 2, bh >= 55 ? 1.3 : 0, bh >= 72 && r.sense >= 62 ? 0.9 * f : 0, bh >= 66 ? 1.0 * f : 0, bh >= 76 && r.agility >= 66 ? 0.8 * f : 0];
-    return DRIBBLE_MOVES[this.fxr.weighted(w)];
   }
 
   private updatePhase() {
@@ -1632,7 +1694,7 @@ class GameSim {
         }
       }
       // 손을 뻗다가 파울 (반칙이 많으면 조심한다)
-      let lamF = 0.012 + ((60 - d.pl.r.iq) / 100) * 0.012 + (this.act.k === 'drive' ? 0.03 : 0) + (trapped ? 0.04 : 0);
+      let lamF = 0.012 + ((60 - d.pl.r.iq) / 100) * 0.012 + (this.act.k === 'drive' || this.act.k === 'move' ? 0.03 : 0) + (trapped ? 0.04 : 0);
       lamF *= 1.3 - (d.pl.r.focus / 100) * 0.5;
       lamF *= this.foulCare(d.pid) * (lv(d.pl, 'foulProne') ? 1.4 : 1);
       if (this.rng.chance(Math.max(0, lamF) * DT)) {
@@ -1675,16 +1737,24 @@ class GameSim {
         }
       }
       if (dist(h.x, h.y, H.x, H.y) < RIM_FRONT + 1.0) this.nextThink = Math.min(this.nextThink, this.t);
-    } else if (this.act.k !== 'drive') {
+    } else if (this.act.k !== 'drive' && this.act.k !== 'move') {
       this.helper = -1;
     }
 
-    // 수비와 마주 서면 가끔 드리블 기술로 간을 본다 (화면용)
-    if (this.act.k !== 'drive' && this.act.k !== 'post' && this.t >= h.fxUntil && this.fxr.chance(0.012)) {
-      const d = this.defenderOf(h.i);
-      if (dist(d.x, d.y, h.x, h.y) < 2.4) {
-        const m = this.pickMove(h);
-        if (m !== ACT.SPIN) this.poseFx(h, m, 0.5);
+    // 드리블 기술 중 (M25): 기술이 끝날 때까지 다른 판단은 하지 않는다
+    if (this.act.k === 'move') {
+      if (this.updateMove(h)) return;
+      if (this.act.k === 'move') return;
+    }
+    // 돌파하다 도움 수비가 앞을 막으면 한 번 더 기술로 제친다 (스핀·크로스오버)
+    if (this.act.k === 'drive' && this.helper >= 0 && !this.countered) {
+      const hp = this.P[this.helper];
+      if (this.inFront(h, hp, 2.0)) {
+        this.countered = true;
+        if (this.rng.chance(this.moveUseP(h) * 0.55)) {
+          this.startMoves(h, hp, true);
+          return;
+        }
       }
     }
     if (this.t >= this.nextThink) this.think(h);
@@ -1768,7 +1838,7 @@ class GameSim {
       if (play?.k === 'iso' && play.star === h.i) ev += 0.04;
       if (L.u > 9.6 + reach && tLeft > 3) ev -= 0.1; // 너무 먼 슛은 꺼린다
       // 배짱 슈터 (성격)는 딥쓰리를 겁내지 않고, 난사 (나쁜 버릇)는 두세 개 들어가면 무리하게 쏜다
-      if (si.three && si.dist >= DEEP_DIST) ev += (this.deepOpt[h.pid] ? 0.03 : 0) + [0, 0.02, 0.04, 0.07][lv(h.pl, 'deepRange')];
+      if (si.three && si.dist >= DEEP_DIST) ev += (this.deepOpt[h.pid] ? 0.03 : 0) + [0, 0.03, 0.06, 0.1][lv(h.pl, 'deepRange')];
       if (lv(h.pl, 'heatChecker') && this.streak[h.pid] >= 2 && (si.kind === 'three' || si.kind === 'mid')) ev += 0.09;
       // 많이 쐈으면 동료를 찾는다. 팀 슛의 3분의 1을 넘기면 훨씬 강하게
       ev -= this.hogPenalty(h.pid);
@@ -2108,29 +2178,187 @@ class GameSim {
   }
 
   private startDrive(h: SP) {
+    this.countered = false;
     this.cnt.drives++;
     this.adv.drives[h.pid]++;
     this.act = { k: 'drive', u: 0, v: 0, t: this.t };
+    // 드리블 기술 (M25): 앞을 막은 수비를 기술로 제치고 들어간다. 볼핸들링이 좋을수록 자주, 길게 (콤보)
     const d = this.defenderOf(h.i);
-    // 돌파 첫발에 드리블 기술 (화면용)
-    const close = dist(d.x, d.y, h.x, h.y) < 2.6;
-    const move = this.pickMove(h);
-    if (close && this.fxr.chance(0.6)) this.poseFx(h, move, move === ACT.SPIN || move === ACT.SHAKE || move === ACT.KILLER ? 0.55 : 0.45);
-    if (dist(d.x, d.y, h.x, h.y) < 1.8 && d.stun <= 0) {
-      const r = h.pl.r;
-      const edge = r.ballHandling + 0.5 * r.speed + 0.5 * r.accel - d.pl.r.perimeterD - d.pl.r.agility;
-      const p = 0.05 * sigmoid((edge - 10) / 8) * FX.ankle[lv(h.pl, 'ankle')] * FX.geniusAnkle[lv(h.pl, 'genius')];
-      if (this.rng.chance(p)) {
-        d.stun = 0.7;
-        this.nextThink = this.t + 0.15;
-        this.poseFx(h, move, 0.5);
-        this.emit({ type: 'ankle', team: h.team, player: h.i, other: d.i, pts: 0, text: `${h.pl.name}의 ${MOVE_LABEL[move]}! ${d.pl.name} 휘청` });
+    if (this.inFront(h, d, 2.6) && this.rng.chance(this.moveUseP(h))) this.startMoves(h, d, false);
+  }
+
+  /** 수비가 공 가진 선수와 골대 사이에 가까이 있나 */
+  private inFront(h: SP, d: SP, range: number) {
+    const H = this.hoop(h.team);
+    const dh = Math.max(0.01, dist(h.x, h.y, H.x, H.y));
+    const ahead = ((d.x - h.x) * (H.x - h.x) + (d.y - h.y) * (H.y - h.y)) / dh;
+    return dist(d.x, d.y, h.x, h.y) < range && ahead > -0.1 && d.stun <= 0;
+  }
+
+  /** 드리블 기술을 쓸 확률: 볼핸들링 40 아래는 거의 안 쓰고 85 넘으면 거의 늘 (빅맨은 덜) */
+  private moveUseP(h: SP): number {
+    const r = h.pl.r;
+    const f = (0.8 + r.sense / 250) * (this.styleOf[h.pid]?.flash ?? 1) ** 0.5 * (lv(h.pl, 'ankle') ? 1.15 : 1);
+    // 샷클락이 얼마 안 남으면 기술로 시간을 쓰지 않는다
+    const hurry = this.shotClock < 6 ? 0.4 : 1;
+    return clamp(clamp((r.ballHandling - 40) / 45, 0, 1) ** 1.4 * 0.95 * f * (this.isBig(h) ? 0.45 : 1) * hurry, 0, 0.97);
+  }
+
+  /** 기술 고르기 (경기 난수): 흔한 정도 × 능력치 × 화려함 (센스·천재·성격) */
+  private pickDribble(h: SP, from?: number[]): DribbleDef | null {
+    const r = h.pl.r;
+    const flash = (0.55 + r.sense / 100) * FX.geniusFlash[lv(h.pl, 'genius')] * (this.styleOf[h.pid]?.flash ?? 1);
+    const list = DRIBBLES.filter((m) => (!from || from.includes(m.act)) && Object.entries(m.need).every(([k, v]) => r[k as RatingKey] >= v!));
+    if (!list.length) return null;
+    const w = list.map((m) => {
+      const q = m.keys.reduce((a, k) => a + r[k], 0) / m.keys.length;
+      return m.base * clamp(1 + (q - 60) / 30, 0.3, 2) * (m.flash > 1.1 ? flash ** (m.flash - 1) : 1);
+    });
+    return list[this.rng.weighted(w)];
+  }
+
+  /** 드리블 기술 시작: 첫 기술을 고르고, 볼핸들링에 따라 콤보 길이를 정한다 */
+  private startMoves(h: SP, d: SP, help: boolean) {
+    const first = this.pickDribble(h, help ? [ACT.SPIN, ACT.CROSSOVER, ACT.BEHIND, ACT.HALFSPIN, ACT.HESI] : undefined);
+    if (!first) return;
+    const H = this.hoop(h.team);
+    const dh = Math.max(0.01, dist(h.x, h.y, H.x, H.y));
+    const fx = (H.x - h.x) / dh;
+    const fy = (H.y - h.y) / dh;
+    // 공간이 넓은 쪽으로 공격한다 (다른 수비·사이드라인에서 먼 쪽)
+    const room = (sg: number) => {
+      const px = h.x - fy * sg * 1.6 + fx * 1.0;
+      const py = h.y + fx * sg * 1.6 + fy * 1.0;
+      let m = Math.min(px + 1, COURT.length + 1 - px, py + 0.5, COURT.width + 0.5 - py, 4);
+      for (const o of this.mates(d.team)) if (o !== d) m = Math.min(m, dist(o.x, o.y, px, py));
+      return m;
+    };
+    const side = room(1) >= room(-1) ? 1 : -1;
+    const bh = h.pl.r.ballHandling;
+    this.mv = { h: h.i, d: d.i, seq: [first], k: 0, t0: this.t, x0: h.x, y0: h.y, side, fx, fy, lx: -fy, ly: fx, decided: false, stage: 0, wins: 0, max: help ? 1 : bh >= 82 ? 3 : bh >= 68 ? 2 : 1, help };
+    this.act = { k: 'move', u: 0, v: 0, t: this.t };
+    this.beginMove(h);
+  }
+
+  private beginMove(h: SP) {
+    const mv = this.mv!;
+    const m = mv.seq[mv.k];
+    // 방향을 바꾸는 순간은 누구나 첫 발을 세게 딛는다 (제쳤으면 더 오래)
+    h.burstUntil = this.t + m.dur;
+    h.burstK = 1 + (m.burst - 1) * 0.6;
+    mv.t0 = this.t;
+    mv.x0 = h.x;
+    mv.y0 = h.y;
+    mv.decided = false;
+    mv.stage = 0;
+    // 크게 꺾는 기술은 반대쪽으로 방향을 바꾼다 (첫 기술은 이미 고른 쪽으로)
+    if (mv.k > 0 && m.lat >= 0.6) mv.side = -mv.side;
+    this.nextThink = this.t + m.dur + 0.05;
+    this.poseFx(h, m.act, m.dur + 0.05);
+  }
+
+  /** 기술 동안 공 가진 선수가 향하는 곳 (속이는 쪽 → 진짜 쪽) */
+  private moveGoal(h: SP) {
+    const mv = this.mv;
+    if (!mv || mv.h !== h.i) return this.setGoal(h, h.x, h.y, 0.3);
+    const m = mv.seq[mv.k];
+    const s = mv.side;
+    if (!mv.decided) {
+      if (m.pause) return this.setGoal(h, mv.x0 + mv.fx * 0.25, mv.y0 + mv.fy * 0.25, 0.22);
+      const fake = m.fake > 0 ? m.fake : m.lat * 0.25;
+      return this.setGoal(h, mv.x0 - mv.lx * s * fake + mv.fx * m.fwd * 0.25, mv.y0 - mv.ly * s * fake + mv.fy * m.fwd * 0.25, 1);
+    }
+    if (m.fwd < 0) return this.setGoal(h, mv.x0 + mv.fx * m.fwd * 1.3, mv.y0 + mv.fy * m.fwd * 1.3, 1);
+    // 진짜 방향: 옆으로 크게 꺾어 치고 나간다
+    const fw = m.fwd + 0.6;
+    this.setGoal(h, mv.x0 + mv.lx * s * m.lat * 2 + mv.fx * fw, mv.y0 + mv.ly * s * m.lat * 2 + mv.fy * fw, 1);
+  }
+
+  /** 기술 진행 (live에서 매 틱): 속이는 순간 수비가 반응하고, 끝나면 콤보를 잇거나 돌파로 */
+  private updateMove(h: SP): boolean {
+    const mv = this.mv;
+    if (!mv || mv.h !== h.i || this.act.k !== 'move') {
+      this.mv = null;
+      if (this.act.k === 'move') this.act = { k: 'hold', u: 0, v: 0, t: this.t };
+      return false;
+    }
+    const m = mv.seq[mv.k];
+    const age = this.t - mv.t0;
+    if (!mv.decided && age >= m.dur * (m.fake > 0 || m.pause ? 0.4 : 0.25)) {
+      mv.decided = true;
+      if (this.resolveMove(h, this.P[mv.d], m)) return true;
+    }
+    if (age < m.dur) return false;
+    // 콤보: 아직 수비가 앞에 있으면 다음 기술을 잇는다
+    const d = this.P[mv.d];
+    const r = h.pl.r;
+    if (mv.k + 1 < mv.max && mv.stage <= 1 && m.next.length && this.shotClock > 6 && this.inFront(h, d, 2.4) && this.rng.chance(clamp((r.ballHandling - 56) / 40, 0, 0.8))) {
+      const nx = this.pickDribble(h, m.next);
+      if (nx) {
+        mv.seq.push(nx);
+        mv.k++;
+        this.beginMove(h);
+        return false;
       }
     }
+    this.mv = null;
+    // 스냅백은 뒤로 빠져 슛 공간을 만든다, 나머지는 돌파를 이어 간다
+    this.act = m.fwd < 0 ? { k: 'hold', u: 0, v: 0, t: this.t } : { k: 'drive', u: 0, v: 0, t: this.t };
+    // 제쳤으면 일단 골밑으로 치고 들어간다 (골대 가까이 가면 drive가 알아서 판단을 부른다)
+    this.nextThink = m.fwd >= 0 && mv.wins > 0 ? this.t + 0.4 : this.t;
+    return false;
+  }
+
+  /**
+   * 수비가 기술에 반응한다 (경기 난수): 공 다루는 실력·센스·기술의 힘 vs 외곽 수비·민첩·IQ·집중.
+   * 1 = 반대로 쏠려 한 발 늦음, 2 = 휘청, 3 = 주저앉음 (앵클 브레이커). 크게 지면 공을 뺏긴다. 뺏겼으면 true
+   */
+  private resolveMove(h: SP, d: SP, m: DribbleDef): boolean {
+    const mv = this.mv!;
+    const r = h.pl.r;
+    const dr = d.pl.r;
+    const keyQ = m.keys.reduce((a, k) => a + ex(r[k]), 0) / m.keys.length;
+    // 농구 IQ: 수비가 쏠린 틈을 골라 쓴다 (낮으면 아무 때나 써서 읽히고 뺏긴다)
+    const q = keyQ + (r.sense - 50) * 0.15 + (r.iq - 52) * 0.15 + m.power * 12 + mv.wins * 6 + [0, 4, 8, 12][lv(h.pl, 'ankle')] + (lv(h.pl, 'genius') ? 5 : 0);
+    const dq = mv.help
+      ? ex(dr.perimeterD) * 0.25 + dr.agility * 0.25 + dr.helpD * 0.3 + dr.iq * 0.2 + lv(d.pl, 'rimProtector') * 5
+      : ex(dr.perimeterD) * 0.45 + dr.agility * 0.3 + dr.iq * 0.15 + dr.focus * 0.1 + [0, 3, 6, 9][lv(d.pl, 'lockdown')];
+    const edge = q - dq - MOVE_EDGE + this.rng.normal(0, 11);
+    let stage = edge >= 32 && this.rng.chance(0.4 + lv(h.pl, 'ankle') * 0.15) ? 3 : edge >= 16 ? 2 : edge >= 3 ? 1 : 0;
+    if (d.stun > 0) stage = Math.max(stage, 1);
+    mv.stage = stage;
+    this.cnt.moves = (this.cnt.moves ?? 0) + 1;
+    if (stage === 0) {
+      // 읽혔다: 크게 지면 수비가 공을 쳐낸다
+      if (edge < -16 && this.rng.chance(0.14 * m.risk * (0.6 + (ex(dr.steal) / 100) * 0.6) * (1.3 - r.iq / 170))) {
+        if (this.rng.chance(0.45)) this.deflect(h, d, 'stolenDribble', h.x, h.y, Math.atan2(h.y - d.y, h.x - d.x));
+        else this.turnover(h.i, 'stolenDribble', d.i);
+        this.mv = null;
+        return true;
+      }
+      return false;
+    }
+    mv.wins++;
+    this.cnt.beats = (this.cnt.beats ?? 0) + 1;
+    // 속은 쪽으로 쏠리고 반응이 늦는다
+    d.lag = Math.max(d.lag, 0.4 + 0.15 * stage);
+    d.leanX = -mv.lx * mv.side * 0.9;
+    d.leanY = -mv.ly * mv.side * 0.9;
+    d.leanUntil = this.t + 0.35;
+    if (stage === 2) d.stun = Math.max(d.stun, 0.55);
+    if (stage === 3) d.stun = Math.max(d.stun, 1.25);
+    this.poseFx(d, stage === 3 ? ACT.ANKLE : stage === 2 ? ACT.STUN : ACT.BEATEN, stage === 3 ? 1.4 : stage === 2 ? 0.65 : 0.5);
+    h.burstUntil = mv.t0 + m.dur + 0.45;
+    h.burstK = m.burst * (0.85 + r.accel / 300);
+    const label = MOVE_LABEL[m.act];
+    const text = stage === 3 ? `${h.pl.name}의 ${label}! ${d.pl.name} 주저앉았다 (앵클 브레이커)` : stage === 2 ? `${h.pl.name}의 ${label}! ${d.pl.name} 휘청` : `${h.pl.name}의 ${label}, ${d.pl.name}을(를) 제쳤다`;
+    this.emit({ type: stage >= 3 ? 'ankle' : 'dribble', team: h.team, player: h.i, other: d.i, pts: 0, dmove: m.act, stage, combo2: mv.k + 1, text });
+    return false;
   }
 
   private startGather(h: SP, post: boolean, alley = false, forced?: ShotMove) {
-    this.lastDrive = this.act.k === 'drive';
+    this.lastDrive = this.act.k === 'drive' || this.act.k === 'move';
+    this.mv = null;
     const L = this.loc(this.off, h.x, h.y);
     const ct = this.contest(h);
     let si = shotInfo(h.pl, L.u, L.v, post, ct.c, this.rangeOf(h));
@@ -2149,6 +2377,7 @@ class GameSim {
     else if (si.kind === 'hook' || si.kind === 'floater') this.jumpFx(h, 0.3 + j / 400, dur + 0.35, act);
     else this.jumpFx(h, 0.3 + j / 400, dur + 0.32, act, def?.slide ? Math.min(0.14, dur * 0.4) : 0);
     // 스텝백은 수비에게서 한 발 뒤로, 유로스텝·사이드스텝은 옆으로
+    let slideDir: { x: number; y: number } | null = null;
     if (def?.slide) {
       const d = ct.blocker >= 0 ? this.P[ct.blocker] : this.defenderOf(h.i);
       let ax = h.x - d.x;
@@ -2164,9 +2393,107 @@ class GameSim {
       h.slideX = (ax * def.slide.m) / T;
       h.slideY = (ay * def.slide.m) / T;
       h.slideUntil = this.t + T;
+      slideDir = { x: ax, y: ay };
     }
+    // 슛 동작이 실제로 수비를 제친다 (M25)
+    this.posterBy = -1;
+    this.drewFake = false;
+    this.dodged = false;
+    if (def?.beat) this.shotBeat(h, def, ct, slideDir, dur);
     this.act = { k: 'hold', u: L.u, v: L.v, t: this.t };
     this.ph = { k: 'gather', shooter: h.i, t: this.t, dur, post, alley, move, f0: this.tick };
+  }
+
+  /**
+   * 슛 동작이 수비를 제친다 (M25, 경기 난수): 동작마다 맞서는 능력치가 다르다.
+   * 이기면 수비가 한 발 늦거나 (반응·속도), 속아 쏠리거나, 밀려나거나, 펌프 페이크에 떠서 견제를 못 한다
+   */
+  private shotBeat(h: SP, m: ShotMoveDef, ct: { c: number; blocker: number; c1: number }, slideDir: { x: number; y: number } | null, dur: number) {
+    const kind = m.beat!;
+    const onBlocker = kind === 'bite' || kind === 'dodge' || kind === 'shove' || kind === 'over';
+    const d = onBlocker && ct.blocker >= 0 ? this.P[ct.blocker] : this.defenderOf(h.i);
+    if (dist(d.x, d.y, h.x, h.y) > 2.6 || d.stun > 0) return;
+    const r = h.pl.r;
+    const dr = d.pl.r;
+    const keyQ = m.keys.reduce((a, k) => a + ex(r[k]), 0) / m.keys.length;
+    let q = keyQ + (r.sense - 50) * 0.1 + (m.ability ? lv(h.pl, m.ability) * 5 : 0);
+    let dq: number;
+    switch (kind) {
+      case 'shove':
+        q = r.strength * 0.6 + Math.max(r.dunk, r.layup) * 0.4 + (h.pl.body.weightKg - 95) * 0.3;
+        dq = dr.strength * 0.6 + dr.postD * 0.3 + (d.pl.body.weightKg - 95) * 0.3 + dr.boxOut * 0.1;
+        break;
+      case 'over':
+        q = ex(r.dunk) * 0.4 + ex(r.jump) * 0.4 + r.strength * 0.2 + (h.pl.body.heightCm - 200) * 0.4;
+        dq = ex(dr.block) * 0.4 + ex(dr.jump) * 0.3 + dr.strength * 0.2 + (d.pl.body.heightCm - 200) * 0.5;
+        break;
+      case 'jumpfake':
+        dq = dr.iq * 0.5 + dr.focus * 0.3 + dr.composure * 0.2;
+        break;
+      case 'bite':
+      case 'dodge':
+        dq = dr.iq * 0.35 + dr.agility * 0.3 + dr.helpD * 0.2 + ex(dr.block) * 0.15;
+        break;
+      default:
+        dq = ex(dr.perimeterD) * 0.5 + dr.agility * 0.3 + dr.iq * 0.2;
+    }
+    const edge = q - dq - 4 + this.rng.normal(0, 10);
+    if (edge < 0) return;
+    const big = edge > 14;
+    const away = Math.max(0.01, dist(d.x, d.y, h.x, h.y));
+    const ux = (d.x - h.x) / away;
+    const uy = (d.y - h.y) / away;
+    switch (kind) {
+      case 'lunge':
+        // 스텝백·사이드스텝: 달려든 수비가 한 발 늦는다 (크게 지면 미끄러진다)
+        d.lag = Math.max(d.lag, big ? 0.65 : 0.45);
+        d.leanX = -ux * 0.7;
+        d.leanY = -uy * 0.7;
+        d.leanUntil = this.t + 0.3;
+        if (big) d.stun = Math.max(d.stun, 0.4);
+        this.poseFx(d, big ? ACT.STUN : ACT.BEATEN, 0.5);
+        break;
+      case 'space':
+        d.lag = Math.max(d.lag, 0.3);
+        break;
+      case 'bite':
+        // 유로스텝: 첫 스텝 쪽으로 속아서 쏠린다
+        d.lag = Math.max(d.lag, 0.5);
+        if (slideDir) {
+          d.leanX = -slideDir.x * 0.9;
+          d.leanY = -slideDir.y * 0.9;
+          d.leanUntil = this.t + 0.4;
+        }
+        if (big) d.stun = Math.max(d.stun, 0.35);
+        this.poseFx(d, ACT.BEATEN, 0.55);
+        break;
+      case 'dodge':
+        // 리버스·스쿱·더블 클러치: 블록하러 뻗은 손을 피한다
+        d.lag = Math.max(d.lag, 0.3);
+        this.dodged = true;
+        this.poseFx(d, ACT.BEATEN, 0.45);
+        break;
+      case 'shove':
+        // 컨택트: 몸으로 밀어낸다
+        d.x += ux * (big ? 0.8 : 0.5);
+        d.y += uy * (big ? 0.8 : 0.5);
+        d.stun = Math.max(d.stun, big ? 0.6 : 0.4);
+        this.poseFx(d, ACT.SHOVED, 0.6);
+        break;
+      case 'over':
+        // 인유어페이스: 블록하러 뜬 수비 위로 찍고, 들어가면 수비가 넘어진다
+        this.posterBy = d.i;
+        break;
+      case 'jumpfake':
+        // 펌프 페이크: 수비가 떠 버려서 쏠 때 견제를 못 한다 (내려오며 부딪히면 파울)
+        this.jumpFx(d, 0.35 + dr.jump / 400, 0.6, ACT.CONTEST, 0.05);
+        d.stun = Math.max(d.stun, dur * 0.9);
+        d.leanX = -ux * 0.5;
+        d.leanY = -uy * 0.5;
+        d.leanUntil = this.t + dur;
+        this.drewFake = true;
+        break;
+    }
   }
 
   /** 마무리 동작 (M21): 덩크는 덩크 종류마다, 레이업·훅·플로터·점프슛은 각자, 슛 동작이 있으면 그 동작 */
@@ -2549,6 +2876,8 @@ class GameSim {
     pFoul *= 1.25 - ((d.pl.r.iq + d.pl.r.focus) / 400) * 1.0;
     pFoul *= this.foulCare(d.pid) * (lv(d.pl, 'foulProne') ? 1.4 : 1);
     pFoul *= mfx.foul ?? 1;
+    // 펌프 페이크에 뜬 수비가 내려오며 부딪힌다 (M25)
+    if (this.drewFake) pFoul = pFoul * 1.6 + 0.05;
     const fouled = this.rng.chance(clamp(pFoul, 0, 0.45));
     // 파울을 당하면 잘 안 들어간다 (컨택트 동작·컨택트 피니셔는 더 넣는다)
     if (fouled) p *= Math.min(0.92, (near ? 0.55 : 0.35) * (mfx.andOne ?? 1) * FX.contactAndOne[lv(h.pl, 'contact')]);
@@ -2600,6 +2929,7 @@ class GameSim {
       // 엘리트 피니셔 (M24)는 블록을 피해 올린다
       pb *= 1 - elite(h.pl.r[SHOT_KEY[si.kind]]) * 0.6 - legend(h.pl.r[SHOT_KEY[si.kind]]) * 0.3;
       pb *= (mfx.block ?? 1) * (1 + FX.rimProtector[lv(b.pl, 'rimProtector')] * 1.5);
+      if (this.dodged) pb *= 0.5;
       // 인유어페이스: 블록하러 뜬 수비 위로 찍는다
       if (mv === 'poster') {
         poster = true;
@@ -2742,6 +3072,12 @@ class GameSim {
       const mate = this.mates(h.team).filter((m) => m !== h && dist(m.x, m.y, h.x, h.y) < 4.5).sort((a, b) => dist(a.x, a.y, h.x, h.y) - dist(b.x, b.y, h.x, h.y))[0];
       if (mate && this.fxr.chance(0.6)) this.poseFx(mate, ACT.HIGHFIVE, 0.7);
       if (fouled && (si.kind === 'layup' || si.kind === 'dunk') && this.fxr.chance(0.3)) this.poseFx(this.P[ph.fouler], ACT.FALL, 0.9);
+      // 인유어페이스 (M25): 위로 찍힌 수비가 넘어진다
+      if (ph.poster && this.posterBy >= 0) {
+        const v = this.P[this.posterBy];
+        this.poseFx(v, ACT.FALL, 1.1);
+        v.stun = Math.max(v.stun, 0.8);
+      }
       this.emit({
         type: 'made',
         team: h.team,
@@ -3586,6 +3922,9 @@ class GameSim {
       case 'drive':
         this.setGoalLocal(h, off, RIM_FRONT + 0.25, clamp(L.v * 0.25, -1.2, 1.2), 1);
         break;
+      case 'move':
+        this.moveGoal(h);
+        break;
       case 'post':
         this.setGoalLocal(h, off, 1.6, L.v * 0.6, 0.22);
         break;
@@ -3767,6 +4106,11 @@ class GameSim {
       gx = mx + ux * gap;
       gy = my + uy * gap;
       urg = 1;
+      // 속았다 (M25): 쏠린 쪽으로 간다
+      if (this.t < p.leanUntil) {
+        gx += p.leanX;
+        gy += p.leanY;
+      }
     } else {
       const db = dist(mx, my, this.ball.x, this.ball.y);
       const sag = clamp(1.0 + db * 0.1, 1.0, 2.4);
@@ -3858,7 +4202,7 @@ class GameSim {
     for (const p of this.P) {
       const onDef = p.team !== off;
       const f = this.fit(p);
-      let tau = (onDef ? p.tau : 0.07) * (1.3 - 0.3 * f);
+      let tau = (onDef ? p.tau : 0.07) * (1.3 - 0.3 * f) * (p.lag > 0 ? 3.2 : 1);
       // 위치선정 (M22): 오프볼이 좋은 선수를 막으면 따라붙는 반응이 늦다 (공 없는 선수만)
       if (onDef && p.man >= 0 && this.ball.holder !== p.man) tau *= clamp(1 + (this.P[p.man].pl.r.offBall - 56) / 110, 0.75, 1.4);
       const k = Math.min(1, DT / tau);
@@ -3870,15 +4214,23 @@ class GameSim {
       let cap = p.maxSpd * p.urg * (0.86 + 0.14 * f);
       if (this.ball.holder === p.i) cap *= 0.8 + (p.pl.r.ballHandling / 100) * 0.17;
       // 돌파를 막는 수비는 뒷걸음질·옆걸음이라 앞으로 달리는 공격수보다 느리다
-      if (onDef && this.act.k === 'drive' && this.ball.holder >= 0 && this.defenderOf(this.ball.holder) === p) cap *= 0.72 + (p.pl.r.agility / 100) * 0.2;
+      if (onDef && (this.act.k === 'drive' || this.act.k === 'move') && this.ball.holder >= 0 && this.defenderOf(this.ball.holder) === p) cap *= 0.72 + (p.pl.r.agility / 100) * 0.2;
       if (p.stun > 0) cap *= 0.25;
+      // 제쳐졌다 (M25): 반응이 늦고 느리다
+      if (p.lag > 0) {
+        cap *= 0.55;
+        p.lag = Math.max(0, p.lag - DT);
+      }
+      // 기술 뒤 첫 발 폭발
+      const burst = this.t < p.burstUntil ? p.burstK : 1;
+      if (burst > 1) cap *= 1.06;
       const want = Math.min(cap, d / 0.3);
       const wx = d > 0.001 ? (dx / d) * want : 0;
       const wy = d > 0.001 ? (dy / d) * want : 0;
       let ax = wx - p.vx;
       let ay = wy - p.vy;
       const al = Math.hypot(ax, ay);
-      const maxDv = p.acc * DT * (0.85 + 0.15 * f);
+      const maxDv = p.acc * DT * (0.85 + 0.15 * f) * burst;
       if (al > maxDv) {
         ax = (ax / al) * maxDv;
         ay = (ay / al) * maxDv;

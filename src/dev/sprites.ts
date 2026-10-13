@@ -10,6 +10,8 @@ const ctx = c.getContext('2d')!;
 const q = new URLSearchParams(location.search);
 const pick = q.get('acts')?.split(',');
 const facingQ = (q.get('facing') ?? 'side') as Facing;
+// 걸음 (M25): ?speed=4 이면 되풀이 동작은 그 속도로 한 보폭 주기를 칸에 나눠 그린다
+const speedQ = Number(q.get('speed') ?? 0);
 const rng = new Rng(4);
 const players = [generatePlayer(rng, 'PG', 0, 7), generatePlayer(rng, 'C', 0, 34), generatePlayer(rng, 'SF', 0, 23)];
 players[0].look.hair = 2;
@@ -41,6 +43,6 @@ acts.forEach(([name, act], row) => {
     if (air.has(act)) lift = Math.round(Math.sin(Math.PI * Math.min(1, p * 1.1)) * 16);
     if (late.has(act)) lift = p > 0.45 ? Math.round(Math.sin(Math.PI * ((p - 0.45) / 0.55)) * 12) : 0;
     if (act === ACT.HANG) lift = 18;
-    drawFigureRig(ctx, 70 + k * CW + 14, y, { pl, kit: { jersey: row % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing: facingQ, flip: false, act, speed: 0, lift, time: one ? 0 : p, seed: 0, tired: false, prog: p, carry: true });
+    drawFigureRig(ctx, 70 + k * CW + 14, y, { pl, kit: { jersey: row % 2 ? '#3d8fe0' : '#e0473d', trim: '#ffffff' }, facing: facingQ, flip: false, act, speed: one ? 0 : speedQ, lift, time: one ? 0 : p, seed: 0, tired: false, prog: p, carry: true, phase: one ? undefined : p });
   }
 });

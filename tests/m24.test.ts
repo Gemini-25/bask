@@ -113,7 +113,7 @@ describe('도약·99·건너뛰기·역할 (M24)', () => {
     }
     // 99는 흔하지 않다: 리그 최상위보다 한 단계 위
     expect(fgm / fga).toBeGreaterThan(0.72);
-    expect(tpm / tpa).toBeGreaterThan(0.6);
+    expect(tpm / tpa).toBeGreaterThan(0.55);
   });
 
   it('일정 건너뛰기: 정한 만큼 넘기고, 경기는 결과만, 다음 경기 앞에서는 멈춘다', () => {

@@ -33,9 +33,9 @@ function shots(setup: (r: Record<string, number>, ab: Record<string, number>) =>
 }
 
 describe('동작 (M16)', () => {
-  it('동작 20가지, 드리블 기술 9가지, 동작마다 새 포즈', () => {
+  it('동작 20가지, 드리블 기술 12가지 (M25에 더블 크로스오버·스터터 스텝·하프 스핀), 동작마다 새 포즈', () => {
     expect(SHOT_MOVES.length).toBeGreaterThanOrEqual(19);
-    expect(DRIBBLE_MOVES.length).toBe(9);
+    expect(DRIBBLE_MOVES.length).toBe(12);
     for (const m of SHOT_MOVES) expect(Object.values(ACT)).toContain(m.act);
   });
 

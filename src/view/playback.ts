@@ -57,13 +57,15 @@ export class Playback {
     // 버저비터와 막판 결정적인 슛은 느리게 보여준다
     let prevScore: [number, number] = [0, 0];
     for (const e of game.events) {
+      // 앵클 브레이커 (M25)도 느리게
+      if (e.type === 'ankle') this.slow.push([e.tick - 6, e.tick + 6]);
       if (e.type === 'made' || e.type === 'miss') {
         const buzzer = e.clock < 0.6;
         const margin = Math.abs(prevScore[0] - prevScore[1]);
         const clutch = e.quarter >= 4 && e.clock < 6 && margin <= 3;
         if (buzzer || clutch) this.slow.push([e.tick - 14, e.tick + 4]);
         // M21: 인유어페이스·화려한 덩크·로고샷도 느리게
-        else if (e.type === 'made' && (e.poster || (e.dunk && SLOW_DUNKS.has(e.dunk)) || (e.pts === 3 && (e.dist ?? 0) >= 9.5))) this.slow.push([e.tick - 8, e.tick + 2]);
+        else if (e.type === 'made' && (e.poster || (e.dunk && SLOW_DUNKS.has(e.dunk)) || (e.leap && e.leap.d >= 2.8) || (e.pts === 3 && (e.dist ?? 0) >= 9.5))) this.slow.push([Math.min(e.tick - 8, (e.leap?.t ?? e.tick) - 3), e.tick + 2]);
       }
       prevScore = e.score;
     }

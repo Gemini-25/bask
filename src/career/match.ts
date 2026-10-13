@@ -304,6 +304,7 @@ export function applyMatch(c: Career, m: MatchSetup): GameReport {
       if ((e.type === 'made' || e.type === 'miss') && e.shot) add(SHOT_XP[e.shot], e.type === 'made' ? 0.1 : 0.05);
       if (e.type === 'ft') add('freeThrow', 0.06);
       if (e.type === 'ankle') add('ballHandling', 0.15);
+      if (e.type === 'dribble') add('ballHandling', 0.03);
       if (e.type === 'screen') add('screen', 0.05);
     }
     add('passing', l.ast * 0.12);

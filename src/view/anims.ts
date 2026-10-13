@@ -47,6 +47,10 @@ export interface Anim {
   trail?: boolean;
   /** 다리는 걷기·달리기 그대로 (팔과 공만 이 동작) */
   legsFree?: boolean;
+  /** 움직일 때 발걸음에 맞춰 되풀이 (한 보폭 주기에 몇 번, M25: 드리블이 발에 맞게 튄다) */
+  stepSync?: number;
+  /** 다리는 수비 사이드 스텝 (legsFree와 같이) */
+  shuffle?: boolean;
 }
 
 const HANDS_CHEST = { aF: [25, 105], aB: [20, 108], wF: -0.7, wB: -0.7, ball: 'FB' } as const;
@@ -104,19 +108,32 @@ function dunk(mid: Key[], o: { slam?: number; legs?: Partial<Pose>; trail?: bool
   );
 }
 
-/** 한 손에서 다른 손으로 넘기는 드리블 (정면에서 본다) */
-function cross(o: { wide?: number; legs?: Partial<Pose>; via?: BallAt; dx?: number }): Anim {
-  const w = o.wide ?? 0.6;
-  const dx = o.dx ?? 2;
-  return A(
-    [
-      { t: 0, aF: [38, 30], wF: w, aB: [30, 38], wB: 0.2, ball: 'F', dx },
-      { t: 0.45, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: o.via ?? [4, 0, 0], dx: 0 },
-      { t: 0.9, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: w, ball: 'B', dx: -dx },
-      { t: 1, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: w, ball: 'B', dx: -dx },
-    ],
-    { base: { face: 'front', crouch: 1, lean: 10, ws: 4, ...CROUCH_LEGS, ...(o.legs ?? {}), eyes: 'focus' } },
-  );
+/**
+ * 한 손에서 다른 손으로 넘기는 드리블 (정면에서 본다, M25): 공을 넘기며 몸을 반대쪽으로 크게 옮기고,
+ * 새 방향으로 발을 크게 내디뎌 치고 나간다. twice면 한 번 더 되돌린다 (더블 크로스오버)
+ */
+function cross(o: { wide?: number; legs?: Partial<Pose>; via?: BallAt; dx?: number; twice?: boolean; trail?: boolean }): Anim {
+  const w = o.wide ?? 0.7;
+  const dx = o.dx ?? 3;
+  const set = { ws: 5, lF: [30, -62] as J, lB: [-8, -30] as J };
+  const plant = { ws: 9, lF: [-6, -26] as J, lB: [44, -76] as J, ...(o.legs ?? {}) };
+  const mid = { ws: 3, lF: [20, -52] as J, lB: [-20, -52] as J };
+  const keys: Key[] = o.twice
+    ? [
+        { t: 0, aF: [38, 30], wF: w, aB: [30, 38], wB: 0.2, ball: 'F', dx, ...set },
+        { t: 0.18, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: o.via ?? [3, 0, 0], dx: 0, ...mid },
+        { t: 0.36, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: w, ball: 'B', dx: -dx, ...set, lF: [-8, -30], lB: [30, -62] },
+        { t: 0.54, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: o.via ?? [3, 0, 0], dx: 0, ...mid },
+        { t: 0.72, aF: [38, 30], wF: w, aB: [30, 38], wB: 0.2, ball: 'F', dx: dx * 1.4, lean: 18, ...plant, lF: plant.lB, lB: plant.lF },
+        { t: 1, aF: [40, 34], wF: w, aB: [30, 38], wB: 0.2, ball: 'F', dx: dx * 1.2, lean: 20, ws: 6 },
+      ]
+    : [
+        { t: 0, aF: [38, 30], wF: w, aB: [30, 38], wB: 0.2, ball: 'F', dx, ...set },
+        { t: 0.32, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: o.via ?? [3, 0, 0], dx: 0, ...mid },
+        { t: 0.58, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: w, ball: 'B', dx: -dx * 1.4, lean: 18, ...plant },
+        { t: 1, aF: [30, 38], wF: 0.2, aB: [40, 34], wB: w, ball: 'B', dx: -dx * 1.2, lean: 20, ws: 6 },
+      ];
+  return A(keys, { base: { face: 'front', crouch: 2, lean: 12, ws: 4, ...CROUCH_LEGS, eyes: 'focus' }, trail: o.trail });
 }
 
 const STANCE_BASE = { crouch: 2, lean: 14, aF: [75, 25], aB: [65, 30], wF: 1.1, wB: 1.0, eyes: 'focus' } as Partial<Pose>;
@@ -136,7 +153,34 @@ export const ANIMS: Record<number, Anim> = {
       { t: 0.5, aF: [30, 14], aB: [62, 40], wB: 0.9, ball: [7, 0, 4] },
       { t: 1, aF: [46, 36], aB: [62, 40], wB: 0.9, ball: 'F' },
     ],
-    { loop: 1.8, legsFree: true, base: { crouch: 2, lean: 12, eyes: 'focus' } },
+    { loop: 1.8, stepSync: 2, legsFree: true, base: { crouch: 2, lean: 12, eyes: 'focus' } },
+  ),
+  // 평소 드리블 (M25): 달릴 땐 앞으로 크게 밀고, 수비 앞에선 낮게 가리고, 서서 간을 볼 땐 다리 사이로
+  [ACT.SPEEDDRIB]: A(
+    [
+      { t: 0, aF: [70, 20], aB: [-20, 40], ball: 'F', eyes: 'focus' },
+      { t: 0.5, aF: [56, 10], aB: [-20, 40], ball: [12, 0, 3] },
+      { t: 1, aF: [70, 20], aB: [-20, 40], ball: 'F' },
+    ],
+    { loop: 1.4, stepSync: 1, legsFree: true, base: { lean: 14, eyes: 'focus' } },
+  ),
+  [ACT.POCKET]: A(
+    [
+      { t: 0, aF: [36, 30], wF: 0.6, aB: [96, 60], wB: 0.4, ball: 'F' },
+      { t: 0.5, aF: [20, 14], wF: 0.6, aB: [96, 60], wB: 0.4, ball: [2, 0, 6] },
+      { t: 1, aF: [36, 30], wF: 0.6, aB: [96, 60], wB: 0.4, ball: 'F' },
+    ],
+    { loop: 3, stepSync: 2, legsFree: true, base: { crouch: 3, lean: 18, eyes: 'focus' } },
+  ),
+  [ACT.RHYTHM]: A(
+    [
+      { t: 0, aF: [36, 30], wF: 0.7, aB: [30, 38], wB: 0.2, ball: 'F', dx: 1 },
+      { t: 0.25, aF: [16, 20], wF: 0.1, aB: [16, 20], wB: 0.1, ball: [0, 2, 0], dx: 0 },
+      { t: 0.5, aF: [30, 38], wF: 0.2, aB: [36, 30], wB: 0.7, ball: 'B', dx: -1 },
+      { t: 0.75, aF: [16, 20], wF: 0.1, aB: [16, 20], wB: 0.1, ball: [0, 2, 0], dx: 0 },
+      { t: 1, aF: [36, 30], wF: 0.7, aB: [30, 38], wB: 0.2, ball: 'F', dx: 1 },
+    ],
+    { loop: 1.3, base: { face: 'front', crouch: 2, lean: 10, ws: 7, lF: [36, -60], lB: [-30, -50], eyes: 'focus' } },
   ),
   [ACT.HOLD]: A([{ t: 0, ...HANDS_CHEST, lF: [26, -46], lB: [-16, -36], crouch: 1, lean: 8, eyes: 'focus' }, { t: 1, ...HANDS_CHEST, lF: [26, -46], lB: [-16, -36], crouch: 1, lean: 9, eyes: 'focus' }], { loop: 0.5 }),
   [ACT.POST]: A(
@@ -640,61 +684,150 @@ export const ANIMS: Record<number, Anim> = {
   [ACT.TURNAWAY]: A([{ t: 0, aF: [160, 10], aB: [12, 10] }, { t: 1, aF: [90, 20], aB: [12, 10] }], { legsFree: true }),
   // ───────────── 드리블 기술 ─────────────
   [ACT.CROSSOVER]: cross({}),
-  [ACT.KILLER]: cross({ wide: 1.4, dx: 4, legs: { lF: [52, -100], lB: [46, -96] } }),
-  [ACT.LEGS]: cross({ via: [0, 2, 0], legs: { lF: [44, -64], lB: [-30, -64], ws: 7 } as Partial<Pose> }),
+  [ACT.KILLER]: cross({ wide: 1.5, dx: 5, legs: { lF: [-10, -20], lB: [56, -100], ws: 11 }, trail: true }),
+  [ACT.DBLCROSS]: cross({ twice: true, dx: 3, trail: true }),
+  [ACT.LEGS]: A(
+    [
+      { t: 0, aF: [38, 30], wF: 0.6, aB: [30, 38], wB: 0.2, ball: 'F', dx: 2, lF: [30, -62], lB: [-8, -30], ws: 5 },
+      // 앞발을 크게 내딛고 다리 사이로 공을 넘긴다
+      { t: 0.4, aF: [20, 20], wF: 0.1, aB: [20, 20], wB: 0.1, ball: [0, 2, 0], dx: 0, lF: [60, -50], lB: [-40, -30], ws: 8, crouch: 3 },
+      { t: 0.7, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: 0.7, ball: 'B', dx: -2, lF: [40, -60], lB: [-24, -40], ws: 6 },
+      { t: 1, aF: [30, 38], wF: 0.2, aB: [40, 34], wB: 0.7, ball: 'B', dx: -2, lF: [30, -62], lB: [-8, -30], ws: 5 },
+    ],
+    { base: { face: 'front', crouch: 2, lean: 12, ws: 5, eyes: 'focus' } },
+  ),
   [ACT.BEHIND]: A(
     [
-      { t: 0, aF: [38, 30], wF: 0.6, aB: [30, 38], wB: 0.2, ball: 'F', dx: 1 },
-      { t: 0.3, aF: [-36, 40], wF: 0.4, aB: [24, 30], wB: 0.2, ball: [-3, 8, 3, true] },
-      { t: 0.5, aF: [-44, 40], wF: 0.2, aB: [-30, 40], wB: 0.2, ball: [-3, 3, 0, true] },
-      { t: 0.72, aF: [20, 30], wF: 0.2, aB: [-30, 40], wB: 0.4, ball: [-3, 8, -3, true] },
-      { t: 0.92, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: 0.6, ball: 'B', dx: -1 },
-      { t: 1, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: 0.6, ball: 'B', dx: -1 },
+      { t: 0, aF: [38, 30], wF: 0.6, aB: [30, 38], wB: 0.2, ball: 'F', dx: 2, lF: [30, -62], lB: [-8, -30], ws: 5 },
+      { t: 0.3, aF: [-36, 40], wF: 0.4, aB: [24, 30], wB: 0.2, ball: [-3, 8, 3, true], dx: 1 },
+      { t: 0.5, aF: [-44, 40], wF: 0.2, aB: [-30, 40], wB: 0.2, ball: [-3, 3, 0, true], dx: 0, ws: 3 },
+      { t: 0.72, aF: [20, 30], wF: 0.2, aB: [-30, 40], wB: 0.4, ball: [-3, 8, -3, true], dx: -3, lF: [-6, -26], lB: [44, -76], ws: 9, lean: 18 },
+      { t: 1, aF: [30, 38], wF: 0.2, aB: [40, 34], wB: 0.7, ball: 'B', dx: -3, lean: 20, ws: 6 },
     ],
-    { base: { face: 'front', crouch: 1, lean: 10, ws: 4, ...CROUCH_LEGS, eyes: 'focus' } },
+    { base: { face: 'front', crouch: 2, lean: 12, ws: 4, ...CROUCH_LEGS, eyes: 'focus' } },
   ),
   [ACT.SHAKE]: A(
     [
-      { t: 0, aF: [38, 30], wF: 0.7, aB: [30, 38], wB: 0.2, ball: 'F', dx: 3 },
-      { t: 0.2, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: [4, 0, 0], dx: 0 },
-      { t: 0.4, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: 0.7, ball: 'B', dx: -3 },
-      { t: 0.6, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: [4, 0, 0], dx: 0 },
-      { t: 0.8, aF: [38, 30], wF: 0.7, aB: [30, 38], wB: 0.2, ball: 'F', dx: 3 },
-      { t: 1, aF: [38, 30], wF: 0.7, aB: [30, 38], wB: 0.2, ball: 'F', dx: 3 },
+      { t: 0, aF: [38, 30], wF: 0.8, aB: [30, 38], wB: 0.2, ball: 'F', dx: 4, lF: [30, -62], lB: [-8, -30], ws: 6 },
+      { t: 0.2, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: [3, 0, 0], dx: 0, ws: 3 },
+      { t: 0.4, aF: [30, 38], wF: 0.2, aB: [38, 30], wB: 0.8, ball: 'B', dx: -4, lF: [-8, -30], lB: [30, -62], ws: 6 },
+      { t: 0.6, aF: [22, 18], wF: 0.1, aB: [22, 18], wB: 0.1, ball: [3, 0, 0], dx: 0, ws: 3 },
+      { t: 0.8, aF: [38, 30], wF: 0.8, aB: [30, 38], wB: 0.2, ball: 'F', dx: 6, lF: [44, -76], lB: [-6, -26], ws: 10, lean: 20 },
+      { t: 1, aF: [40, 34], wF: 0.8, aB: [30, 38], wB: 0.2, ball: 'F', dx: 5, lean: 20, ws: 6 },
     ],
-    { base: { face: 'front', crouch: 1, lean: 12, ws: 4, ...CROUCH_LEGS, eyes: 'focus' }, trail: true },
+    { base: { face: 'front', crouch: 2, lean: 12, ws: 4, ...CROUCH_LEGS, eyes: 'focus' }, trail: true },
   ),
+  // 인앤아웃: 넘길 듯 안쪽으로 공을 끌었다가 그대로 바깥으로 치고 나간다
   [ACT.INOUT]: A(
     [
-      { t: 0, aF: [38, 30], wF: 0.6, aB: [30, 38], wB: 0.2, ball: 'F', dx: 1 },
-      { t: 0.4, aF: [26, 22], wF: -0.1, aB: [30, 38], wB: 0.2, ball: [4, 3, 1], dx: -3 },
-      { t: 0.8, aF: [40, 30], wF: 0.8, aB: [30, 38], wB: 0.2, ball: 'F', dx: 3 },
-      { t: 1, aF: [40, 30], wF: 0.8, aB: [30, 38], wB: 0.2, ball: 'F', dx: 3 },
+      { t: 0, aF: [38, 30], wF: 0.6, aB: [30, 38], wB: 0.2, ball: 'F', dx: 1, lF: [30, -62], lB: [-8, -30], ws: 5 },
+      { t: 0.4, aF: [26, 22], wF: -0.2, aB: [30, 38], wB: 0.2, ball: [4, 3, 0], dx: -3, lF: [-8, -30], lB: [30, -62], lean: 6, ws: 6 },
+      { t: 0.75, aF: [40, 30], wF: 0.9, aB: [30, 38], wB: 0.2, ball: 'F', dx: 4, lF: [44, -76], lB: [-6, -26], ws: 9, lean: 20 },
+      { t: 1, aF: [40, 30], wF: 0.9, aB: [30, 38], wB: 0.2, ball: 'F', dx: 4, lean: 20, ws: 6 },
     ],
-    { base: { face: 'front', crouch: 1, lean: 10, ws: 4, ...CROUCH_LEGS, eyes: 'focus' } },
+    { base: { face: 'front', crouch: 2, lean: 10, ws: 4, ...CROUCH_LEGS, eyes: 'focus' } },
   ),
+  // 스핀: 수비를 등지며 한 바퀴 돌아 반대로 빠져나간다 (축발을 딛고)
   [ACT.SPIN]: A(
     [
-      { t: 0, face: 'spin', rot: 0, aF: [40, 80], aB: [60, 40], ball: 'F', lean: 10, lF: [30, -40], lB: [-20, -50] },
-      { t: 0.8, face: 'spin', rot: 1, aF: [40, 80], aB: [60, 40], ball: 'F', lean: 10, lF: [-20, -50], lB: [30, -40] },
-      { t: 1, face: 'side', aF: [46, 36], aB: [62, 40], ball: 'F', lean: 14, lF: [30, -40], lB: [-20, -50] },
+      { t: 0, face: 'spin', rot: 0, aF: [40, 80], aB: [60, 40], ball: 'F', lean: 12, lF: [36, -50], lB: [-20, -50], crouch: 2 },
+      { t: 0.3, face: 'spin', rot: 0.35, aF: [60, 90], aB: [80, 50], wF: 0.6, ball: 'F', lean: 6, lF: [10, -40], lB: [-40, -40], crouch: 2 },
+      { t: 0.7, face: 'spin', rot: 0.9, aF: [40, 80], aB: [60, 40], ball: 'F', lean: 10, lF: [-30, -50], lB: [36, -50], crouch: 2 },
+      { t: 1, face: 'side', aF: [46, 36], aB: [62, 40], ball: 'F', lean: 20, lF: [50, -60], lB: [-34, -64] },
     ],
     { trail: true, base: { crouch: 1, eyes: 'focus' } },
   ),
-  // 헤지테이션: 멈칫 일어섰다가 확 낮춰 치고 나간다
+  // 하프 스핀: 돌 듯하다가 원래 쪽으로 되돌아 나간다
+  [ACT.HALFSPIN]: A(
+    [
+      { t: 0, face: 'spin', rot: 0, aF: [40, 80], aB: [60, 40], ball: 'F', lean: 12, lF: [36, -50], lB: [-20, -50], crouch: 2 },
+      { t: 0.4, face: 'spin', rot: 0.4, aF: [60, 90], aB: [80, 50], ball: 'F', lean: 6, lF: [10, -40], lB: [-40, -40], crouch: 2 },
+      { t: 0.7, face: 'spin', rot: 0.05, aF: [40, 80], aB: [60, 40], ball: 'F', lean: 14, lF: [40, -60], lB: [-24, -50], crouch: 2 },
+      { t: 1, face: 'side', aF: [46, 36], aB: [62, 40], ball: 'F', lean: 20, lF: [50, -60], lB: [-34, -64] },
+    ],
+    { trail: true, base: { crouch: 1, eyes: 'focus' } },
+  ),
+  // 헤지테이션: 슛할 듯 멈칫 일어섰다가 확 낮춰 치고 나간다
   [ACT.HESI]: A([
-    { t: 0, aF: [70, 40], aB: [62, 40], wB: 0.9, ball: 'F', lF: [20, -30], lB: [-14, -30], lean: 4 },
-    { t: 0.45, aF: [82, 52], aB: [62, 40], wB: 0.9, ball: 'F', lF: [10, -14], lB: [-8, -14], lean: -2, dy: -1, eyes: 'focus' },
-    { t: 0.6, aF: [40, 20], aB: [62, 40], wB: 0.9, ball: [8, 0, 4], lF: [52, -100], lB: [-30, -60], lean: 26 },
-    { t: 1, aF: [46, 36], aB: [62, 40], wB: 0.9, ball: 'F', lF: [44, -60], lB: [-34, -64], lean: 22 },
+    { t: 0, aF: [70, 40], aB: [62, 40], wB: 0.9, ball: 'F', lF: [30, -50], lB: [-14, -40], lean: 8, crouch: 1 },
+    { t: 0.42, aF: [96, 60], aB: [70, 50], wB: 0.6, ball: 'F', lF: [10, -12], lB: [-8, -12], lean: -6, dy: -2, eyes: 'focus' },
+    { t: 0.58, aF: [40, 20], aB: [62, 40], wB: 0.9, ball: [10, 0, 4], lF: [60, -104], lB: [-36, -64], lean: 28, crouch: 2 },
+    { t: 1, aF: [46, 36], aB: [62, 40], wB: 0.9, ball: 'F', lF: [52, -70], lB: [-40, -70], lean: 24 },
   ]),
-  // 스냅백: 확 밀고 들어가다 뒤로 튕기듯 빠진다
+  // 스터터 스텝: 제자리에서 발을 다다닥 굴러 수비를 멈춰 세우고 튀어 나간다
+  [ACT.STUTTER]: A([
+    { t: 0, aF: [50, 36], aB: [62, 40], wB: 0.9, ball: 'F', lF: [16, -30], lB: [-10, -30], lean: 6 },
+    { t: 0.1, lF: [28, -54], lB: [-6, -14], dy: -1 },
+    { t: 0.2, lF: [6, -14], lB: [-20, -54], dy: 0, ball: [6, 0, 4] },
+    { t: 0.3, lF: [28, -54], lB: [-6, -14], dy: -1, ball: 'F' },
+    { t: 0.4, lF: [6, -14], lB: [-20, -54], dy: 0, ball: [6, 0, 4] },
+    { t: 0.5, lF: [28, -54], lB: [-6, -14], dy: -1, ball: 'F', eyes: 'focus' },
+    { t: 0.65, aF: [40, 20], ball: [10, 0, 4], lF: [62, -104], lB: [-38, -64], lean: 28, crouch: 2 },
+    { t: 1, aF: [46, 36], ball: 'F', lF: [52, -70], lB: [-40, -70], lean: 24 },
+  ]),
+  // 스냅백: 확 밀고 들어가다 뒤로 튕기듯 빠진다 (슛 자세로 내려선다)
   [ACT.SNAP]: A([
     { t: 0, aF: [40, 24], aB: [62, 40], wB: 0.9, ball: 'F', lF: [44, -30], lB: [-30, -56], lean: 22 },
-    { t: 0.35, aF: [30, 20], aB: [62, 40], wB: 0.9, ball: [8, 0, 4], lF: [52, -40], lB: [-32, -62], lean: 24 },
-    { t: 0.6, ...HANDS_CHEST, lF: [-8, -54], lB: [-26, -84], lean: -8, dx: -3 },
-    { t: 1, aF: [46, 36], aB: [62, 40], wB: 0.9, ball: 'F', ...CROUCH_LEGS, lean: 6, dx: -3 },
+    { t: 0.35, aF: [30, 20], aB: [62, 40], wB: 0.9, ball: [10, 0, 4], lF: [62, -50], lB: [-36, -66], lean: 26, crouch: 2 },
+    { t: 0.6, ...HANDS_CHEST, lF: [-8, -54], lB: [-26, -84], lean: -10, dx: -3, dy: -2 },
+    { t: 1, ...HANDS_CHEST, ...CROUCH_LEGS, lean: 6, dx: -3 },
   ]),
+  // ───────────── 당한 수비 (M25) ─────────────
+  // 한 발 늦음: 속은 쪽으로 몸이 쏠려 다리가 꼬이고 팔만 뻗는다
+  [ACT.BEATEN]: A([
+    { t: 0, ...STANCE_BASE, lF: [36, -86], lB: [-26, -76], ws: 4 },
+    { t: 0.3, lean: 26, aF: [100, 0], wF: 1.4, aB: [40, 30], wB: 0.4, lF: [60, -40], lB: [-50, -20], ws: 2, crouch: 1, eyes: 'focus' },
+    { t: 0.7, lean: 20, aF: [80, 10], wF: 1.2, aB: [30, 30], lF: [40, -50], lB: [-40, -30], ws: 3, crouch: 1 },
+    { t: 1, ...STANCE_BASE, lF: [30, -70], lB: [-24, -60], ws: 4 },
+  ]),
+  // 주저앉음 (앵클 브레이커): 다리가 풀려 엉덩방아를 찧는다
+  [ACT.ANKLE]: A([
+    { t: 0, lean: 20, aF: [100, 20], aB: [80, 30], wF: 1.2, wB: 1.2, lF: [40, -60], lB: [-30, -50], eyes: 'dizzy' },
+    { t: 0.25, lean: -14, aF: [150, 30], aB: [140, 30], wF: 1.2, wB: 1.2, lF: [70, -40], lB: [50, -60], crouch: 3, eyes: 'dizzy' },
+    { t: 0.45, lean: -24, aF: [-30, 10], aB: [-40, 10], wF: 0.8, wB: 0.8, lF: [92, -14], lB: [84, -30], crouch: 4, eyes: 'dizzy' },
+    { t: 1, lean: -20, aF: [-30, 10], aB: [-40, 10], wF: 0.8, wB: 0.8, lF: [92, -14], lB: [84, -30], crouch: 4, eyes: 'sad' },
+  ]),
+  // 컨택트에 밀려난다: 뒤로 휘청이며 팔을 휘젓는다
+  [ACT.SHOVED]: A([
+    { t: 0, lean: -10, aF: [120, 30], aB: [110, 30], wF: 1, wB: 1, lF: [30, -40], lB: [-20, -40] },
+    { t: 0.35, lean: -28, aF: [160, 40], aB: [140, 50], wF: 1.3, wB: 1.3, lF: [40, -20], lB: [-40, -50], eyes: 'dizzy' },
+    { t: 1, lean: -10, aF: [100, 40], aB: [90, 40], wF: 1, wB: 1, lF: [20, -40], lB: [-20, -40] },
+  ]),
+  // ───────────── 수비·오프볼 움직임 (M25) ─────────────
+  [ACT.SLIDE]: A([{ t: 0, aF: [80, 20], aB: [70, 25], wF: 1.3, wB: 1.2, eyes: 'focus' }], { loop: 1, legsFree: true, shuffle: true, base: { crouch: 2, lean: 14 } }),
+  // 클로즈아웃: 잔걸음으로 속도를 죽이며 한 손을 높이 든다
+  [ACT.CLOSEOUT]: A(
+    [
+      { t: 0, aF: [168, 6], aB: [60, 30], wB: 0.8, lF: [30, -50], lB: [-16, -30], lean: -4, eyes: 'angry' },
+      { t: 0.5, aF: [172, 4], aB: [60, 30], wB: 0.8, lF: [10, -30], lB: [-30, -50], lean: -4, dy: -1 },
+      { t: 1, aF: [168, 6], aB: [60, 30], wB: 0.8, lF: [30, -50], lB: [-16, -30], lean: -4 },
+    ],
+    { loop: 4, base: { crouch: 1 } },
+  ),
+  // 패스 길 막기: 공 쪽 팔을 길에 뻗고 옆걸음
+  [ACT.DENY]: A([{ t: 0, aF: [96, 0], wF: 1.5, aB: [40, 30], wB: 0.4, eyes: 'focus' }], { loop: 1, legsFree: true, shuffle: true, base: { crouch: 1, lean: 8 } }),
+  // 컷: 손을 들어 공을 부르며 달린다
+  [ACT.CUT]: A(
+    [
+      { t: 0, aF: [150, 20], aB: [40, 70], eyes: 'focus' },
+      { t: 0.5, aF: [160, 14], aB: [-30, 70] },
+      { t: 1, aF: [150, 20], aB: [40, 70] },
+    ],
+    { loop: 2, stepSync: 1, legsFree: true, base: { lean: 12 } },
+  ),
+  // 펌프 페이크: 슛할 듯 공을 이마까지 올렸다가 (수비가 뜬 사이) 내려와서 진짜로 쏜다
+  [ACT.PUMPFAKE]: A(
+    [
+      { t: 0, ...HANDS_CHEST, ...CROUCH_LEGS, lean: 6, eyes: 'focus' },
+      { t: 0.18, ...SET, lF: [12, -24], lB: [4, -18], lean: 0, dy: -2, eyes: 'focus' },
+      { t: 0.4, ...SET, lF: [12, -24], lB: [4, -18], lean: 0, dy: -2 },
+      { t: 0.55, ...HANDS_CHEST, ...CROUCH_LEGS, lean: 6, eyes: 'focus' },
+      { t: 0.72, ...SET, lF: [10, -18], lB: [0, -14], lean: 0, eyes: 'focus' },
+      { t: 0.8, ...RELEASE, lF: [6, -16], lB: [-4, -20], lean: -2 },
+      { t: 1, aF: [158, 20], aB: [70, 30], lF: [6, -10], lB: [0, -6], lean: 0 },
+    ],
+    { rel: 0.78 },
+  ),
 };
 
 /** 벤치 (경기 기록에 없는 화면 전용 동작) */
@@ -762,26 +895,99 @@ function sample(keys: Key[], p: number, base: Pose): Pose & { ball2?: [BallAt | 
 
 export type SampledPose = ReturnType<typeof sample>;
 
-/** 걷기·달리기 (속도 m/s, 시간 초) */
-function locomotion(speed: number, time: number, seed: number): Pose {
-  if (speed < 0.5) return { ...STAND, dy: Math.sin(time * 2.2 + seed) > 0.6 ? -1 : 0 };
-  const amp = Math.min(1, 0.35 + speed * 0.12);
-  const p = frac(time * (1.1 + speed * 0.28) + seed * 0.37);
-  const r = sample(RUN, p, STAND);
-  const sc = (v: J): J => [v[0] * amp, v[1] * amp];
-  return { ...r, lF: sc(r.lF), lB: sc(r.lB), aF: sc(r.aF), aB: sc(r.aB), lean: speed > 3 ? 8 : 4, dy: speed > 2 ? r.dy : 0 };
+/** 걷기 (M25): 무릎을 조금만 굽히고 팔은 작게 */
+const WALK: Key[] = [
+  { t: 0, lF: [20, -8], lB: [-18, -22], aF: [-14, 20], aB: [14, 20], dy: 0 },
+  { t: 0.25, lF: [4, -4], lB: [10, -44], aF: [0, 20], aB: [0, 20], dy: -1 },
+  { t: 0.5, lF: [-18, -22], lB: [20, -8], aF: [14, 20], aB: [-14, 20], dy: 0 },
+  { t: 0.75, lF: [10, -44], lB: [4, -4], aF: [0, 20], aB: [0, 20], dy: -1 },
+  { t: 1, lF: [20, -8], lB: [-18, -22], aF: [-14, 20], aB: [14, 20], dy: 0 },
+];
+/** 전력 질주: 무릎을 높이 들고 팔을 크게 흔든다 */
+const SPRINT: Key[] = [
+  { t: 0, lF: [58, -22], lB: [-42, -74], aF: [-58, 92], aB: [72, 92], dy: 0 },
+  { t: 0.25, lF: [10, -10], lB: [44, -124], aF: [0, 92], aB: [10, 92], dy: -2 },
+  { t: 0.5, lF: [-42, -74], lB: [58, -22], aF: [72, 92], aB: [-58, 92], dy: 0 },
+  { t: 0.75, lF: [44, -124], lB: [10, -10], aF: [10, 92], aB: [0, 92], dy: -2 },
+  { t: 1, lF: [58, -22], lB: [-42, -74], aF: [-58, 92], aB: [72, 92], dy: 0 },
+];
+/** 수비 사이드 스텝: 다리를 벌렸다 모은다 (무릎은 굽힌 채) */
+const SHUFFLE: Key[] = [
+  { t: 0, lF: [26, -64], lB: [-26, -64], ws: 9, dy: 0 },
+  { t: 0.5, lF: [14, -44], lB: [-14, -44], ws: 3, dy: -1 },
+  { t: 1, lF: [26, -64], lB: [-26, -64], ws: 9, dy: 0 },
+];
+
+/** 두 자세 섞기 */
+function mix(a: Pose, b: Pose, k: number): Pose {
+  if (k <= 0) return a;
+  if (k >= 1) return b;
+  const out = { ...a };
+  for (const f of PAIR) out[f] = [lerp(a[f][0], b[f][0], k), lerp(a[f][1], b[f][1], k)];
+  for (const f of NUM) (out as unknown as Record<string, number>)[f] = lerp(a[f] as number, b[f] as number, k);
+  return out;
+}
+
+export interface Loco {
+  /** 이동 속도 (m/s) */
+  speed: number;
+  time: number;
+  seed: number;
+  /** 보폭 주기 (M25): 지나온 거리 / 보폭. 있으면 발이 땅에 맞게 움직인다 (미끄러지지 않게) */
+  phase?: number;
+  /** 진행 방향 가속 (m/s², +면 치고 나가고 -면 급정지) */
+  accel?: number;
+  /** 뒷걸음질 (보는 쪽 반대로 움직인다) */
+  back?: boolean;
+  /** 수비 사이드 스텝 */
+  shuffle?: boolean;
+}
+
+/** 걷기·조깅·전력 질주 (M25): 속도에 따라 섞고, 보폭 주기에 맞춰 발을 디딘다. 급정지·첫 발·뒷걸음질 */
+function locomotion(o: Loco): Pose {
+  const { speed } = o;
+  if (speed < 0.5) return { ...STAND, dy: Math.sin(o.time * 2.2 + o.seed) > 0.6 ? -1 : 0 };
+  let p = frac(o.phase ?? o.time * (1.1 + speed * 0.28) + o.seed * 0.37);
+  if (o.back) p = 1 - p;
+  let r: Pose;
+  if (o.shuffle) {
+    r = { ...STAND, ...sample(SHUFFLE, frac(p * 2), STAND), crouch: 2, lean: 12 };
+  } else {
+    const walk = sample(WALK, p, STAND);
+    const run = sample(RUN, p, STAND);
+    const sprint = sample(SPRINT, p, STAND);
+    r = speed < 2.2 ? mix(walk, run, (speed - 1.2) / 1.0) : speed < 5 ? run : mix(run, sprint, (speed - 5) / 1.6);
+    r.lean = speed < 2 ? 2 : speed < 5 ? 7 : 7 + Math.min(1, (speed - 5) / 1.6) * 9;
+    if (speed < 2.2) r.dy = 0;
+  }
+  if (o.back) {
+    r.lean = -6;
+    r.aF = [20, 30];
+    r.aB = [10, 30];
+  }
+  const a = o.accel ?? 0;
+  // 급정지: 몸을 뒤로 젖히고 앞발을 뻗어 버틴다
+  if (a < -5 && !o.shuffle) {
+    const k = Math.min(1, (-a - 5) / 6);
+    r = mix(r, { ...r, lF: [44, -12], lB: [-20, -60], lean: -10, crouch: 1, dy: 0 }, k);
+  }
+  // 첫 발 폭발: 낮게 앞으로 기운다
+  if (a > 5 && speed < 5 && !o.back) r.lean += Math.min(12, (a - 5) * 2);
+  return r;
 }
 
 /**
  * 이 순간의 자세.
  * prog: 한 번 하는 동작의 진행 (0~1), rel: 기록에서 공이 손을 떠난 진행 (없으면 동작 기본값)
  */
-export function poseAt(act: number, o: { prog?: number; rel?: number; time: number; speed: number; seed: number }): SampledPose {
-  const loco = locomotion(o.speed, o.time, o.seed);
+export function poseAt(act: number, o: { prog?: number; rel?: number } & Loco): SampledPose {
   const anim = ANIMS[act];
-  if (!anim) return { ...loco };
+  const loco = locomotion({ ...o, shuffle: o.shuffle || anim?.shuffle });
+  // 그냥 서 있는 동작은 움직이면 걷기·달리기 그대로 (팔 흔들기, 몸 기울기)
+  if (!anim || (act === ACT.IDLE && o.speed > 0.5)) return { ...loco };
   let p: number;
-  if (anim.loop) p = frac(o.time * anim.loop + o.seed * 0.29);
+  if (anim.stepSync && o.speed > 0.5 && o.phase !== undefined) p = frac(o.phase * anim.stepSync + o.seed * 0.29);
+  else if (anim.loop) p = frac(o.time * anim.loop + o.seed * 0.29);
   else {
     p = Math.max(0, Math.min(1, o.prog ?? 0.5));
     // 공이 실제로 손을 떠난 때에 키프레임의 '놓는 순간'을 맞춘다
@@ -790,10 +996,14 @@ export function poseAt(act: number, o: { prog?: number; rel?: number; time: numb
   const base: Pose = { ...STAND, ...(anim.legsFree ? { lF: loco.lF, lB: loco.lB, dy: loco.dy } : {}), ...anim.base } as Pose;
   const out = sample(anim.keys.map((k) => ({ ...anim.base, ...k })), p, base);
   if (anim.legsFree) {
-    // 다리는 걷기 그대로
+    // 다리는 걷기 그대로, 빨리 달리면 몸도 그만큼 기운다
     out.lF = loco.lF;
     out.lB = loco.lB;
-    if (o.speed > 0.5) out.dy = loco.dy;
+    if (anim.shuffle) out.ws = loco.ws;
+    if (o.speed > 0.5) {
+      out.dy = loco.dy;
+      out.lean = Math.max(out.lean, loco.lean);
+    }
   }
   return out;
 }

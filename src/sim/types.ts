@@ -26,6 +26,8 @@ export type EventType =
   | 'rebound'
   | 'turnover'
   | 'ankle'
+  /** 드리블 기술 (M25): 수비를 한 발 제쳤다 (stage 1). 휘청·주저앉으면 ankle */
+  | 'dribble'
   | 'screen'
   | 'foul'
   | 'ft'
@@ -84,6 +86,10 @@ export interface GameEvent {
   poster?: boolean;
   /** 덩크 도약 (M24, 화면용): 림에서 떨어진 거리 (m), 수직 점프 (m), 체공 (초), 뛴 자리, 뛴 틱 */
   leap?: Leap;
+  /** 드리블 기술 (M25): 기술 (ACT), 수비가 당한 정도 1 = 한 발 늦음, 2 = 휘청, 3 = 주저앉음, 콤보 몇 번째 */
+  dmove?: number;
+  stage?: number;
+  combo2?: number;
   /** 체이스다운 블록 (M21) */
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
@@ -203,11 +209,37 @@ export const ACT = {
   BEHINDPASS: 74,
   NOLOOK: 75,
   CHASE: 76,
+  // M25: 새 드리블 기술, 당한 수비, 평소 드리블, 수비·오프볼 움직임
+  DBLCROSS: 77,
+  STUTTER: 78,
+  HALFSPIN: 79,
+  /** 제쳐졌다: 반대로 쏠려 한 발 늦는다 */
+  BEATEN: 80,
+  /** 앵클 브레이커: 주저앉는다 */
+  ANKLE: 81,
+  /** 앞으로 밀고 나가는 높은 드리블 */
+  SPEEDDRIB: 82,
+  /** 수비 앞에서 낮게 몸으로 가리는 드리블 */
+  POCKET: 83,
+  /** 제자리 리듬 드리블 (다리 사이로 왔다 갔다) */
+  RHYTHM: 84,
+  /** 수비 사이드 스텝 */
+  SLIDE: 85,
+  /** 슈터에게 달려들어 손을 든다 */
+  CLOSEOUT: 86,
+  /** 패스 길에 팔을 뻗어 막는다 */
+  DENY: 87,
+  /** 컷: 전력으로 뛰며 손을 든다 */
+  CUT: 88,
+  /** 컨택트 덩크·인유어페이스에 밀려난다 */
+  SHOVED: 89,
+  /** 펌프 페이크 후 슛 */
+  PUMPFAKE: 90,
 } as const;
 
 /** 드리블 기술 이름 */
-export const MOVE_LABEL: Record<number, string> = { 30: '크로스오버', 31: '비하인드 백', 32: '레그 스루', 33: '스핀 무브', 34: '헤지테이션', 53: '인앤아웃', 54: '셰이크 앤 베이크', 55: '스냅백', 56: '킬러 크로스오버' };
-export const DRIBBLE_MOVES = [ACT.CROSSOVER, ACT.BEHIND, ACT.LEGS, ACT.SPIN, ACT.HESI, ACT.INOUT, ACT.SHAKE, ACT.SNAP, ACT.KILLER] as number[];
+export const MOVE_LABEL: Record<number, string> = { 30: '크로스오버', 31: '비하인드 백', 32: '레그 스루', 33: '스핀 무브', 34: '헤지테이션', 53: '인앤아웃', 54: '셰이크 앤 베이크', 55: '스냅백', 56: '킬러 크로스오버', 77: '더블 크로스오버', 78: '스터터 스텝', 79: '하프 스핀' };
+export const DRIBBLE_MOVES = [ACT.CROSSOVER, ACT.BEHIND, ACT.LEGS, ACT.SPIN, ACT.HESI, ACT.INOUT, ACT.SHAKE, ACT.SNAP, ACT.KILLER, ACT.DBLCROSS, ACT.STUTTER, ACT.HALFSPIN] as number[];
 
 /** 슛 동작 (M16): 고른 동작마다 견제·성공률·블록·파울이 조금씩 달라진다 */
 export type ShotMove =
@@ -218,6 +250,7 @@ export type ShotMove =
   | 'turnFade'
   | 'oneLeg'
   | 'catchShoot'
+  | 'pumpFake'
   | 'contactShot'
   | 'bank'
   | 'skyhook'
@@ -346,4 +379,7 @@ export interface Counters {
   switches: number;
   doubles: number;
   alleyOops: number;
+  /** 드리블 기술 (M25): 쓴 횟수, 수비를 제친 횟수 */
+  moves?: number;
+  beats?: number;
 }

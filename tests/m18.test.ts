@@ -73,7 +73,7 @@ describe('성격·특수능력 늘리기 (M18)', () => {
     // 센터(자리 4)가 골밑을 지킬 때 상대 야투율
     const rim = (ab: Record<string, number>) => {
       let r = emptyRaw();
-      for (let g = 0; g < 14; g++) {
+      for (let g = 0; g < 24; g++) {
         const a = generateTeam(new Rng(40 + g), TEAM_INFOS[1], 0);
         const b = generateTeam(new Rng(80 + g), TEAM_INFOS[6], 0);
         a.players[4].abilities = ab;
