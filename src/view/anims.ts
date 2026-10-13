@@ -804,6 +804,21 @@ export const ANIMS: Record<number, Anim> = {
     { t: 0.45, lean: -24, aF: [-30, 10], aB: [-40, 10], wF: 0.8, wB: 0.8, lF: [92, -14], lB: [84, -30], crouch: 4, eyes: 'dizzy' },
     { t: 1, lean: -20, aF: [-30, 10], aB: [-40, 10], wF: 0.8, wB: 0.8, lF: [92, -14], lB: [84, -30], crouch: 4, eyes: 'sad' },
   ]),
+  // 포스트 수비 (M27): 낮게 버티며 앞팔로 등을 막고 (팔꿈치), 다리를 넓게
+  [ACT.POSTD]: A(
+    [
+      { t: 0, aF: [84, 40], aB: [60, 40], wF: 1.4, wB: 1.0, lF: [34, -76], lB: [-34, -70], ws: 5, crouch: 2, lean: 18, eyes: 'angry' },
+      { t: 0.5, aF: [92, 34], aB: [64, 40], wF: 1.4, wB: 1.0, lF: [30, -70], lB: [-38, -76], ws: 6, crouch: 2, lean: 22, eyes: 'angry' },
+      { t: 1, aF: [84, 40], aB: [60, 40], wF: 1.4, wB: 1.0, lF: [34, -76], lB: [-34, -70], ws: 5, crouch: 2, lean: 18, eyes: 'angry' },
+    ],
+    { loop: 0.9 },
+  ),
+  // 몸싸움 (M27): 어깨를 들이밀며 부딪힌다
+  [ACT.BUMP]: A([
+    { t: 0, aF: [70, 60], aB: [40, 60], wF: 1.2, wB: 1.2, lF: [40, -50], lB: [-30, -40], crouch: 1, lean: 24, eyes: 'angry' },
+    { t: 0.4, aF: [60, 70], aB: [30, 70], wF: 1.3, wB: 1.3, lF: [50, -60], lB: [-40, -30], crouch: 2, lean: 32, eyes: 'angry' },
+    { t: 1, aF: [80, 40], aB: [50, 40], wF: 1.1, wB: 1.1, lF: [30, -40], lB: [-20, -40], crouch: 1, lean: 16 },
+  ]),
   // 컨택트에 밀려난다: 뒤로 휘청이며 팔을 휘젓는다
   [ACT.SHOVED]: A([
     { t: 0, lean: -10, aF: [120, 30], aB: [110, 30], wF: 1, wB: 1, lF: [30, -40], lB: [-20, -40] },

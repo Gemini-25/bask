@@ -31,6 +31,8 @@ export type EventType =
   | 'dribble'
   /** 공이 림·백보드에 맞았다 (M26, 화면용: 림 흔들림·소리) */
   | 'bounce'
+  /** 몸싸움 (M27): player = 이긴 선수, other = 진 선수. contact = 어떤 몸싸움 */
+  | 'contact'
   | 'screen'
   | 'foul'
   | 'ft'
@@ -99,6 +101,8 @@ export interface GameEvent {
   missKind?: string;
   /** 루즈볼 (M26): 패스를 놓쳤다 */
   fumble?: boolean;
+  /** 몸싸움 (M27): 돌파하며 밀고 들어감, 돌파가 막힘, 포스트에서 밀어붙임, 포스트에서 버팀 */
+  contact?: 'shove' | 'stop' | 'backdown' | 'hold';
   /** 체이스다운 블록 (M21) */
   chase?: boolean;
   /** 비하인드 백·노룩 패스를 받아 넣었다 (M21) */
@@ -248,6 +252,10 @@ export const ACT = {
   TIPIN: 91,
   /** 루즈볼에 몸을 던진다 (M26) */
   DIVE: 92,
+  /** 포스트 수비 (M27): 등 뒤에서 팔과 몸으로 버틴다 */
+  POSTD: 93,
+  /** 몸싸움 (M27): 부딪혀 어깨로 민다 */
+  BUMP: 94,
 } as const;
 
 /** 드리블 기술 이름 */
@@ -396,4 +404,6 @@ export interface Counters {
   /** 드리블 기술 (M25): 쓴 횟수, 수비를 제친 횟수 */
   moves?: number;
   beats?: number;
+  /** 몸싸움 (M27): 밀고 들어감·막힘·포스트 밀어붙이기·버팀 */
+  contacts?: number;
 }

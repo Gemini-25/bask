@@ -1060,6 +1060,15 @@ export class CourtScene extends Phaser.Scene {
           if (calm) this.cameras.main.shake(100, 0.004);
         }
         break;
+      case 'contact': {
+        // 몸싸움 (M27): 이긴 선수 위에 글자
+        const p = at(e.player);
+        const label = e.contact === 'shove' ? '밀고 들어간다!' : e.contact === 'stop' ? '몸으로 막았다!' : e.contact === 'backdown' ? '밀어붙인다!' : '버틴다!';
+        if (speed <= 8) this.popText(p.x, p.y, label, '#ffd9a0');
+        if (calm && (e.contact === 'shove' || e.contact === 'stop')) this.cameras.main.shake(70, 0.002);
+        if (e.other >= 0 && calm) this.emote(e.other, 'dots');
+        break;
+      }
       case 'bounce': {
         // 공이 림·백보드에 맞았다 (M26): 세게 맞을수록 림이 크게 흔들린다
         const side = this.hoopSide(e.team, e.quarter);

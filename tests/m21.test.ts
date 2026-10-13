@@ -14,7 +14,7 @@ import { ANIMS } from '../src/view/anims';
 const spec = (over: Partial<CreateSpec> = {}): CreateSpec => ({ name: '테스트', number: 7, gender: 'M', prefPos: 'SG', background: 'ordinary', growth: 'normal', heightDelta: 0, build: 'normal', look: lookFor('x'), alloc: {}, school: 'HANB', ...over });
 
 const DUNKY = new Set<number>([...Object.values(DUNK_ACT), ACT.POSTER, ACT.CDUNK, ACT.PUTBACK, ACT.ALLEY, ACT.DUNK]);
-const LAYUPY = new Set<number>([ACT.LAYUP, ACT.EURO, ACT.SCOOP, ACT.REVLAY, ACT.FINGER, ACT.POWERLAY, ACT.CLUTCH, ACT.CONTACT]);
+const LAYUPY = new Set<number>([ACT.LAYUP, ACT.EURO, ACT.SCOOP, ACT.REVLAY, ACT.FINGER, ACT.POWERLAY, ACT.CLUTCH, ACT.CONTACT, ACT.TIPIN]);
 
 function games(n: number, setup?: (a: ReturnType<typeof generateTeam>, b: ReturnType<typeof generateTeam>) => void, base = 0) {
   const out: GameResult[] = [];
@@ -65,7 +65,9 @@ describe('동작·딥쓰리·특성 (M21)', () => {
           const y = g.rec.pos[e.tick * 20 + slot * 2 + 1];
           const near = [hoopXY(true), hoopXY(false)].some((H) => Math.hypot(H.x - x, H.y - y) < 1.3);
           expect(near).toBe(true);
-          if (e.type === 'made') expect([...Array(8)].some((_, k) => g.rec.act[(e.tick + k) * 10 + slot] === ACT.HANG)).toBe(true);
+          // 경기·쿼터가 끝나는 마지막 덩크는 끝 세리머니가 덮는다
+          const last = g.events.some((x) => (x.type === 'quarterEnd' || x.type === 'gameEnd') && x.tick >= e.tick && x.tick - e.tick < 12);
+          if (e.type === 'made' && !last) expect([...Array(8)].some((_, k) => g.rec.act[(e.tick + k) * 10 + slot] === ACT.HANG)).toBe(true);
         } else if (e.shot === 'layup') {
           layups++;
           expect(DUNKY.has(act), `레이업인데 덩크 동작 ${act}`).toBe(false);

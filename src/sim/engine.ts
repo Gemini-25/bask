@@ -417,9 +417,17 @@ class GameSim {
   /** 지금 날아가는 패스가 화려한 패스 (비하인드 백·노룩) */
   private fancyPass = false;
   private nextThink = 0;
+  /** 몸싸움 (M27): 이번 틱에 부딪힌 짝 (a, b 자리, 다가오던 속도, a→b 방향), 같은 짝을 다시 따지지 않게 마지막 판정 시각 */
+  private touches: { a: number; b: number; j: number; nx: number; ny: number }[] = [];
+  private contactAt = new Map<number, number>();
+  private massK = new Float64Array(10);
   /** 공 속도 (M26, 공중일 때), 마지막 패스 위험 계산에서 길목 자리 */
   private bv = { x: 0, y: 0, z: 0 };
   private lastRiskS = 0.5;
+  /** 몸싸움을 이기고 밀고 들어간 선수 (M27: 마무리가 좋고 파울을 얻는다) */
+  private shove: { by: number; t: number } | null = null;
+  /** 포스트업을 시작한 자리 (M27) */
+  private postFrom: { i: number; d: number; t: number; shown: boolean } | null = null;
   /** 지금 하고 있는 드리블 기술 (M25), 이번 돌파에 도움 수비를 제치려 했나 */
   private mv: MoveRun | null = null;
   private countered = false;
@@ -784,6 +792,7 @@ class GameSim {
     }
     this.updateTargets();
     this.moveAll();
+    this.resolveContacts();
     this.updateBall();
     this.updateClocks();
     this.updateEnergy();
@@ -855,11 +864,13 @@ class GameSim {
       }
       return ACT.HOLD;
     }
-    // 슛이 날아가는 동안 골밑 수비는 박스아웃
-    if (ph.k === 'shot' && p.team !== this.off) {
+    // 슛이 날아가는 동안 (M27: 림에 맞고 튀어 오를 때까지) 골밑 수비는 박스아웃
+    if ((ph.k === 'shot' || (ph.k === 'air' && this.ball.z > 2.6 && !ph.steal)) && p.team !== this.off) {
       const H = this.hoop(this.off);
-      if (dist(p.x, p.y, H.x, H.y) < 5 && this.P.some((o) => o.team === this.off && dist(o.x, o.y, p.x, p.y) < 1.6)) return ACT.BOXOUT;
+      if (dist(p.x, p.y, H.x, H.y) < 5 && this.P.some((o) => o.team === this.off && dist(o.x, o.y, p.x, p.y) < 1.2)) return ACT.BOXOUT;
     }
+    // 포스트 수비 (M27)
+    if (ph.k === 'live' && this.act.k === 'post' && this.ball.holder >= 0 && this.defenderOf(this.ball.holder) === p && dist(p.x, p.y, this.P[this.ball.holder].x, this.P[this.ball.holder].y) < 1.0) return ACT.POSTD;
     if (ph.k === 'live' || ph.k === 'pass') {
       const play = this.play;
       if (play?.k === 'pnr' && play.scr === p.i && (play.stage === 'set' || play.stage === 'use')) return ACT.SCREEN;
@@ -2890,7 +2901,8 @@ class GameSim {
     // 차징: 돌파하다 자리 잡은 도움 수비와 부딪힌다
     if (wasDrive && near && blocker >= 0 && blocker === this.helper && c1 > 0.5) {
       const speed = Math.hypot(d.vx, d.vy);
-      if (speed < 1.5 && this.rng.chance(0.09 * (0.6 + d.pl.r.iq / 100))) {
+      // 제한 구역 (림에서 1.25m) 안에 선 수비는 차징을 얻지 못한다 (M27)
+      if (speed < 1.5 && dist(d.x, d.y, Hh.x, Hh.y) > 1.25 && this.rng.chance(0.05 * (0.6 + d.pl.r.iq / 100))) {
         this.fga[h.pid]--;
         this.poseFx(d, ACT.FALL, 1.1);
         this.callFoul(h.i, d.i, 'charge');
@@ -2901,11 +2913,15 @@ class GameSim {
     // 슈팅 파울: 골밑 몸싸움에서 자주, 점프슛에선 드물게
     let pFoul = near ? c1 * (0.23 + ((h.pl.r.strength + h.pl.r.layup) / 200) * 0.15) : c1 * 0.028;
     if (wasDrive) pFoul *= 1.25;
+    // 몸싸움을 이기고 들어온 마무리 (M27): 수비가 균형을 잃었다
+    const shoved = near && !!this.shove && this.shove.by === h.i && this.t - this.shove.t < 1.4;
+    if (shoved) pFoul *= 1.35;
     pFoul *= 1.25 - ((d.pl.r.iq + d.pl.r.focus) / 400) * 1.0;
     pFoul *= this.foulCare(d.pid) * (lv(d.pl, 'foulProne') ? 1.4 : 1);
     pFoul *= mfx.foul ?? 1;
     // 펌프 페이크에 뜬 수비가 내려오며 부딪힌다 (M25)
     if (this.drewFake) pFoul = pFoul * 1.6 + 0.05;
+    if (shoved) p = Math.min(0.97, p * 1.07);
     const fouled = this.rng.chance(clamp(pFoul, 0, 0.45));
     // 파울을 당하면 잘 안 들어간다 (컨택트 동작·컨택트 피니셔는 더 넣는다)
     if (fouled) p *= Math.min(0.92, (near ? 0.55 : 0.35) * (mfx.andOne ?? 1) * FX.contactAndOne[lv(h.pl, 'contact')]);
@@ -3371,7 +3387,7 @@ class GameSim {
     // 팁인: 골밑 공격수가 림 높이에서 건드려 넣는다
     if (!ph.steal && win.p.team === ph.shotTeam && b.z > 2.7 && dist(win.p.x, win.p.y, H.x, H.y) < 1.4) {
       const r = win.p.pl.r;
-      if (this.rng.chance(clamp(0.12 + (r.offReb + r.jump + r.layup - 180) / 300 + (win.p.pl.body.heightCm - 200) / 200, 0.04, 0.5))) {
+      if (this.rng.chance(clamp(0.17 + (r.offReb + r.jump + r.layup - 180) / 300 + (win.p.pl.body.heightCm - 200) / 200, 0.05, 0.55))) {
         this.secure(win.p, ph, true);
         return;
       }
@@ -3706,9 +3722,10 @@ class GameSim {
         this.act = { k: 'use', u: L.u, v: L.v, t: this.t };
       }
     } else if (play.stage === 'use') {
-      if (!play.screened && dist(d.x, d.y, s.x, s.y) < 1.3 && dist(h.x, h.y, s.x, s.y) < 2.3) {
+      // 몸이 부딪히면 (resolveContacts) 걸린다. 스치듯 아주 가까이 지나가도
+      if (!play.screened && dist(d.x, d.y, s.x, s.y) < 1.0 && dist(h.x, h.y, s.x, s.y) < 2.3) {
         play.screened = true;
-        this.screenContact(s, d, h);
+        this.screenContact(s, d, h, Math.hypot(s.vx, s.vy));
       }
       if (age > 0.6) {
         play.stage = 'roll';
@@ -3720,8 +3737,9 @@ class GameSim {
   }
 
   /** 스크린이 걸리는 순간: 무빙 스크린 / 스위치 / 걸려서 휘청 */
-  private screenContact(s: SP, d: SP, h: SP) {
-    if (this.rng.chance(0.08 * (1.4 - s.pl.r.iq / 100))) {
+  private screenContact(s: SP, d: SP, h: SP, sSpeed = 0) {
+    // 무빙 스크린 (M27): 움직이며 부딪히면 반칙이 잘 불린다
+    if (this.rng.chance(0.06 * (1.4 - s.pl.r.iq / 100) + (sSpeed > 1.2 ? 0.25 : 0))) {
       this.callFoul(s.i, d.i, 'screen');
       return;
     }
@@ -3767,15 +3785,19 @@ class GameSim {
       return;
     }
     const d = this.defenderOf(sh.i);
-    if (!play.screened && dist(d.x, d.y, s.x, s.y) < 1.2 && age > 0.3) {
+    if (!play.screened && dist(d.x, d.y, s.x, s.y) < 0.85 && age > 0.3) {
       play.screened = true;
-      if (this.rng.chance(0.75)) {
-        d.stun = clamp(0.3 + (s.pl.r.screen - d.pl.r.agility) / 200, 0.2, 0.7);
-        s.screenFlag = 0.5;
-        this.emit({ type: 'screen', team: s.team, player: s.i, other: d.i, pts: 0, text: `${s.pl.name}의 다운스크린` });
-        this.nextThink = Math.min(this.nextThink, this.t + 0.2);
-      }
+      this.downScreen(s, d);
     }
+  }
+
+  /** 다운스크린에 걸렸다 (M27: 몸이 부딪히면): 스크린·근력 vs 민첩·IQ */
+  private downScreen(s: SP, d: SP) {
+    if (!this.rng.chance(0.8)) return;
+    d.stun = clamp(0.3 + (s.pl.r.screen + s.pl.r.strength / 2 - d.pl.r.agility - d.pl.r.iq / 2) / 220, 0.2, 0.75);
+    s.screenFlag = 0.5;
+    this.emit({ type: 'screen', team: s.team, player: s.i, other: d.i, pts: 0, text: `${s.pl.name}의 다운스크린` });
+    this.nextThink = Math.min(this.nextThink, this.t + 0.2);
   }
 
   /** 드리블 핸드오프: 빅맨에게 공을 넘기고, 가드가 스치듯 받아 간다 */
@@ -4166,10 +4188,12 @@ class GameSim {
     let ly = H.y;
     let near = false;
     if (ph.k === 'air') {
-      // 공이 떨어질 자리로 (낮게 구르면 공을 쫓는다)
+      // 공이 떨어질 자리로 (낮게 구르면 공을 쫓는다). 리바운드를 잘하는 선수는 튀는 공을 빨리 읽는다 (M27)
       lx = ph.lx;
       ly = ph.ly;
-      near = this.ball.z < 1.4 ? dist(p.x, p.y, lx, ly) < 8 : dist(p.x, p.y, lx, ly) < 4.5 && this.t - ph.t > 0.15;
+      const sk = p.team === ph.shotTeam ? p.pl.r.offReb : p.pl.r.defReb;
+      const read = clamp(0.32 - (sk - 50) / 220, 0.02, 0.5);
+      near = this.ball.z < 1.4 ? dist(p.x, p.y, lx, ly) < 8 : dist(p.x, p.y, lx, ly) < 4.5 && this.t - ph.t > read;
     }
     if (near) {
       // 박스아웃에 걸린 공격수 (M26): 공 쪽을 막고 선 수비를 돌아가느라 늦다 (힘·공격 리바운드 vs 박스아웃·힘)
@@ -4183,7 +4207,7 @@ class GameSim {
           return;
         }
       }
-      this.setGoal(p, lx, ly, 1);
+      this.setGoal(p, lx, ly, ph.k === 'air' ? clamp(0.92 + ((p.team === ph.shotTeam ? p.pl.r.offReb : p.pl.r.defReb) - 50) / 400, 0.85, 1.08) : 1);
       return;
     }
     const dH = dist(p.x, p.y, H.x, H.y);
@@ -4329,7 +4353,8 @@ class GameSim {
       // 멀리 있으면 떨어져 막는다. 딥쓰리 사거리가 긴 선수는 더 멀리서부터 붙는다
       const far = 9.8 + this.rangeOf(m).extra * 1.3;
       if (Lm.u > far && !press) gap += Math.min(2.5, (Lm.u - far) * 0.6);
-      if (this.act.k === 'post' && this.ball.holder === m.i) gap = 0.55;
+      // 포스트 수비 (M27): 등 뒤에 붙어 몸으로 민다 (밀리느냐 버티느냐는 몸싸움)
+      if (this.act.k === 'post' && this.ball.holder === m.i) gap = 0.25;
       gx = mx + ux * gap;
       gy = my + uy * gap;
       urg = 1;
@@ -4473,8 +4498,9 @@ class GameSim {
       if (p.stun > 0) p.stun = Math.max(0, p.stun - DT);
       if (p.screenFlag > 0) p.screenFlag = Math.max(0, p.screenFlag - DT);
     }
-    // 서로 겹치지 않게 밀어낸다
-    const R = 0.62;
+    // 몸싸움 (M27): 서로 겹치지 않게 밀어낸다. 무겁고 힘세고 자세를 잡은 쪽이 덜 밀리고, 부딪힌 속도를 나눠 갖는다
+    for (const p of this.P) this.massK[p.i] = this.massOf(p);
+    this.touches.length = 0;
     for (let a = 0; a < 10; a++) {
       for (let b = a + 1; b < 10; b++) {
         const pa = this.P[a];
@@ -4482,20 +4508,184 @@ class GameSim {
         const dx = pb.x - pa.x;
         const dy = pb.y - pa.y;
         const d = Math.hypot(dx, dy);
+        const R = this.radOf(pa) + this.radOf(pb);
         if (d < R && d > 0.0001) {
-          const push = (R - d) / 2;
+          const ma = this.massK[a];
+          const mb = this.massK[b];
+          const ov = R - d;
           const nx = dx / d;
           const ny = dy / d;
-          pa.x -= nx * push;
-          pa.y -= ny * push;
-          pb.x += nx * push;
-          pb.y += ny * push;
+          const ka = mb / (ma + mb);
+          const kb = ma / (ma + mb);
+          pa.x -= nx * ov * ka;
+          pa.y -= ny * ov * ka;
+          pb.x += nx * ov * kb;
+          pb.y += ny * ov * kb;
+          const vn = (pb.vx - pa.vx) * nx + (pb.vy - pa.vy) * ny;
+          if (vn < 0) {
+            const j = (-vn * 0.25) / (1 / ma + 1 / mb);
+            pa.vx -= (j / ma) * nx;
+            pa.vy -= (j / ma) * ny;
+            pb.vx += (j / mb) * nx;
+            pb.vy += (j / mb) * ny;
+          }
+          if (pa.team !== pb.team) this.touches.push({ a, b, j: Math.max(0, -vn), nx, ny });
         }
       }
     }
     for (const p of this.P) {
       p.x = clamp(p.x, -1.2, COURT.length + 1.2);
       p.y = clamp(p.y, -1.4, COURT.width + 1.2);
+    }
+  }
+
+  /** 몸 반지름 (M27): 몸무게가 많이 나갈수록 넓다 */
+  private radOf(p: SP) {
+    return clamp(0.29 + (p.pl.body.weightKg - 95) / 520, 0.26, 0.36);
+  }
+
+  /**
+   * 몸싸움 무게 (M27): 몸무게 × 근력, 그리고 자세. 서서 스크린을 건 선수, 박스아웃·포스트에서 버티는 선수는 무겁다.
+   * 뜬 선수·휘청이는 선수는 가볍다
+   */
+  private massOf(p: SP) {
+    const r = p.pl.r;
+    let m = p.pl.body.weightKg * (0.7 + (ex(r.strength) / 100) * 0.6);
+    const ph = this.ph;
+    const play = this.play;
+    if (play && ((play.k === 'pnr' && play.scr === p.i && (play.stage === 'set' || play.stage === 'use')) || (play.k === 'pindown' && play.scr === p.i && play.stage === 'run'))) m *= 1.7 + r.screen / 200;
+    else if ((ph.k === 'shot' || ph.k === 'air') && p.team !== (ph.k === 'air' ? ph.shotTeam : this.off)) m *= 1.15 + ex(r.boxOut) / 250;
+    else if (ph.k === 'live' && this.act.k === 'post' && this.ball.holder >= 0) {
+      if (p.i === this.ball.holder) m *= 1.1 + r.postUp / 250;
+      else if (this.defenderOf(this.ball.holder) === p) m *= 1.1 + r.postD / 250;
+    }
+    if (p.stun > 0) m *= 0.6;
+    // 슛·덩크로 날아가는 선수는 이미 몸을 던졌다 (길을 지킨다), 리바운드로 뜬 선수는 조금 가볍다
+    const ph2 = this.ph;
+    if (((ph2.k === 'gather' || ph2.k === 'shot') && ph2.shooter === p.i) || this.t < p.slideUntil) m *= 6;
+    else if (this.zOf(p) > 0.08) m *= 0.8;
+    return m;
+  }
+
+  /** 부딪힌 짝마다 (M27): 스크린에 걸림, 돌파하다 부딪힘 (차징·블로킹·밀고 들어감·막힘), 포스트 밀어붙이기 */
+  private resolveContacts() {
+    if (this.ph.k !== 'live') return;
+    for (const tc of this.touches) {
+      const A = this.P[tc.a];
+      const B = this.P[tc.b];
+      const o = A.team === this.off ? A : B;
+      const d = o === A ? B : A;
+      const play = this.play;
+      // 스크린: 스크리너 몸에 공 가진 선수 (슈터) 수비가 걸렸다
+      if (play?.k === 'pnr' && (play.stage === 'use' || play.stage === 'set') && !play.screened && play.scr === o.i && this.ball.holder >= 0 && this.defenderOf(this.ball.holder) === d) {
+        play.screened = true;
+        this.screenContact(o, d, this.P[this.ball.holder], Math.hypot(o.vx, o.vy));
+        if (this.ph.k !== 'live') return;
+        continue;
+      }
+      if (play?.k === 'pindown' && play.stage === 'run' && !play.screened && play.scr === o.i && this.defenderOf(play.shooter) === d) {
+        play.screened = true;
+        this.downScreen(o, d);
+        continue;
+      }
+      // 돌파하다 수비와 부딪혔다
+      if (o.i === this.ball.holder && (this.act.k === 'drive' || this.act.k === 'move')) {
+        const key = o.i * 10 + d.i;
+        if (this.t - (this.contactAt.get(key) ?? -9) < 1.2) continue;
+        this.contactAt.set(key, this.t);
+        this.driveContact(o, d, tc.j);
+        if (this.ph.k !== 'live') return;
+      }
+    }
+    this.postBattle();
+  }
+
+  /**
+   * 돌파 접촉 (M27, 경기 난수): 자리를 잡고 선 도움 수비 (제한 구역 밖)와 세게 부딪히면 차징,
+   * 늦게 미끄러져 들어와 몸으로 막으면 블로킹 파울, 아니면 힘 대결: 이기면 밀고 들어가고 (수비가 밀려난다), 지면 막혀서 멈춘다
+   */
+  private driveContact(h: SP, d: SP, hit: number) {
+    if (hit < 1.2 || d.stun > 0) return;
+    const H = this.hoop(h.team);
+    const hh = Math.max(0.01, dist(h.x, h.y, H.x, H.y));
+    const hd = Math.max(0.01, dist(h.x, h.y, d.x, d.y));
+    const between = ((H.x - h.x) * (d.x - h.x) + (H.y - h.y) * (d.y - h.y)) / (hh * hd) > 0.45;
+    const dsp = Math.hypot(d.vx, d.vy);
+    const dH = dist(d.x, d.y, H.x, H.y);
+    const onBall = this.defenderOf(h.i) === d;
+    const set = between && dsp < 1.0 && dH > 1.25;
+    const dr = d.pl.r;
+    const hr = h.pl.r;
+    if (set && !onBall) {
+      const pc = clamp(0.06 + (hit - 0.9) * 0.05, 0.04, 0.26) * (0.6 + dr.iq / 100 * 0.6) * (1.3 - hr.iq / 200);
+      if (this.rng.chance(pc)) {
+        this.poseFx(d, ACT.FALL, 1.1);
+        this.callFoul(h.i, d.i, 'charge');
+        return;
+      }
+    } else if (between && dsp > 2.2) {
+      const pb = 0.045 * this.foulCare(d.pid) * (1.3 - dr.iq / 200);
+      if (this.rng.chance(pb)) {
+        this.poseFx(h, ACT.SHOVED, 0.5);
+        this.callFoul(d.i, h.i, 'block');
+        return;
+      }
+    }
+    if (!between) return;
+    // 힘 대결: 무게 (자세 포함)·근력, 그리고 부딪힌 세기
+    const mh = this.massK[h.i];
+    const md = this.massK[d.i];
+    // 수비 자리 잡기: 도움 수비는 헬프 수비·IQ (먼저 와서 버틴다), 앞을 막던 수비는 외곽 수비
+    const pos = onBall ? (ex(dr.perimeterD) - 55) / 350 : (dr.helpD + dr.iq - 110) / 260;
+    const edge = (mh - md) / (mh + md) + (ex(hr.strength) - ex(dr.strength)) / 400 + (hit - 1.8) * 0.04 - pos + (ex(hr.ballHandling) - 55) / 600 + this.rng.normal(0, 0.12);
+    // 앞을 막던 수비와는 늘 부딪히니 크게 이길 때만 보인다
+    const need = onBall ? 0.2 : 0.12;
+    if (edge > need) {
+      d.stun = Math.max(d.stun, 0.25 + Math.min(0.3, edge));
+      this.poseFx(d, ACT.SHOVED, 0.45);
+      this.poseFx(h, ACT.BUMP, 0.3);
+      this.emit({ type: 'contact', team: h.team, player: h.i, other: d.i, pts: 0, contact: 'shove', text: `${h.pl.name} 밀고 들어간다` });
+      this.shove = { by: h.i, t: this.t };
+      this.cnt.contacts = (this.cnt.contacts ?? 0) + 1;
+    } else if (edge < -need) {
+      h.lag = Math.max(h.lag, 0.25 + Math.min(0.3, -edge));
+      h.vx *= 0.3;
+      h.vy *= 0.3;
+      this.poseFx(h, ACT.SHOVED, 0.4);
+      this.poseFx(d, ACT.BUMP, 0.3);
+      this.emit({ type: 'contact', team: d.team, player: d.i, other: h.i, pts: 0, contact: 'stop', text: `${d.pl.name} 몸으로 돌파를 막았다` });
+      this.cnt.contacts = (this.cnt.contacts ?? 0) + 1;
+      // 막혔으니 다시 판단 (뒤로 빼서 쏘거나 빼 준다)
+      this.act = { k: 'hold', u: 0, v: 0, t: this.t };
+      this.nextThink = Math.min(this.nextThink, this.t + 0.15);
+    }
+  }
+
+  /** 포스트업 (M27): 등지고 밀어붙이는 만큼 골대로 다가간다. 많이 밀리면 화면에 보인다 */
+  private postBattle() {
+    if (this.act.k !== 'post' || this.ball.holder < 0) {
+      this.postFrom = null;
+      return;
+    }
+    const h = this.P[this.ball.holder];
+    const H = this.hoop(h.team);
+    const dH = dist(h.x, h.y, H.x, H.y);
+    if (!this.postFrom || this.postFrom.i !== h.i) {
+      this.postFrom = { i: h.i, d: dH, t: this.t, shown: false };
+      return;
+    }
+    const pf = this.postFrom;
+    if (pf.shown) return;
+    const d = this.defenderOf(h.i);
+    if (dist(d.x, d.y, h.x, h.y) > 1.0) return;
+    if (pf.d - dH > 1.1) {
+      pf.shown = true;
+      this.emit({ type: 'contact', team: h.team, player: h.i, other: d.i, pts: 0, contact: 'backdown', text: `${h.pl.name} 밀어붙인다` });
+      this.cnt.contacts = (this.cnt.contacts ?? 0) + 1;
+    } else if (this.t - pf.t > 1.5 && pf.d - dH < 0.45) {
+      pf.shown = true;
+      this.emit({ type: 'contact', team: d.team, player: d.i, other: h.i, pts: 0, contact: 'hold', text: `${d.pl.name} 버틴다` });
+      this.cnt.contacts = (this.cnt.contacts ?? 0) + 1;
     }
   }
 
