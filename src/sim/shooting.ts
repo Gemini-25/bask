@@ -1,5 +1,6 @@
 import { clamp } from '../core/math';
 import type { Player } from '../data/player';
+import type { RatingKey } from '../data/ratings';
 import { COURT, isThreeLocal } from './court';
 import type { ShotKind } from './types';
 
@@ -27,6 +28,13 @@ export function canDunk(p: Player, dist: number): boolean {
   const lift = p.r.jump + (p.body.heightCm - 190) * 1.6;
   return dist < 1.5 && p.r.dunk >= 45 && lift >= 52;
 }
+
+/** 슛 종류마다 성공률을 정하는 능력치 */
+export const SHOT_KEY: Record<ShotKind, RatingKey> = { dunk: 'dunk', layup: 'layup', floater: 'floater', hook: 'postUp', mid: 'midRange', three: 'three' };
+
+/** 엘리트 (M24): 80을 넘으면 제곱으로 커져 99에서 1. 99는 99답게 넣는다 */
+export const elite = (v: number) => clamp((v - 80) / 19, 0, 1) ** 2;
+const ELITE: Record<ShotKind, number> = { dunk: 0.05, layup: 0.15, hook: 0.15, floater: 0.15, mid: 0.11, three: 0.06 };
 
 /** 공격 방향 기준 좌표 (u, v)에서 이 선수가 던지는 슛 */
 /** 아주 높은 능력치는 효과가 조금 줄어든다 (75를 넘으면 0.75씩, M16에서 0.5 → 0.75: 99는 99답게) */
@@ -63,7 +71,8 @@ export function shotInfo(p: Player, u: number, v: number, post = false, contest 
     kind = 'three';
     pOpen = 0.385 + (r.three - 50) * 0.005 - Math.max(0, dist - 7.0 - range.extra) * 0.07 * range.slope;
   }
-  return { kind, dist, three, pts: three ? 3 : 2, pOpen: clamp(pOpen, 0.01, 0.97) };
+  pOpen += ELITE[kind] * elite(raw[SHOT_KEY[kind]]);
+  return { kind, dist, three, pts: three ? 3 : 2, pOpen: clamp(pOpen, 0.01, 0.985) };
 }
 
 /** 수비 견제(0~1)가 성공률을 얼마나 깎는지 */

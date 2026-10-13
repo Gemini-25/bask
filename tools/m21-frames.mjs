@@ -53,7 +53,7 @@ ims=[]
 for f,x,y,si,k in fs:
     im=Image.open(f); W,H=im.size; s=W/640
     cx=(40+x*20)*s; cy=(100+y*14)*s
-    box=(int(cx-45*s),int(cy-80*s),int(cx+45*s),int(cy+12*s))
+    hw=int(__import__("os").environ.get("WIDE","45")); box=(int(cx-hw*s),int(cy-80*s),int(cx+hw*s),int(cy+12*s))
     c=im.crop(box); c=c.resize((c.width*2,c.height*2),Image.NEAREST)
     ims.append((si,k,c))
 cw,ch=ims[0][2].size

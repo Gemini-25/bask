@@ -8,6 +8,7 @@ import { sound } from './view/sound';
 import type { SongId } from './view/music';
 import { campModal, minigameModal, miniFor, positionModal, streetModal } from './app/extras-ui';
 import { helpModal } from './app/help';
+import { runSkip, skipResultModal } from './app/skip';
 import { allStarModal, awardsModal, contractModal, draftModal, eventModal, pathModal, preGameModal, renderResult, retireModal, retireSummaryModal, seasonCardModal, weekModal } from './app/flow';
 import { checkAchievements, enshrine, hallOfFame, legacyBonus, retire, type LegacyBonus, type RetireSummary } from './career/legacy';
 import { teamInfoOf } from './career/match';
@@ -216,6 +217,20 @@ const home = new Home({
     if (mg) return minigameModal(mg, go);
     go();
   },
+  skip(span) {
+    const c = career!;
+    if (c.pathPending) return afterWeek();
+    runSkip(
+      c,
+      span,
+      (res) => {
+        save();
+        home.render(c);
+        skipResultModal(c, res, () => afterWeek());
+      },
+      (done) => eventModal(c, done),
+    );
+  },
   save(silent) {
     save();
     if (!silent) toast('저장했어');
@@ -396,6 +411,7 @@ function preGame() {
       closeModal();
       finishMatch();
     },
+    match,
   );
 }
 

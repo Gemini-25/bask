@@ -1,7 +1,7 @@
-// 경기 중 선수 머리 위 이름표 (보기만 바뀐다): 등번호 / 이름 / 끔. 브라우저에 기억한다
-export type LabelMode = 'number' | 'name' | 'off';
+// 경기 중 선수 머리 위 이름표 (보기만 바뀐다): 등번호 / 이름 / 역할 (M24) / 끔. 브라우저에 기억한다
+export type LabelMode = 'number' | 'name' | 'role' | 'off';
 const KEY = 'bask.labels';
-const MODES: LabelMode[] = ['number', 'name', 'off'];
+const MODES: LabelMode[] = ['number', 'name', 'role', 'off'];
 
 function load(): LabelMode {
   try {
@@ -23,7 +23,7 @@ export function setLabelMode(m: LabelMode) {
   }
 }
 
-/** 번호 → 이름 → 끔 → 번호 */
+/** 번호 → 이름 → 역할 → 끔 → 번호 */
 export function nextLabelMode(): LabelMode {
   const m = MODES[(MODES.indexOf(LABELS.mode) + 1) % MODES.length];
   setLabelMode(m);

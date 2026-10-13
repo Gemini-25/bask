@@ -2,10 +2,10 @@
 // 경기는 결과만 보고, 이벤트는 첫 선택지, 드래프트·시상·올스타 화면은 건너뛴다.
 import { overall } from '../data/player';
 import { RATING_KEYS, type RatingKey } from '../data/ratings';
-import { costOf, dateOf, FOCUS, invest, mentorReady, POINT_OF, type ActionId, type Career, type FocusId } from './career';
+import { actionById, canDo, costOf, dateOf, FOCUS, invest, mentorReady, POINT_OF, type ActionId, type Career, type FocusId } from './career';
 import { buy, has, itemDef } from './money';
 import { collegeOffers, declareDraft, enterCollege, stayInCollege } from './college';
-import { resolveEvent } from './events';
+import { eventById, fill, resolveEvent } from './events';
 import { answerPosition, applyStreet, CAMPS, campCost, canCamp, runCamp, runStreet, type CampDef } from './extras';
 import { applyMatch, playMatch } from './match';
 import { contractOffers, signContract } from './pro';
@@ -190,4 +190,210 @@ export function autoWeek(c: Career, policy: AutoPolicy, opts: { invest?: boolean
   }
   if (policy === 'good') autoShop(c);
   return { stopped: null, notes, games };
+}
+
+// ───────────── 일정 건너뛰기 (M24) ─────────────
+
+/** 건너뛰는 동안 훈련: 알아서 (피로·컨디션 관리하며 고르게, 돈은 안 쓴다) 또는 고른 훈련 반복 */
+export type SkipRoutine = 'auto' | { repeat: ActionId; focus?: FocusId };
+
+export interface SkipOpts {
+  /** 몇 주, 다음 경기 전까지, 시즌 끝까지 */
+  span: number | 'game' | 'season';
+  routine: SkipRoutine;
+  /** 경기 앞에서 멈출지: 모든 경기, 큰 경기 (결승·플레이오프·올스타·국가대표)만, 안 멈춤 (결과만) */
+  stopGames: 'all' | 'big' | 'none';
+  /** 이벤트에서 멈춰 직접 고른다 (아니면 첫 선택지) */
+  stopEvents: boolean;
+  /** 포인트 자동 투자 */
+  invest: boolean;
+}
+
+export type SkipStop = 'game' | 'event' | 'draft' | 'path' | 'contract' | 'allstar' | 'season' | 'retire' | 'camp' | 'position' | 'injury';
+export const SKIP_STOP_LABEL: Record<SkipStop, string> = {
+  game: '경기가 남아 있다',
+  event: '이벤트가 생겼다',
+  draft: '드래프트',
+  path: '진로를 정할 때',
+  contract: '계약할 때',
+  allstar: '올스타 위크엔드',
+  season: '시즌이 끝났다',
+  retire: '은퇴 고민',
+  camp: '전지훈련을 고를 때',
+  position: '감독의 포지션 제안',
+  injury: '부상',
+};
+
+export interface SkipGame {
+  label: string;
+  opponent: string;
+  won: boolean;
+  score: [number, number];
+  pts: number;
+  reb: number;
+  ast: number;
+  played: boolean;
+}
+
+export interface SkipResult {
+  weeks: number;
+  from: number;
+  to: number;
+  games: SkipGame[];
+  notes: string[];
+  stopped: SkipStop | null;
+  ovr: [number, number];
+  ups: Partial<Record<RatingKey, number>>;
+}
+
+const BIG_GAME = /플레이오프|챔피언|결승|왕중왕|올스타/;
+export function isBigGame(g: { label: string; special?: string } | null): boolean {
+  return !!g && (!!g.special || BIG_GAME.test(g.label));
+}
+
+/** 건너뛰는 동안 이번 주 행동 */
+export function skipAction(c: Career, routine: SkipRoutine): { id: ActionId; focus?: FocusId } {
+  if (c.injury) return { id: 'rehab' };
+  // 고른 훈련을 못 하는 주 (돈이 모자라거나 은사를 이미 만났거나)엔 알아서
+  if (routine !== 'auto' && canDo(c, actionById(routine.repeat))) return c.fatigue > 62 ? { id: 'rest' } : { id: routine.repeat, focus: routine.focus };
+  if (c.fatigue > 50) return { id: 'rest' };
+  if (c.condition <= 1) return { id: 'friends' };
+  const focus = bestFocus(c);
+  if (mentorReady(c)) return { id: 'mentor', focus };
+  if (c.trust < 55) return { id: 'team' };
+  return c.week % 3 === 2 ? { id: 'team' } : { id: 'solo', focus };
+}
+
+/**
+ * 정한 만큼 주를 넘긴다. 사람이 봐야 할 화면이 생기면 그 앞에서 멈춘다 (그 화면은 남겨 둔다).
+ * 화면이 멈추지 않게 한 주씩 (step) 돌릴 수 있다
+ */
+export class SkipRun {
+  readonly res: SkipResult;
+  finished = false;
+  /** 다음 step: 새 주를 보낸다, 또는 이벤트 뒤 이 주 남은 일 */
+  private stage: 'week' | 'rest' = 'week';
+  private readonly limit: number;
+  private readonly yearBefore: number;
+  private readonly r0: Record<RatingKey, number>;
+
+  constructor(
+    private readonly c: Career,
+    private readonly o: SkipOpts,
+    maxWeeks = 60,
+  ) {
+    const ovr0 = overall(c.me, c.prefPos);
+    this.res = { weeks: 0, from: c.week, to: c.week, games: [], notes: [], stopped: null, ovr: [ovr0, ovr0], ups: {} };
+    this.limit = typeof o.span === 'number' ? o.span : maxWeeks;
+    this.yearBefore = dateOf(c.week).year;
+    this.r0 = { ...c.me.r };
+    // 시작할 때 남아 있는 것부터
+    const first = this.pending() ?? (c.pendingEvent && o.stopEvents ? 'event' : null) ?? this.games();
+    if (first) this.done(first);
+  }
+
+  /** 끝까지 돌린다 */
+  run(): SkipResult {
+    while (!this.finished) this.step();
+    return this.res;
+  }
+
+  /** 이벤트를 사람이 고른 뒤 그 주 남은 일 (경기 등)부터 이어 간다 */
+  resume() {
+    if (!this.finished || this.res.stopped !== 'event' || this.c.pendingEvent) return;
+    this.finished = false;
+    this.res.stopped = null;
+  }
+
+  /** 한 주. 끝났으면 true */
+  step(): boolean {
+    if (this.finished) return true;
+    const { c, o, res } = this;
+    if (this.stage === 'week') {
+      if (res.weeks >= this.limit) return this.done(null);
+      const injuredBefore = !!c.injury;
+      const a = skipAction(c, o.routine);
+      const r = playWeek(c, a.id, a.focus);
+      res.weeks++;
+      res.notes.push(...r.notes);
+      if (r.injured && !injuredBefore) res.notes.push(`부상: ${r.injured.name} (${r.injured.weeks}주)`);
+      if (c.streetPending) res.notes.push(...applyStreet(c, runStreet(c)));
+      if (c.pendingEvent) {
+        if (o.stopEvents) {
+          // 고르고 나면 (resume) 이 주 남은 일부터
+          this.stage = 'rest';
+          return this.done('event');
+        }
+        const def = eventById(c.pendingEvent.id);
+        const ev = c.pendingEvent;
+        const out = resolveEvent(c, ev, 0);
+        if (def) res.notes.push(`이벤트 「${fill(c, def.title, ev.mate)}」 → ${fill(c, def.choices[0].label, ev.mate)}${out.length ? ` (${out.join(' · ')})` : ''}`);
+        c.pendingEvent = null;
+      }
+    }
+    this.stage = 'week';
+    const p0 = this.pending();
+    if (p0) return this.done(p0);
+    if (o.span === 'game' && c.pendingGame) return this.done('game');
+    const g = this.games();
+    if (g) return this.done(g);
+    const p1 = this.pending();
+    if (p1) return this.done(p1);
+    if (o.invest) autoInvest(c);
+    if (o.span === 'season' && dateOf(c.week).year !== this.yearBefore) return this.done('season');
+    if (res.weeks >= this.limit) return this.done(null);
+    return false;
+  }
+
+  /** 사람이 중간에 멈춘다 */
+  stopNow() {
+    this.done(null);
+  }
+
+  private done(s: SkipStop | null): true {
+    const { c, res } = this;
+    this.finished = true;
+    res.stopped = s;
+    res.to = c.week;
+    res.ovr[1] = overall(c.me, c.prefPos);
+    res.ups = {};
+    for (const k of RATING_KEYS) if (c.me.r[k] !== this.r0[k]) res.ups[k] = c.me.r[k] - this.r0[k];
+    return true;
+  }
+
+  /** 사람이 봐야 할 화면 */
+  private pending(): SkipStop | null {
+    const c = this.c;
+    if (c.retired) return 'retire';
+    if (c.pathPending) return 'path';
+    if (c.draft) return 'draft';
+    if (c.ceremony) return 'season';
+    if (c.retirePending && c.pro) return 'retire';
+    if (c.contractPending && c.pro) return 'contract';
+    if (c.allStar?.unseen) return 'allstar';
+    if (c.campPending) return 'camp';
+    if (c.posOffer) return 'position';
+    return null;
+  }
+
+  /** 경기를 치른다 (멈출 경기면 멈춘다) */
+  private games(): SkipStop | null {
+    const { c, o, res } = this;
+    while (c.pendingGame) {
+      if (o.stopGames === 'all' || (o.stopGames === 'big' && isBigGame(c.pendingGame))) return 'game';
+      const g = c.pendingGame;
+      const m = playMatch(c);
+      const rep = applyMatch(c, m);
+      const notes = afterGame(c);
+      res.games.push({ label: g.label, opponent: g.opponent, won: rep.won, score: rep.score, pts: rep.line?.pts ?? 0, reb: rep.line?.reb ?? 0, ast: rep.line?.ast ?? 0, played: !!rep.line && rep.line.sec > 0 });
+      res.notes.push(...rep.abilityNotes, ...notes);
+      if (rep.injured) res.notes.push(`부상: ${rep.injured.name} (${rep.injured.weeks}주)`);
+      if (o.invest) autoInvest(c);
+    }
+    return null;
+  }
+}
+
+export function skipWeeks(c: Career, o: SkipOpts, maxWeeks = 60): SkipResult {
+  return new SkipRun(c, o, maxWeeks).run();
 }

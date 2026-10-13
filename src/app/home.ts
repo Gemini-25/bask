@@ -48,9 +48,13 @@ import { minutesText } from '../sim/stats';
 import { numberColorFor } from '../view/pixel';
 import { $, esc, toast } from './dom';
 import { figureCanvas } from './figure';
+import { skipSettingsModal, skipSummary } from './skip';
+import { archetype, DEF_LABEL, lineupRoles, ROLE_DESC, ROLE_LABEL } from '../sim/roles';
 
 export interface HomeActions {
   doWeek(id: ActionId, focus?: FocusId): void;
+  /** 일정 건너뛰기 (M24) */
+  skip(span: number | 'game' | 'season'): void;
   playGame(): void;
   save(silent?: boolean): void;
   exportFile(): void;
@@ -149,6 +153,15 @@ export class Home {
     return w === 1 ? `<b class="hot">이번 주말 ${esc(n.label)}${opp}</b>` : `다음 경기: <b>${esc(n.label)}</b>${opp} · ${w}주 뒤`;
   }
 
+  /** 팀에서 맡은 역할 (M24): 주전이면 주전 다섯 명 안에서, 벤치면 혼자 본 성향 */
+  private roleLine(team: ReturnType<typeof myTeam>) {
+    const me = team.meIndex;
+    if (me < 0) return '';
+    const key = me < 5 ? lineupRoles(team.team.players.slice(0, 5))[me] : null;
+    const k = key ? key.key : archetype(team.team.players[me]);
+    return `<div class="prole" title="${esc(ROLE_DESC[k])}${key ? ` · ${esc(key.jobs.join(' · '))}` : ''}">역할 <b>${ROLE_LABEL[k]}</b>${key ? ` · ${DEF_LABEL[key.def]}` : ' <small class="muted">(벤치)</small>'}</div>`;
+  }
+
   private renderCard() {
     const c = this.c!;
     const school = teamInfoOf(c, c.pro ? c.pro.team : c.school);
@@ -164,6 +177,7 @@ export class Home {
       ${c.nickname ? `<div class="pnick">'${esc(c.nickname)}'</div>` : ''}
       <div class="psub">${c.pro ? `${c.me.age ?? ''}살 · ${c.pro.pickNo}순위 출신` : dateText(c.week).split(' ')[0]} · ${POSITION_LABEL[c.prefPos]} · ${esc(backgroundById(c.background).label)}</div>
       <div class="povr"><span>종합</span><b>${myOverall(c).toFixed(0)}</b><small>감독 평가: ${role}</small></div>
+      ${this.roleLine(team)}
       ${inj}
       <div class="meter"><span>컨디션</span><b style="color:${COND_COLOR[c.condition]}">${CONDITION_LABEL[c.condition]}</b><span class="dots">${[0, 1, 2, 3, 4].map((i) => `<i class="${i <= c.condition ? 'on' : ''}" style="${i <= c.condition ? `background:${COND_COLOR[c.condition]}` : ''}"></i>`).join('')}</span></div>
       <div class="meter"><span>피로</span><b>${Math.round(c.fatigue)}</b><span class="bar"><i style="width:${c.fatigue}%;background:${fatigueColor(c.fatigue)}"></i></span></div>
@@ -384,7 +398,8 @@ export class Home {
       })
       .join('');
     const last = c.log.slice(-1)[0];
-    return `<div class="acts">${cards}</div>
+    const skip = `<div class="skipbar"><div><b>⏩ 일정 건너뛰기</b><small class="muted">${esc(skipSummary(c))}</small></div><div class="skipbtns"><button type="button" data-skip="1">1주</button><button type="button" data-skip="4">4주</button><button type="button" data-skip="game">다음 경기까지</button><button type="button" data-skip="season">시즌 끝까지</button><button type="button" data-a="skipset" title="훈련 방식, 멈출 곳">⚙ 설정</button></div></div>`;
+    return `${skip}<div class="acts">${cards}</div>
       <p class="hint">피로가 쌓이면 부상 확률이 오르고 컨디션이 떨어진다. 컨디션이 좋으면 훈련 효율이 오르고 경기에서도 잘한다. 피로는 매주 조금씩 저절로 풀린다.${last ? ` · 지난주: ${esc(ACTIONS.find((x) => x.id === last.action)!.label)}` : ''}</p>`;
   }
 
@@ -436,24 +451,27 @@ export class Home {
     const gradeOf = new Map(c.roster.map((e) => [e.player.id, e.grade]));
     const ageCol = (p: { id: string; age?: number }) => (c.pro ? `${p.id === 'me' ? c.me.age : p.age}살` : `${p.id === 'me' ? Math.floor(c.week / 48) + 1 : gradeOf.get(p.id)}학년`);
     const inTeam = new Set(team.players.map((p) => p.id));
+    const roles = lineupRoles(team.players.slice(0, 5));
     const rows = team.players
       .map((p, i) => {
         const role = i < 5 ? '주전' : i === 5 ? '식스맨' : '벤치';
+        const rk = i < 5 ? roles[i].key : archetype(p);
+        const job = `<td title="${esc(ROLE_DESC[rk])}${i < 5 ? ` · ${esc(roles[i].jobs.join(' · '))}` : ''}" class="${i < 5 ? '' : 'muted'}">${ROLE_LABEL[rk]}${i < 5 ? `<small> · ${DEF_LABEL[roles[i].def]}</small>` : ''}</td>`;
         const me = p.id === 'me';
         const fr = me ? '' : this.heart(c.friends[p.id] ?? 0);
         const cb = c.combos?.find((x) => x.mate === p.id);
-        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td><td>${ageCol(p)}</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}${cb ? ` <b class="tagcb" title="${COMBO_LABEL[cb.kind]}">🤝</b>` : ''}<button type="button" class="edpick" data-edit="${me ? 'me' : `mate:${p.id}`}" title="에디터로 고치기">✏️</button></td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
+        return `<tr class="${me ? 'me' : ''}"><td>${role}</td><td>${p.pos}</td>${job}<td>${ageCol(p)}</td><td class="nm"><span class="no">${p.number}</span>${esc(p.name)}${me ? ' <b class="tagme">나</b>' : ''}${cb ? ` <b class="tagcb" title="${COMBO_LABEL[cb.kind]}">🤝</b>` : ''}<button type="button" class="edpick" data-edit="${me ? 'me' : `mate:${p.id}`}" title="에디터로 고치기">✏️</button></td><td>${p.body.heightCm}</td><td><b>${overall(p, p.pos).toFixed(0)}</b></td><td class="hrt">${fr}</td></tr>`;
       })
       .join('');
     const out = c.roster
       .filter((e) => !inTeam.has(e.player.id))
-      .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}<button type="button" class="edpick" data-edit="mate:${e.player.id}" title="에디터로 고치기">✏️</button></td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td><td class="hrt">${this.heart(c.friends[e.player.id] ?? 0)}</td></tr>`)
+      .map((e) => `<tr class="dim"><td>명단 외</td><td>${e.player.pos}</td><td>${ROLE_LABEL[archetype(e.player)]}</td><td>${e.grade}학년</td><td class="nm"><span class="no">${e.player.number}</span>${esc(e.player.name)}<button type="button" class="edpick" data-edit="mate:${e.player.id}" title="에디터로 고치기">✏️</button></td><td>${e.player.body.heightCm}</td><td>${overall(e.player).toFixed(0)}</td><td class="hrt">${this.heart(c.friends[e.player.id] ?? 0)}</td></tr>`)
       .join('');
-    const meOut = c.injury ? `<tr class="me dim"><td>부상</td><td>${c.prefPos}</td><td></td><td class="nm"><span class="no">${c.me.number}</span>${esc(c.me.name)} <b class="tagme">나</b></td><td>${c.me.body.heightCm}</td><td>${myOverall(c).toFixed(0)}</td><td></td></tr>` : '';
+    const meOut = c.injury ? `<tr class="me dim"><td>부상</td><td>${c.prefPos}</td><td>${ROLE_LABEL[archetype(c.me)]}</td><td></td><td class="nm"><span class="no">${c.me.number}</span>${esc(c.me.name)} <b class="tagme">나</b></td><td>${c.me.body.heightCm}</td><td>${myOverall(c).toFixed(0)}</td><td></td></tr>` : '';
     const combos = (c.combos ?? []).length
       ? `<p class="combos">${c.combos.map((cb) => `🤝 <b>${esc(cb.name)}</b> ${COMBO_LABEL[cb.kind]}`).join(' · ')}</p>`
       : `<p class="hint">친밀도가 ${80} 넘는 팀원과는 콤비가 생긴다 (두 명까지). 같이 코트에 있으면 그 플레이를 더 자주, 더 잘 한다.</p>`;
-    return `<p class="muted coach">감독 <b class="ink">${esc(c.coach)}</b> · 신뢰도 ${Math.round(c.trust)}</p>${combos}<div class="tablewrap"><table class="ttable"><tr><th>역할</th><th>포지션</th><th>${c.pro ? '나이' : '학년'}</th><th class="nm">선수</th><th>키</th><th>종합</th><th>친밀도</th></tr>${rows}${meOut}${out}</table></div>
+    return `<p class="muted coach">감독 <b class="ink">${esc(c.coach)}</b> · 신뢰도 ${Math.round(c.trust)}</p>${combos}<div class="tablewrap"><table class="ttable"><tr><th>출전</th><th>포지션</th><th title="감독이 작전을 짤 때 맡기는 일 (주전 다섯 명 기준, 벤치는 혼자 본 성향)">역할</th><th>${c.pro ? '나이' : '학년'}</th><th class="nm">선수</th><th>키</th><th>종합</th><th>친밀도</th></tr>${rows}${meOut}${out}</table></div>
       <p class="hint">감독은 포지션마다 종합 능력치가 가장 높은 선수를 주전으로 쓴다. 선호 포지션이 아니어도 팀 사정에 따라 다른 자리에 설 수 있다. 연습경기에선 신입생도 식스맨으로 기회를 받는다.</p>`;
   }
 
@@ -551,6 +569,17 @@ export class Home {
       else go();
       return;
     }
+    const sk = t.closest('[data-skip]') as HTMLElement | null;
+    if (sk) {
+      if (Object.values(this.pending).some((n) => n)) {
+        toast('능력치 투자를 먼저 확정하거나 초기화해줘');
+        this.tab = 'stats';
+        return this.render(c);
+      }
+      if (this.busy) return;
+      const v = sk.dataset.skip!;
+      return this.act.skip(v === 'game' || v === 'season' ? v : Number(v));
+    }
     const wg = t.closest('[data-watchg]') as HTMLElement | null;
     if (wg) {
       const [a, b] = wg.dataset.watchg!.split('|');
@@ -606,6 +635,11 @@ export class Home {
         return this.act.save();
       case 'game':
         return this.act.playGame();
+      case 'skipset':
+        return skipSettingsModal(c, () => {
+          this.act.save(true);
+          this.renderTab();
+        });
       case 'export':
         return this.act.exportFile();
       case 'title':

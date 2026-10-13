@@ -3,6 +3,7 @@ import { COURT } from '../sim/court';
 import { DEEP_DIST, LOGO_DIST } from '../sim/shooting';
 import { ACT, DUNK_LABEL, FLAG_CUT, FLAG_STUN, PLAY_LABEL, type GameEvent } from '../sim/types';
 import { shotMove } from '../data/moves';
+import { lineupRoles, ROLE_SHORT, type Role } from '../sim/roles';
 import { LABELS, TACTICS } from './labels';
 import { drawArena, drawCheerBanner, drawCrowd, drawHoopBack, drawHoopFront, drawJumbotron, makeCrowd, paintColors, type ArenaDeco, type CrowdMood } from './arena';
 import { drawBall, drawBenchFigure, drawFigure, drawFigureRig, reachPx, type Facing, type Kit } from './character';
@@ -254,6 +255,20 @@ export class CourtScene extends Phaser.Scene {
     });
   }
 
+  /** 지금 다섯 명씩의 역할 (M24, 라인업마다 한 번) */
+  private roleCache = new WeakMap<object, Role[]>();
+  private rolesOf(lineup: { pids: number[] }): Role[] {
+    let r = this.roleCache.get(lineup);
+    if (!r) {
+      const ps = this.host.pb!.game.players;
+      const a = lineup.pids.slice(0, 5).map((p) => ps[p]);
+      const b = lineup.pids.slice(5, 10).map((p) => ps[p]);
+      r = [...lineupRoles(a, b), ...lineupRoles(b, a)];
+      this.roleCache.set(lineup, r);
+    }
+    return r;
+  }
+
   private kit(team: 0 | 1): Kit {
     const l = this.host.looks[team];
     return { jersey: l.fill, trim: l.num };
@@ -302,6 +317,7 @@ export class CourtScene extends Phaser.Scene {
     this.clock = time / 1000;
     const fr = pb.sample();
     const lineup = pb.lineupAt(pb.cur);
+    const roles = this.rolesOf(lineup);
     const rec = pb.game.rec;
     const f0 = Math.floor(pb.cur);
     const f1 = Math.min(rec.n - 1, f0 + 1);
@@ -538,6 +554,7 @@ export class CourtScene extends Phaser.Scene {
           // 머리 위 이름표: 등번호는 도트 숫자, 이름은 글자 객체 (아래에서)
           if (labelMode === 'number' && !emoting) this.numberTag(ctx, px, top - 8, pl.number, team);
           if (labelMode === 'name') tags[i] = { x: px, y: top - (emoting ? 13 : 2), name: pl.name, team };
+          if (labelMode === 'role') tags[i] = { x: px, y: top - (emoting ? 13 : 2), name: `${pl.number} ${ROLE_SHORT[roles[i].key]}`, team };
           if (DEV.stamina) {
             ctx.font = '7px monospace';
             ctx.textAlign = 'center';
@@ -636,7 +653,7 @@ export class CourtScene extends Phaser.Scene {
     if (focusRef.v) {
       const { x, y } = focusRef.v;
       // 이름표가 있으면 그 위에
-      const lift = labelMode === 'number' ? 8 : labelMode === 'name' ? 12 : 0;
+      const lift = labelMode === 'number' ? 8 : labelMode === 'name' || labelMode === 'role' ? 12 : 0;
       const yy = y - 4 - lift - (Math.floor(this.clock * 4) % 2);
       ctx.fillStyle = '#1b1f2a';
       ctx.fillRect(x - 3, yy - 1, 7, 1);

@@ -12,7 +12,8 @@ import { DUNKS, dunkUnlocked } from '../data/dunks';
 import { overall, POS_GROUP, type Player } from '../data/player';
 import type { Team } from '../data/teams';
 import { COURT, hoopXY, MID_Y, toLocal, toWorld } from './court';
-import { canDunk, contestFactor, DEEP_DIST, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
+import { carryScore, creation as creationOf } from './roles';
+import { canDunk, contestFactor, DEEP_DIST, elite, SHOT_KEY, SHOT_LABEL, shotInfo, type Range, type ShotInfo } from './shooting';
 import {
   FLAG_CUT,
   FLAG_SCREEN,
@@ -45,7 +46,6 @@ const ELITE = 0.8;
 const ex = (v: number) => v + Math.max(0, v - 80) * ELITE;
 /** 슈퍼스타 보정 최대 (팀 슛 몫을 이만큼 더 가져가도 된다) */
 const STAR_MAX = 0.15;
-const SHOT_KEY: Record<ShotInfo['kind'], RatingKey> = { dunk: 'dunk', layup: 'layup', floater: 'floater', hook: 'postUp', mid: 'midRange', three: 'three' };
 /** 슛 동작 없이 그냥 던지는 무게 (동작 무게 합과 비교) */
 const NO_MOVE_W = 3.2;
 
@@ -146,6 +146,9 @@ interface SP {
   qAct: number;
   qAt: number;
   qDur: number;
+  /** 화면용 위치 (M24): 다음 틱들에 실제 자리 대신 기록할 x, y (덩크 도약 비행) */
+  vq: number[] | null;
+  vqN: number;
 }
 
 type Phase =
@@ -527,6 +530,8 @@ class GameSim {
       qAct: 0,
       qAt: 0,
       qDur: 0,
+      vq: null,
+      vqN: 0,
     };
     this.applyPlayer(sp, pid);
     return sp;
@@ -606,7 +611,7 @@ class GameSim {
   /** 공을 주로 운반하는 선수 (볼핸들링 + 패스가 가장 좋은 선수) */
   private primary(team: Side): SP {
     let best = this.mates(team)[0];
-    for (const p of this.mates(team)) if (p.pl.r.ballHandling + p.pl.r.passing > best.pl.r.ballHandling + best.pl.r.passing) best = p;
+    for (const p of this.mates(team)) if (carryScore(p.pl) > carryScore(best.pl)) best = p;
     return best;
   }
   private zoneOn(team: Side) {
@@ -707,7 +712,13 @@ class GameSim {
         this.poseFx(p, p.qAct, p.qDur);
         p.qAct = 0;
       }
-      this.rPos.push(p.x, p.y);
+      if (p.vq?.length) {
+        // 도약 비행 (M24): 화면에서만 미리 정한 길로, 끝으로 갈수록 실제 자리에 섞는다
+        const k = (p.vqN - p.vq.length / 2 + 1) / (p.vqN + 1);
+        const w = k * k;
+        this.rPos.push(p.vq[0] + (p.x - p.vq[0]) * w, p.vq[1] + (p.y - p.vq[1]) * w);
+        p.vq.splice(0, 2);
+      } else this.rPos.push(p.x, p.y);
       let f = 0;
       if (p.stun > 0) f |= FLAG_STUN;
       if (this.ph.k === 'gather' && this.ph.shooter === p.i) f |= FLAG_SHOOT;
@@ -1312,7 +1323,7 @@ class GameSim {
         if (clutch) p += (r.composure - 50) * 0.002 + lv(s.pl, 'clutch') * 0.01 - (lv(s.pl, 'chicken') ? 0.05 : 0);
         if (lv(s.pl, 'ftPhobia')) p -= 0.12;
         p *= 0.94 + 0.06 * this.fit(s);
-        ph.prob = clamp(p, 0.3, 0.97);
+        ph.prob = clamp(p, 0.3, 0.97 + 0.02 * elite(r.freeThrow));
         ph.made = this.rng.chance(ph.prob);
         this.jumpFx(s, 0.08, 0.5, ACT.SHOOT);
         ph.stage = 'flight';
@@ -2210,6 +2221,185 @@ class GameSim {
     }
   }
 
+  /** 덩크 도약 거리 (M24, 화면용 m): 점프·스피드가 좋을수록, 속공일수록, 화려한 덩크일수록 멀리서 뛴다 */
+  private takeoffDist(h: SP, act: number, fast: boolean): number {
+    const r = h.pl.r;
+    if (act === ACT.FTLINE) return 4.3 + Math.max(0, r.jump - 85) * 0.01;
+    let d = 1.4 + Math.max(0, r.jump - 40) * 0.024 + Math.max(0, r.speed - 50) * 0.01 + (fast ? 0.4 : 0);
+    if (act === ACT.SUPERMAN) d += 0.9;
+    else if (act === ACT.WINDMILL || act === ACT.D360 || act === ACT.TOMAHAWK || act === ACT.CRADLE || act === ACT.BETWEEN || act === ACT.DOUBLE) d += 0.3;
+    else if (act === ACT.POSTER || act === ACT.HAMMER) d += 0.25;
+    else if (act === ACT.REVERSE) d -= 0.25;
+    else if (act === ACT.CDUNK) d -= 0.35;
+    return clamp(d, 1.2, 4.0);
+  }
+
+  /** 덩크 (M24, 화면용): 멀리서 뛰어 림까지 날아가 꽂는다 */
+  private glideDunk(h: SP, ph: Extract<Phase, { k: 'gather' }>, act: number, flight: number, w: { x: number; y: number }, fast: boolean) {
+    const D = this.takeoffDist(h, act, fast);
+    const jump = h.pl.r.jump;
+    this.glide(h, ph, act, {
+      tS: this.t + flight,
+      end: w,
+      D,
+      // 체공 시간: 멀리서 뛸수록, 점프가 좋을수록 길다
+      air: (d) => clamp(0.62 + (jump - 50) / 400 + (d - 1.5) * 0.09, 0.62, 1.05),
+      // 동작의 앞 2할은 두 발을 모으는 시간 (도약은 동작 0.2, 꽂기는 0.9)
+      ground: 0.286,
+      jh: this.dunkHeight(h, ph.move),
+      peak: 1,
+    });
+  }
+
+  /** 레이업 (M24, 화면용): 한두 걸음 앞에서 떠서 림 앞까지 날아가 올려놓는다 */
+  private glideLayup(h: SP, ph: Extract<Phase, { k: 'gather' }>, act: number, flight: number, fast: boolean) {
+    const r = h.pl.r;
+    const H = this.hoop(h.team);
+    const tS = this.t + flight * 0.4;
+    // 손을 떠날 때 있을 자리 (지금 움직임대로)
+    let ex = h.x + h.vx * flight * 0.4;
+    let ey = h.y + h.vy * flight * 0.4;
+    const de = dist(ex, ey, H.x, H.y);
+    if (de < 0.45) {
+      ex = H.x + ((ex - H.x) / Math.max(0.01, de)) * 0.45;
+      ey = H.y + ((ey - H.y) / Math.max(0.01, de)) * 0.45;
+    }
+    const D = clamp(1.25 + Math.max(0, r.jump - 40) * 0.01 + Math.max(0, r.speed - 50) * 0.008 + (fast ? 0.3 : 0) + (act === ACT.FINGER ? 0.25 : 0), 1.1, 2.6);
+    this.glide(h, ph, act, {
+      tS,
+      end: { x: ex, y: ey },
+      D,
+      air: (d) => clamp(0.36 + r.jump / 600 + (d - 1.2) * 0.08, 0.34, 0.6),
+      // 레이업 동작: 도약 0.3, 손을 떠나는 때 0.55
+      ground: 1.2,
+      jh: 0.55 + r.jump / 300,
+      peak: 1.15,
+    });
+  }
+
+  /**
+   * 도약 (M24, 화면용): 도약 자리에서 떠서 날아간다.
+   * 달려온 길은 그대로, 시간만 다시 나눈다: 도약 전엔 두 발을 모으며 속도를 줄이고, 도약부터 끝날 때까지 고르게 날아간다.
+   * 기록된 위치·높이·동작만 고친다 (경기 결과에는 영향이 없다)
+   */
+  private glide(
+    h: SP,
+    ph: Extract<Phase, { k: 'gather' }>,
+    act: number,
+    o: { tS: number; end: { x: number; y: number }; D: number; air: (d: number) => number; ground: number; jh: number; peak: number },
+  ) {
+    const i = h.i;
+    const tS = o.tS;
+    const H = this.hoop(h.team);
+    // 공을 쥐고 달려온 구간 (1.4초까지)
+    let fMin = this.tick - 1;
+    while (fMin - 1 >= Math.max(0, this.tick - 14) && this.rCarry[fMin - 1] === i) fMin--;
+    if (fMin >= this.tick - 1) return;
+    // 길: 기록된 자리들 → 지금 자리 → 끝 자리 (시간과 함께)
+    const px: number[] = [];
+    const py: number[] = [];
+    const pt: number[] = [];
+    for (let f = fMin; f < this.tick; f++) {
+      px.push(this.rPos[f * 20 + i * 2]);
+      py.push(this.rPos[f * 20 + i * 2 + 1]);
+      pt.push(f * DT);
+    }
+    px.push(h.x, o.end.x);
+    py.push(h.y, o.end.y);
+    pt.push(this.t, tS);
+    const n = px.length;
+    const cs = [0];
+    for (let k = 1; k < n; k++) cs.push(cs[k - 1] + Math.hypot(px[k] - px[k - 1], py[k] - py[k - 1]));
+    const sAtT = (t: number) => {
+      if (t <= pt[0]) return 0;
+      for (let k = 1; k < n; k++) if (t <= pt[k]) return cs[k - 1] + ((cs[k] - cs[k - 1]) * (t - pt[k - 1])) / Math.max(1e-6, pt[k] - pt[k - 1]);
+      return cs[n - 1];
+    };
+    const at = (sv: number): [number, number] => {
+      for (let k = 1; k < n; k++)
+        if (sv <= cs[k]) {
+          const u = (sv - cs[k - 1]) / Math.max(1e-6, cs[k] - cs[k - 1]);
+          return [px[k - 1] + (px[k] - px[k - 1]) * u, py[k - 1] + (py[k] - py[k - 1]) * u];
+        }
+      return [px[n - 1], py[n - 1]];
+    };
+    const sEnd = cs[n - 1];
+    // 도약 자리: 길 위에서 림까지 D가 되는 마지막 곳
+    let sD = 0;
+    for (let k = n - 2; k >= 0; k--) {
+      const d0 = dist(px[k], py[k], H.x, H.y);
+      if (d0 >= o.D) {
+        const d1 = dist(px[k + 1], py[k + 1], H.x, H.y);
+        const u = d0 === d1 ? 0 : clamp((d0 - o.D) / (d0 - d1), 0, 1);
+        sD = cs[k] + (cs[k + 1] - cs[k]) * u;
+        break;
+      }
+    }
+    let A = o.air(dist(...at(sD), H.x, H.y));
+    const G = o.ground;
+    if (tS - A * (1 + G) < pt[0]) A = (tS - pt[0]) / (1 + G);
+    if (A < 0.3) return;
+    const tT = tS - A;
+    // 실제가 도약 자리에 아직 못 왔으면 그때 있던 곳에서 뛴다
+    sD = Math.min(sD, sAtT(tT));
+    const vG = (sEnd - sD) / A;
+    // 도약 전: 실제와 같은 곳에서 출발해 도약 자리까지 속도를 줄여 간다 (가장 자연스러운 출발 틱)
+    let fa = fMin;
+    let best = Infinity;
+    for (let f = fMin; f * DT < tT - 0.15; f++) {
+      const sa = sAtT(f * DT);
+      if (sa > sD) break;
+      const va = (sAtT((f + 1) * DT) - sa) / DT;
+      const need = (sD - sa) / (tT - f * DT);
+      const cost = Math.abs(need - (va + vG * 1.15) / 2);
+      if (cost < best) {
+        best = cost;
+        fa = f;
+      }
+    }
+    const ta = fa * DT;
+    const sa = sAtT(ta);
+    const span = Math.max(DT, tT - ta);
+    const ds = Math.max(0, sD - sa);
+    const va = (sAtT(ta + DT) - sa) / DT;
+    const m0 = Math.min(va * span, 3 * ds);
+    const m1 = Math.min(vG * 1.15 * span, 3 * ds);
+    const sv = (t: number) => {
+      if (t <= ta) return sAtT(t);
+      if (t < tT) {
+        const u = (t - ta) / span;
+        const u2 = u * u;
+        const u3 = u2 * u;
+        return (2 * u3 - 3 * u2 + 1) * sa + (u3 - 2 * u2 + u) * m0 + (-2 * u3 + 3 * u2) * sD + (u3 - u2) * m1;
+      }
+      const u = Math.min(1, (t - tT) / A);
+      return sD + (sEnd - sD) * (1.15 * u - 0.15 * u * u);
+    };
+    // 높이: 도약부터 올라가 끝날 때 (peak배) 꼭대기
+    h.jt = tT;
+    h.jd = 2 * A * o.peak;
+    h.jh = o.jh;
+    h.jk = 0;
+    const fG = Math.ceil((tT - A * G) / DT - 1e-6);
+    for (let f = fa + 1; f < this.tick; f++) {
+      const [x, y] = at(sv(f * DT));
+      this.rPos[f * 20 + i * 2] = x;
+      this.rPos[f * 20 + i * 2 + 1] = y;
+    }
+    for (let f = Math.max(fMin, Math.min(fG, ph.f0)); f < this.tick; f++) {
+      const t = f * DT;
+      const z = t > tT ? h.jh * Math.sin((Math.PI * (t - tT)) / h.jd) : 0;
+      this.rPz[f * 10 + i] = Math.round(clamp(z, 0, 5) * 50);
+      // 모으기 전까진 달려오는 모습 (슛을 모으는 동안 찍어 둔 마무리 동작은 지운다)
+      this.rAct[f * 10 + i] = f >= fG ? act : ACT.DRIBBLE;
+    }
+    // 앞으로 날아갈 자리: 끝으로 갈수록 실제 자리에 섞어 이어 붙인다
+    const q: number[] = [];
+    for (let f = this.tick; (f + 1) * DT < tS; f++) q.push(...at(sv(f * DT)));
+    h.vq = q;
+    h.vqN = q.length / 2;
+  }
+
   /** 동작 성향: 성격(옵션) × 센스 × 천재 */
   private flair(h: SP, d: ShotMoveDef): number {
     const st = this.styleOf[h.pid] ?? {};
@@ -2289,10 +2479,13 @@ class GameSim {
     // 받을 준비 (M22): 오프볼이 좋으면 받자마자 쏘는 슛에 수비가 덜 붙어 있다
     const caughtNow = !!this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 1.1;
     if (caughtNow && (si.kind === 'three' || si.kind === 'mid')) cAdj *= 1 - clamp((h.pl.r.offBall - 56) / 180, -0.15, 0.18);
-    // 엘리트 슈터·피니셔는 견제를 덜 탄다 (그 슛 능력치 85부터)
-    cAdj *= 1 - clamp((h.pl.r[SHOT_KEY[si.kind]] - 85) / 100, 0, 0.14);
+    // 엘리트 슈터·피니셔는 견제를 덜 탄다 (그 슛 능력치 85부터, M24: 99는 점프슛 3할, 골밑 5할 덜 탄다)
+    const near0 = si.kind === 'dunk' || si.kind === 'layup' || si.kind === 'hook' || si.kind === 'floater';
+    cAdj *= 1 - Math.max(clamp((h.pl.r[SHOT_KEY[si.kind]] - 85) / 100, 0, 0.14), elite(h.pl.r[SHOT_KEY[si.kind]]) * (near0 ? 0.5 : 0.3));
     if (si.kind === 'mid' || si.kind === 'three') cAdj *= 1 - FX.deadeye[lv(h.pl, 'deadeye')];
     let p = si.pOpen * contestFactor(si.kind, cAdj) * this.form(h, si) * this.abilityShot(h) * (mfx.p ?? 1);
+    // 99는 99답게 (M24): 엘리트는 남은 실패 확률을 줄인다 (골밑 35%, 점프슛 8%)
+    p += (1 - Math.min(1, p)) * elite(h.pl.r[SHOT_KEY[si.kind]]) * (near0 ? 0.35 : 0.08);
     const assist = this.lastPass && this.lastPass.to === h.i && this.t - this.lastPass.t < 3.2 ? this.lastPass.from : -1;
     // 콤비 패스를 받아 쏘면 조금 더 들어간다
     const comboShot = assist >= 0 && !!this.combo(this.P[assist].pid, h.pid);
@@ -2395,6 +2588,8 @@ class GameSim {
       let pb = c1 * (0.04 + (ex(b.pl.r.block) / 100) * 0.2 + ((b.pl.body.heightCm - h.pl.body.heightCm) / 100) * 0.25 + ((ex(b.pl.r.jump) - 50) / 100) * 0.05 + Math.max(0, b.pl.r.block - 80) * 0.004) * (1 + Math.max(0, b.pl.r.block - 75) / 40);
       if (!near) pb *= 0.25;
       if (si.kind === 'dunk') pb *= 0.6;
+      // 엘리트 피니셔 (M24)는 블록을 피해 올린다
+      pb *= 1 - elite(h.pl.r[SHOT_KEY[si.kind]]) * 0.6;
       pb *= (mfx.block ?? 1) * (1 + FX.rimProtector[lv(b.pl, 'rimProtector')] * 1.5);
       // 인유어페이스: 블록하러 뜬 수비 위로 찍는다
       if (mv === 'poster') {
@@ -2473,7 +2668,8 @@ class GameSim {
       h.slideX = (w.x - h.x) / flight;
       h.slideY = (w.y - h.y) / flight;
       h.slideUntil = this.t + flight;
-    }
+      if (!ph.alley && mv !== 'putback') this.glideDunk(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, w, fast);
+    } else if (si.kind === 'layup' && !ph.post) this.glideLayup(h, ph, this.finishAct(si.kind, mv, ph.alley, dunk, si.dist), flight, fast);
     this.ph = {
       k: 'shot',
       dunk,
@@ -2861,7 +3057,8 @@ class GameSim {
     const off = this.off;
     const mates = this.mates(off);
     const tac = this.teams[off].tactics;
-    const creation = (p: SP) => (p.pl.r.ballHandling + p.pl.r.midRange + p.pl.r.three + p.pl.r.layup + p.pl.r.speed) / 5;
+    // 역할 (roles.ts)과 같은 기준
+    const creation = (p: SP) => creationOf(p.pl);
     const star = [...mates].sort((a, b) => creation(b) - creation(a))[0];
     const bigs = mates.filter((p) => this.isBig(p));
     const big = [...(bigs.length ? bigs : mates)].sort((a, b) => b.pl.r.postUp - a.pl.r.postUp)[0];

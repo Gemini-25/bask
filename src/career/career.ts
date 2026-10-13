@@ -272,6 +272,13 @@ export interface Career {
 export interface CareerSettings {
   romance: boolean;
   minigame: boolean;
+  /** 일정 건너뛰기 설정 (M24) */
+  skip?: {
+    routine: 'auto' | { repeat: ActionId; focus?: FocusId };
+    stopGames: 'all' | 'big' | 'none';
+    stopEvents: boolean;
+    invest: boolean;
+  };
 }
 
 /** 지금 팀원 (고교 선수단 또는 프로 팀) */

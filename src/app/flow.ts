@@ -19,6 +19,7 @@ import { dunkScene, stageScene } from './stage';
 import { sound } from '../view/sound';
 import { trainingScene } from './scenes';
 import { figureCanvas } from './figure';
+import { archetype, DEF_LABEL, lineupRoles, ROLE_DESC, ROLE_LABEL } from '../sim/roles';
 import { fatigueColor, pointsHtml } from './home';
 
 function upsHtml(ups: Partial<Record<RatingKey, number>>) {
@@ -90,7 +91,23 @@ export function eventModal(c: Career, onDone: () => void) {
   );
 }
 
-export function preGameModal(c: Career, onWatch: () => void, onSkip: () => void) {
+/** 경기에서 내 역할 (M24): 주전 라인업과 상대 주전으로 엔진 기준 그대로 */
+export function myRoleHtml(m: MatchSetup): string {
+  if (m.myPid < 0) return '';
+  const lu = m.game.lineups[0];
+  const slot = lu.pids.indexOf(m.myPid);
+  const side = m.home ? 0 : 1;
+  const five = (t: number) => lu.pids.slice(t * 5, t * 5 + 5).map((p) => m.game.players[p]);
+  if (slot < 0) {
+    const r = archetype(m.game.players[m.myPid]);
+    return `<div class="chg role"><span>역할</span><b>${ROLE_LABEL[r]}</b><small>벤치에서 나오면: ${esc(ROLE_DESC[r])}</small></div>`;
+  }
+  const r = lineupRoles(five(side), five(1 - side))[slot - side * 5];
+  return `<div class="chg role"><span>역할</span><b>${ROLE_LABEL[r.key]}</b><small>${esc(r.jobs.join(' · '))}</small></div>
+    <div class="chg role"><span>수비</span><b>${DEF_LABEL[r.def]}</b>${r.guards ? `<small>막을 상대: #${r.guards.number} ${esc(r.guards.name)} (${r.guards.pos})</small>` : ''}</div>`;
+}
+
+export function preGameModal(c: Career, onWatch: () => void, onSkip: () => void, m?: MatchSetup) {
   const pg = c.pendingGame!;
   const pro = c.pro && c.league;
   const opp = { ...teamInfoOf(c, pg.opponent), blurb: pg.special === 'allstar' ? '별들의 잔치' : pg.special === 'national' ? '국가대표 경기' : pro ? (c.overseas ? '해외 리그 · 쿼터 12분 · 6반칙 퇴장' : '프로 팀') : schoolById(pg.opponent).blurb };
@@ -106,6 +123,7 @@ export function preGameModal(c: Career, onWatch: () => void, onSkip: () => void)
     ${rival}
     <div class="chgs">
       <div class="chg"><span>감독 결정</span><b>${role}</b></div>
+      ${m ? myRoleHtml(m) : ''}
       <div class="chg"><span>컨디션</span><b>${CONDITION_LABEL[c.condition]}</b></div>
       <div class="chg"><span>피로</span><b style="color:${fatigueColor(c.fatigue)}">${Math.round(c.fatigue)}</b>${c.fatigue > 20 ? '<small>체력이 덜 찬 채로 시작</small>' : ''}</div>
       ${pg.kind === 'official' && !pg.special ? `<div class="chg"><span>감독 신뢰</span><b>${Math.round(c.trust)}</b><small>공식전은 출전 시간 보장 없음</small></div>` : ''}

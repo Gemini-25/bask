@@ -775,3 +775,16 @@ tr.tot td {
   font-size: 11px;
   line-height: 1.5;
 }
+/* 역할 표 (M24) */
+#tab-tactics table.roles td.rl b {
+  display: block;
+}
+#tab-tactics table.roles td.rl small {
+  display: block;
+  color: var(--muted);
+  white-space: normal;
+  line-height: 1.35;
+}
+#tab-tactics table.roles td.rl small.did {
+  color: var(--led);
+}
